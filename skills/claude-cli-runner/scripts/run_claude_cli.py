@@ -29,7 +29,7 @@ Execute the source prompt literally and completely.
 
 - Treat the source prompt's outcome, constraints, tool limits, artifact paths, and completion criteria as the contract.
 - Do not add fixed progress-update scaffolding. Report progress only if the source prompt asks for it or a real blocker requires it.
-- Prefer direct completion over unnecessary subagents or tool calls. Use tools when needed to satisfy the source prompt, and respect explicit WebSearch/WebFetch, budget, timeout, and output limits.
+- Prefer direct completion over unnecessary subagents or tool calls. Use tools when needed to satisfy the source prompt, and respect explicit WebSearch/WebFetch, timeout, and output limits.
 - If scope is ambiguous, resolve only what is explicitly supported by the source prompt and mark genuinely missing inputs as blocked.
 - Do not emulate effort with phrases like "think hard"; rely on the CLI effort setting supplied by the caller.
 """
@@ -37,7 +37,7 @@ Execute the source prompt literally and completely.
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run claude -p with stream-json output, timeout, budget, and artifact checks."
+        description="Run claude -p with stream-json output, timeout, optional budget, and artifact checks."
     )
     parser.add_argument("--prompt-file", required=True, help="Path to the saved prompt.md file.")
     parser.add_argument("--output-dir", required=True, help="Directory for run artifacts.")
@@ -53,7 +53,11 @@ def parse_args() -> argparse.Namespace:
         help="Claude effort level. Omit to use the Claude CLI configured default.",
     )
     parser.add_argument("--timeout-seconds", type=int, default=600, help="Timeout in seconds. Defaults to 600.")
-    parser.add_argument("--budget-usd", required=True, help="Maximum Claude CLI API budget.")
+    parser.add_argument(
+        "--budget-usd",
+        default=None,
+        help="Optional maximum Claude CLI API budget. Omit for subscription-based Claude CLI usage.",
+    )
     parser.add_argument(
         "--expected-artifact",
         action="append",
@@ -249,9 +253,9 @@ def main() -> int:
         "--output-format",
         "stream-json",
         "--include-partial-messages",
-        "--max-budget-usd",
-        str(args.budget_usd),
     ]
+    if args.budget_usd:
+        command.extend(["--max-budget-usd", str(args.budget_usd)])
     if args.model:
         command.extend(["--model", args.model])
     if args.effort:
@@ -309,7 +313,7 @@ def main() -> int:
     elif "missing_expected_artifact" in failure_reasons:
         recommended = "Check the prompt artifact path contract and rerun with an explicit expected output path."
     else:
-        recommended = "Inspect run.stream.jsonl and run.err, then rerun with adjusted prompt, model, budget, or timeout."
+        recommended = "Inspect run.stream.jsonl and run.err, then rerun with adjusted prompt, model, optional budget, or timeout."
 
     summary = {
         "command": command,

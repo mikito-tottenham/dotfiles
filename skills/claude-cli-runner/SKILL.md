@@ -1,6 +1,6 @@
 ---
 name: claude-cli-runner
-description: Run Claude Code CLI subprocesses with observable stream-json logs, timeouts, budget guards, and artifact-based failure handling. Use when Codex needs to invoke `claude -p`, call Claude from the CLI, ClaudeをCLIで呼ぶ, Claude CLIをサブプロセス実行する, or run long-running research, review, generation, or delegated CLI work while distinguishing real hangs from silent execution.
+description: Run Claude Code CLI subprocesses with observable stream-json logs, timeouts, optional budget guards, and artifact-based failure handling. Use when Codex needs to invoke `claude -p`, call Claude from the CLI, ClaudeをCLIで呼ぶ, Claude CLIをサブプロセス実行する, or run long-running research, review, generation, or delegated CLI work while distinguishing real hangs from silent execution.
 ---
 
 # Claude CLI Runner
@@ -14,7 +14,7 @@ Use this skill to invoke Claude Code CLI from Codex without losing observability
 - When a workflow previously said "run Claude via resolver", resolve the requested Claude model/effort if needed, then execute Claude through this skill and its wrapper.
 - Let the calling workflow decide whether this skill is run directly or through a subagent. For example, the `research` skill may require Codex to delegate researcher roles to subagents; that policy belongs to `research`, not here.
 
-Frame each delegation as an outcome-first contract: source prompt, expected artifacts, timeout, budget, success criteria, allowed side effects, and failure handling. Let caller-provided model and effort settings do model selection; do not encode model behavior with magic words in the source prompt.
+Frame each delegation as an outcome-first contract: source prompt, expected artifacts, timeout, success criteria, allowed side effects, and failure handling. Let caller-provided model and effort settings do model selection; do not encode model behavior with magic words in the source prompt.
 
 ## Core Rules
 
@@ -23,7 +23,7 @@ Frame each delegation as an outcome-first contract: source prompt, expected arti
 - Save the prompt before execution as `.context/<task>/prompt.md`.
 - Do not pass a large prompt body as an inline shell argument. Pass a short instruction that tells Claude to read the prompt file.
 - Use the wrapper's 600-second timeout default, or pass an explicit timeout override when the task needs a shorter or longer limit.
-- For research tasks, explicitly limit WebSearch/WebFetch counts, budget, timeout, and output lines in the prompt.
+- For research tasks, explicitly limit WebSearch/WebFetch counts, timeout, and output lines in the prompt.
 - Do not treat `stdout` or `stderr` being 0 bytes as a hang by itself.
 
 ## Standard Command Shape
@@ -31,7 +31,7 @@ Frame each delegation as an outcome-first contract: source prompt, expected arti
 Use this form, with `<prompt>` kept short and pointing to the prompt file:
 
 ```bash
-timeout 600 claude -p --permission-mode bypassPermissions --verbose --output-format stream-json --include-partial-messages --max-budget-usd <amount> "<prompt>" > <artifact>.stream.jsonl 2> <artifact>.err
+timeout 600 claude -p --permission-mode bypassPermissions --verbose --output-format stream-json --include-partial-messages "<prompt>" > <artifact>.stream.jsonl 2> <artifact>.err
 ```
 
 Add `--model <model>` and/or `--effort <level>` only when the caller wants to override the Claude CLI configured defaults.
@@ -42,12 +42,12 @@ For repeatable runs, prefer the bundled wrapper:
 python3 <skill-dir>/scripts/run_claude_cli.py \
   --prompt-file .context/<task>/prompt.md \
   --output-dir .context/<task> \
-  --budget-usd <amount> \
   --expected-artifact <expected-file>
 ```
 
 Add `--model <model>` or `--effort <low|medium|high|xhigh|max>` to the wrapper only when overriding the CLI defaults.
 Add `--timeout-seconds <seconds>` only when overriding the 600-second default.
+Add `--budget-usd <amount>` only when an explicit API budget guard is required. Omit it for subscription-based Claude CLI usage.
 
 The wrapper writes:
 
@@ -68,7 +68,7 @@ Default behavior:
 - When `--model` is omitted, `auto` cannot know the Claude CLI configured default. If the configured default is Opus 4.7, pass `--prompt-profile opus-4-7` explicitly.
 - Pass `--prompt-profile none` to suppress model-specific prompt adaptation.
 
-The Opus 4.7 adapter is intentionally short and positive. It tells Claude to execute the source prompt literally, avoid fixed progress scaffolding, avoid unnecessary subagents/tool calls, respect explicit tool/budget/output limits, and rely on the CLI `--effort` setting instead of prompt magic words.
+The Opus 4.7 adapter is intentionally short and positive. It tells Claude to execute the source prompt literally, avoid fixed progress scaffolding, avoid unnecessary subagents/tool calls, respect explicit tool/output limits, and rely on the CLI `--effort` setting instead of prompt magic words.
 
 ## Success Criteria
 
@@ -110,7 +110,7 @@ For Claude researcher roles, include:
 
 - max WebSearch/WebFetch calls
 - max output lines or words
-- timeout and budget expectation
+- timeout expectation
 - exact output artifact path
 - instruction to stop and write findings instead of continuing if blocked
 
@@ -147,5 +147,5 @@ For runtime validation, run:
 
 - a short smoke prompt
 - a prompt that reads and writes a file
-- a small WebSearch prompt with strict tool, budget, timeout, and output limits
+- a small WebSearch prompt with strict tool, timeout, and output limits
 - a forced timeout prompt that must generate `failure.md`

@@ -27,9 +27,12 @@ Complete the source prompt as an outcome-first task contract.
 
 - Treat the source prompt's outcome, artifact paths, success criteria, allowed side effects, evidence rules, output shape, and stop condition as the contract.
 - Write requested artifacts exactly where specified.
+- If an expected artifact path is absolute, use that absolute path exactly; do not rewrite it as a path relative to the current working directory.
+- Do not create, update, or delete files outside the requested artifacts unless the source prompt explicitly allows that side effect.
+- Do not use shell execution tools such as run_shell_command; they may be unavailable in headless Gemini. Use read_file, list_directory, and write_file for file checks when needed.
 - Prefer the smallest sufficient plan and tool use that completes the contract.
 - Do not emulate model effort with phrases like "think hard" or mandatory step-by-step narration; rely on the CLI/config settings supplied by the caller.
-- If a required input is missing, mark that item blocked with the missing input instead of guessing.
+- If a required input is missing or unreadable, mark the requested artifact blocked with the missing input instead of guessing.
 - Keep final output concise unless the source prompt asks for a detailed report.
 """
 
@@ -132,12 +135,20 @@ def resolve_prompt_profile(requested: str) -> str:
     return requested
 
 
-def write_launch_prompt(path: Path, source_prompt: Path, profile: str) -> None:
+def write_launch_prompt(
+    path: Path,
+    source_prompt: Path,
+    source_prompt_text: str,
+    profile: str,
+    expected_artifact_paths: list[Path],
+    target_cwd: Path,
+) -> None:
     sections = [
         "---",
         "task: gemini-cli-runner-launch",
         f"source_prompt: {source_prompt}",
         f"prompt_profile: {profile}",
+        f"target_cwd: {target_cwd}",
         "---",
         "",
     ]
@@ -145,9 +156,28 @@ def write_launch_prompt(path: Path, source_prompt: Path, profile: str) -> None:
         sections.extend([GEMINI_ADAPTER, ""])
     sections.extend(
         [
+            "## Target Working Directory",
+            "",
+            f"The caller's target working directory is `{target_cwd}`.",
+            "",
+            "## Expected Artifacts",
+            "",
+        ]
+    )
+    if expected_artifact_paths:
+        sections.extend(f"- `{path}`" for path in expected_artifact_paths)
+    else:
+        sections.append("- No explicit expected artifacts were provided by the runner.")
+    sections.extend(
+        [
+            "",
             "## Source Prompt",
             "",
-            f"Read and follow `{source_prompt}`. Write requested artifacts exactly where specified.",
+            "The complete source prompt is embedded below. Follow it directly; do not try to reread it from another file path.",
+            "",
+            "<source_prompt>",
+            source_prompt_text,
+            "</source_prompt>",
             "",
             "Stop only after every requested item is completed or explicitly marked blocked with the missing input.",
             "",
@@ -228,12 +258,24 @@ def main() -> int:
     summary_path = output_dir / "summary.json"
     failure_path = output_dir / "failure.md"
     prompt_profile = resolve_prompt_profile(args.prompt_profile)
-    write_launch_prompt(launch_prompt_path, prompt_file, prompt_profile)
+    expected_artifact_paths = [artifact_path(raw, output_dir) for raw in args.expected_artifact]
+    source_prompt_text = prompt_file.read_text(encoding="utf-8", errors="replace")
+    write_launch_prompt(
+        launch_prompt_path,
+        prompt_file,
+        source_prompt_text,
+        prompt_profile,
+        expected_artifact_paths,
+        cwd,
+    )
 
     short_prompt = (
-        f"Read and follow the launch prompt in {launch_prompt_path}. "
-        "Write the requested artifacts exactly where specified."
+        f"Read and follow ./{launch_prompt_path.name} in the current working directory. "
+        "Write only the requested artifacts exactly where specified."
     )
+    extra_gemini_args = list(args.extra_gemini_arg)
+    if str(cwd) != str(output_dir) and "--include-directories" not in extra_gemini_args:
+        extra_gemini_args.extend(["--include-directories", str(cwd)])
     command = [
         timeout_bin,
         str(args.timeout_seconds),
@@ -243,14 +285,14 @@ def main() -> int:
         command.extend(["--model", args.model])
     if args.approval_mode:
         command.extend(["--approval-mode", args.approval_mode])
-    command.extend(args.extra_gemini_arg)
+    command.extend(extra_gemini_args)
     command.extend(["-p", short_prompt, "--output-format", "stream-json"])
 
     start = time.monotonic()
     with stream_path.open("wb") as stdout_fh, stderr_path.open("wb") as stderr_fh:
         proc = subprocess.run(
             command,
-            cwd=str(cwd),
+            cwd=str(output_dir),
             stdout=stdout_fh,
             stderr=stderr_fh,
             check=False,
@@ -265,8 +307,7 @@ def main() -> int:
     stderr_error = bool(ERROR_RE.search(stderr_text))
 
     expected = []
-    for raw in args.expected_artifact:
-        path = artifact_path(raw, output_dir)
+    for path in expected_artifact_paths:
         exists = path.exists()
         non_empty = exists and path.is_file() and path.stat().st_size > 0
         expected.append(
@@ -305,6 +346,8 @@ def main() -> int:
         "command": command,
         "gemini_bin": args.gemini_bin,
         "cwd": str(cwd),
+        "target_cwd": str(cwd),
+        "process_cwd": str(output_dir),
         "prompt_file": str(prompt_file),
         "launch_prompt_path": str(launch_prompt_path),
         "prompt_profile": prompt_profile,

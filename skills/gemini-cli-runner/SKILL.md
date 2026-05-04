@@ -14,7 +14,7 @@ Frame each delegation as an outcome-first contract: source prompt, expected arti
 - Use `gemini -p <prompt> --output-format stream-json` for observable non-interactive runs.
 - Put every run under `.context/<task>/`.
 - Save the real assignment as `.context/<task>/prompt.md`.
-- Do not pass a large prompt body as an inline shell argument. Pass a short instruction that tells Gemini to read `.context/<task>/run.prompt.md`.
+- Do not pass a large prompt body as an inline shell argument. The wrapper embeds the source prompt inside `.context/<task>/run.prompt.md`, starts Gemini from that output directory, and passes only a short instruction to read `./run.prompt.md`.
 - Use the wrapper's 600-second timeout default, or pass an explicit timeout override when the task needs a shorter or longer limit.
 - Do not force `--sandbox`, `--yolo`, `--approval-mode`, trust, policy, or tool flags by default. Let Gemini config decide unless the caller explicitly requests an override.
 - Do not treat 0-byte `run.stream.jsonl` or `run.err` as a hang by itself.
@@ -25,7 +25,7 @@ Before running Gemini, make these decisions explicitly:
 
 - Task directory: choose `.context/<task>/`.
 - Source prompt: write `.context/<task>/prompt.md` with the outcome, artifact paths, success criteria, allowed side effects, evidence rules, and stop condition.
-- Working directory: pass `--cwd <project-root>` when the target repository matters.
+- Working directory: pass `--cwd <project-root>` when the target repository matters. The wrapper records this as `target_cwd`, starts the Gemini process from the run output directory so hidden `.context` artifacts are readable by relative path, and includes the target directory with `--include-directories` unless the caller already supplied that flag.
 - Expected artifacts: pass every required output with `--expected-artifact`; relative paths resolve from `--output-dir`, so use absolute paths for artifacts that must be written outside `.context/<task>/`.
 - When `--output-dir .context/<task>` is used, pass `--expected-artifact result.md`, not `--expected-artifact .context/<task>/result.md`; the latter resolves under `.context/<task>/.context/<task>/`.
 - Defaults: omit `--model` and `--approval-mode` unless the caller, model registry, role, or task explicitly requires an override.
@@ -65,7 +65,9 @@ The wrapper writes:
 
 ## Prompt Profiles
 
-The wrapper writes `.context/<task>/run.prompt.md`, then passes only a file-reference prompt to `gemini -p`.
+The wrapper writes `.context/<task>/run.prompt.md`, embeds the complete source prompt in that launch file, then starts Gemini from the run output directory and passes only a relative file-reference prompt to `gemini -p`.
+
+This cwd relocation is intentional: Gemini may reject absolute paths under hidden directories such as `.context` as ignored files, while it can read `./run.prompt.md` when the process cwd is the run directory.
 
 Default behavior:
 
@@ -73,7 +75,7 @@ Default behavior:
 - `--prompt-profile gemini` forces the Gemini adapter.
 - `--prompt-profile none` suppresses prompt adaptation.
 
-The Gemini adapter is short and outcome-first. It tells Gemini to execute the source prompt literally, write requested artifacts exactly where specified, respect allowed side effects, keep output concise unless the source prompt asks otherwise, and stop when the source contract is complete or blocked.
+The Gemini adapter is short and outcome-first. It tells Gemini to execute the embedded source prompt literally, write requested artifacts exactly where specified, preserve absolute artifact paths, avoid side effects outside those artifacts unless explicitly allowed, avoid unavailable shell tools such as `run_shell_command`, keep output concise unless the source prompt asks otherwise, and stop when the source contract is complete or blocked.
 
 ## Success Criteria
 
@@ -100,6 +102,7 @@ On failure, inspect `.context/<task>/summary.json` first:
 
 - `command`
 - `exit_code`
+- `target_cwd` and `process_cwd`
 - `elapsed_seconds`
 - `stream_bytes` and `stderr_bytes`
 - `failure_reasons`
@@ -129,11 +132,11 @@ Use these patterns when testing the wrapper itself without spending Gemini API b
 ## Wrapper Notes
 
 - Resolve `<skill-dir>` from the location of this `SKILL.md`.
-- Pass `--cwd <project-root>` when Gemini should run from a specific repository.
+- Pass `--cwd <project-root>` when Gemini should work against a specific repository. The wrapper uses that as `target_cwd` and runs the process from the output directory for reliable `.context` prompt access.
 - Omit `--model` and `--approval-mode` by default so Gemini CLI uses its configured defaults.
 - Pass `--model <model>` and `--approval-mode <mode>` from the caller when a model registry, role, or task explicitly requires overrides.
 - Pass each expected output as `--expected-artifact`; use an absolute path or a path relative to the wrapper output directory. If the artifact is directly inside `.context/<task>/`, pass only the filename.
-- Use `--extra-gemini-arg` for narrow additions when explicitly required. Pass one Gemini CLI token per wrapper argument, for example `--extra-gemini-arg=--sandbox`, `--extra-gemini-arg=--include-directories --extra-gemini-arg=/path/to/dir`, or `--extra-gemini-arg=--policy --extra-gemini-arg=/path/to/policy.md`.
+- Use `--extra-gemini-arg` for narrow additions when explicitly required. Pass one Gemini CLI token per wrapper argument, for example `--extra-gemini-arg=--sandbox`, `--extra-gemini-arg=--include-directories --extra-gemini-arg=/path/to/dir`, or `--extra-gemini-arg=--policy --extra-gemini-arg=/path/to/policy.md`. If you pass `--include-directories` yourself, include every directory Gemini should access because the wrapper will not add its default target directory include.
 - Keep final orchestration in the caller. This skill only runs Gemini and records observable artifacts.
 
 ## Validation

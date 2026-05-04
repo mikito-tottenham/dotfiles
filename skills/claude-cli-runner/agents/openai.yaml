@@ -1,4 +1,4 @@
 interface:
   display_name: "Claude CLI Runner"
   short_description: "Run Claude CLI with observable artifacts"
-  default_prompt: "Use $claude-cli-runner to run a Claude Code CLI subprocess with stream-json logs, timeout, budget guards, and failure artifacts."
+  default_prompt: "Use $claude-cli-runner to run a Claude Code CLI subprocess with stream-json logs, timeout guards, and failure artifacts."
