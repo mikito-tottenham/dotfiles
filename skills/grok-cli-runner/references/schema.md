@@ -1,6 +1,6 @@
 ---
-name: grok-schema
-description: Request and response artifact contract for the grok publisher skill.
+name: grok-cli-runner-schema
+description: Request and response artifact contract for the grok-cli-runner skill.
 ---
 
 # Artifact Schema
@@ -71,7 +71,7 @@ Optional top-level fields:
 ### Request Notes
 
 - `request` is passed through almost as-is. Use official xAI Responses API fields and shapes inside it.
-- If `request.model` is omitted, the wrapper fills it from `GROK_MODEL`, then `GROK_X_RESEARCH_MODEL`, then `grok-4.20-reasoning`.
+- If `request.model` is omitted, the wrapper fills it from `--model`, then `GROK_MODEL`, then `GROK_X_RESEARCH_MODEL`, then `grok-4.20-reasoning`.
 - `request.input` is required by the wrapper because it is required by xAI Responses API calls.
 - For schema-constrained JSON, use `request.response_format`; the wrapper passes it through and does not validate returned JSON.
 - `meta` stays local in the artifact and is never sent to xAI.
@@ -84,6 +84,7 @@ Required fields:
 
 - `task`: copied from the request artifact
 - `created_at`: UTC timestamp for the wrapper run
+- `meta`: copied from the request artifact when present
 - `request`: normalized payload actually sent to xAI
 - `response`: raw xAI API response object
 - `output_text`: extracted text when xAI returns one

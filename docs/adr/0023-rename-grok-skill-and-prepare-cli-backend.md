@@ -1,12 +1,14 @@
 ---
 title: "ADR 0023: Grok skill を `grok` へ改名し将来の CLI backend 置換に備える"
-status: accepted
+status: superseded
 date: 2026-04-20
 worked_at: 2026-04-20 02:32 JST
 agent_model: GPT-5 Codex
 ---
 
 # ADR 0023: Grok skill を `grok` へ改名し将来の CLI backend 置換に備える
+
+Superseded by [ADR 0029](./0029-retire-grok-skill-for-grok-cli-runner.md).
 
 ## Context
 

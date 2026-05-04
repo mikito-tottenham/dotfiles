@@ -1,0 +1,4 @@
+interface:
+  display_name: "Copilot CLI Runner"
+  short_description: "Run Copilot CLI with observable artifacts"
+  default_prompt: "Use $copilot-cli-runner to run a Copilot CLI subprocess with JSONL logs, timeout guards, and failure artifacts."

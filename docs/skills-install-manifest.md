@@ -1,6 +1,6 @@
 ---
 title: "Skill Install Manifest"
-updated_at: 2026-05-02
+updated_at: 2026-05-04
 ---
 
 # Skill Install Manifest
@@ -20,10 +20,14 @@ repo root を install source にして実行する。
 gh skill install . skill-manager --from-local --agent claude-code --scope user
 gh skill install . docs-entrypoint-check --from-local --agent claude-code --scope user
 gh skill install . docs-evaluator --from-local --agent claude-code --scope user
-gh skill install . grok --from-local --agent claude-code --scope user
+gh skill install . grok-cli-runner --from-local --agent claude-code --scope user
 gh skill install . code-evaluator --from-local --agent claude-code --scope user
 gh skill install . opus-4-7-tuning --from-local --agent claude-code --scope user
 gh skill install . gpt-5-5-tuning --from-local --agent claude-code --scope user
+gh skill install . codex-cli-runner --from-local --agent claude-code --scope user
+gh skill install . gemini-cli-runner --from-local --agent claude-code --scope user
+gh skill install . copilot-cli-runner --from-local --agent claude-code --scope user
+gh skill install . agent-orchestration-evaluator --from-local --agent claude-code --scope user
 ```
 
 ### Codex
@@ -32,10 +36,13 @@ gh skill install . gpt-5-5-tuning --from-local --agent claude-code --scope user
 gh skill install . skill-manager --from-local --agent codex --scope user
 gh skill install . docs-entrypoint-check --from-local --agent codex --scope user
 gh skill install . docs-evaluator --from-local --agent codex --scope user
-gh skill install . grok --from-local --agent codex --scope user
+gh skill install . grok-cli-runner --from-local --agent codex --scope user
 gh skill install . code-evaluator --from-local --agent codex --scope user
 gh skill install . opus-4-7-tuning --from-local --agent codex --scope user
 gh skill install . gpt-5-5-tuning --from-local --agent codex --scope user
+gh skill install . claude-cli-runner --from-local --agent codex --scope user
+gh skill install . gemini-cli-runner --from-local --agent codex --scope user
+gh skill install . copilot-cli-runner --from-local --agent codex --scope user
 ```
 
 ## Third-party external skills

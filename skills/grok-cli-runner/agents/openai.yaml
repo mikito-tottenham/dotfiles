@@ -1,0 +1,4 @@
+interface:
+  display_name: "Grok CLI Runner"
+  short_description: "Call Grok with cost approval and artifacts"
+  default_prompt: "Use $grok-cli-runner to run a Grok handoff with request/response artifacts, timeout guards, API cost approval, and failure summaries."
