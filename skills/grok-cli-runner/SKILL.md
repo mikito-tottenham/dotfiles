@@ -29,11 +29,12 @@ Before running Grok, make these decisions explicitly:
 - Request artifact: write `.context/<task>/grok-request.json` with top-level `task` and `request`.
 - Response artifact: pass `--response-artifact grok-response.json` unless a different response filename is required.
 - API cost confirmation: for real calls, ask the user for explicit approval first, then pass `--confirm-api-cost`; for validation without approval or cost, use `--dry-run`.
-- Model: omit `--model` unless the caller, model registry, or role explicitly requires an override. The wrapper defaults to `GROK_MODEL`, then `GROK_X_RESEARCH_MODEL`, then `grok-4.20-reasoning`.
+- Model: omit `--model` unless the caller, model registry, or role explicitly requires an override. The wrapper defaults to `GROK_MODEL`, then `GROK_X_RESEARCH_MODEL`, then `grok-4.3`.
 - Timeout: rely on the 600-second wrapper default unless the task contract says otherwise. The HTTP timeout defaults to the same value unless `--http-timeout-seconds` is provided.
 - Tools: include `web_search`, `x_search`, or other xAI tools in `request.tools` only when the task needs them; set explicit limits in the prompt/request text when doing research.
 - Structured output: put schema constraints under `request.response_format`, then validate `output_text` in the caller.
 - Expected artifacts: if other files must be created by the caller after reading Grok output, track those outside this wrapper; this wrapper only guarantees the response artifact.
+- Workflow validation: after model-default changes, run at least one no-API validation and, when API cost/auth is approved, a short real call before relying on the new default for long sequential tool workflows.
 
 Do not add "think hard", fixed progress-update scaffolds, or mandatory step-by-step narration to simulate model effort. Use model selection, request fields, and explicit success criteria instead.
 
@@ -170,3 +171,4 @@ For runtime validation, run:
 - no-API missing `--confirm-api-cost` guard failure
 - invalid request failure
 - optional real API smoke only when API/auth cost is explicitly acceptable
+- representative long-tool workflow smoke before using a new default model for production-like delegation

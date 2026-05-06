@@ -17,7 +17,7 @@ from urllib import error, request
 
 
 DEFAULT_BASE_URL = "https://api.x.ai/v1"
-DEFAULT_MODEL = "grok-4.20-reasoning"
+DEFAULT_MODEL = "grok-4.3"
 
 
 def parse_args() -> argparse.Namespace:
