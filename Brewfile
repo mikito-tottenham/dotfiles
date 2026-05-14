@@ -18,7 +18,6 @@ brew "poppler"
 brew "qwen-code"
 brew "rbenv"
 brew "shellcheck"
-brew "tflint"
 brew "tmux"
 brew "xcodegen"
 brew "hashicorp/tap/terraform", link: false
