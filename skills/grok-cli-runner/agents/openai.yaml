@@ -1,4 +1,4 @@
 interface:
   display_name: "Grok CLI Runner"
-  short_description: "Call Grok with cost approval and artifacts"
-  default_prompt: "Use $grok-cli-runner to run a Grok handoff with request/response artifacts, timeout guards, API cost approval, and failure summaries."
+  short_description: "Call Grok and inspect X URLs"
+  default_prompt: "Use $grok-cli-runner to run a Grok handoff through Homebrew-managed Hermes/SuperGrok OAuth by default, preserving request/response artifacts, direct X Search engagement artifacts, timeout guards, and failure summaries."
