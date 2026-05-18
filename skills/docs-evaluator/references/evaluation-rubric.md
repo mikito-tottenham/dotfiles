@@ -91,6 +91,11 @@ Use this rubric to score the documentation system as a graph of active guidance,
 - `metadata-hygiene`: front matter, ADR metadata, skill metadata, or body-embedded metadata is invalid or inconsistent.
 - `reference-integrity`: external references, local implementation paths, manifests, specs, or contracts are missing, stale, or too ambiguous to follow.
 - `freshness-governance`: stale risk lacks replacement, deprecation, status, or update signals.
+- `knowledge-structure`: durable knowledge lacks primary-home rules, resolver/index entrypoints, clear raw-vs-curated boundaries, or maintainable retrieval granularity.
+- `provenance-gap`: important knowledge claims lack source, observation date, confidence, or enough context to distinguish direct, inferred, synthesized, and external claims.
+- `relationship-graph-hygiene`: links, backlinks, aliases, or entity relationships are missing, duplicated, untyped, or too vague for agent traversal.
+- `current-history-blur`: current truth, accepted policy, timeline evidence, historical notes, and temporary task context are mixed without a clear boundary.
+- `privacy-boundary`: public, internal, private, confidential, or machine-local knowledge boundaries are unclear to agents that may quote, index, commit, or expose content.
 - `contract-traceability`: docs mention a contract/spec/implementation dependency but do not identify the canonical artifact to inspect.
 - `stale-or-deprecated`: obsolete docs or skills remain discoverable as active.
 - `todo-governance`: TODO/deferred work is scattered, ownerless, statusless, or expiry-less.

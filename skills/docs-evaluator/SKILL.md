@@ -1,6 +1,6 @@
 ---
 name: docs-evaluator
-description: Evaluate a repository's documentation system when asked for a broad docs audit, AI-readability review, source-of-truth review, link/reachability audit, entrypoint conflict review, stale/deprecated document review, freshness governance review, TODO/deferred work governance review, ADR/history-vs-canonical separation review, instruction-strength drift review, agent-specific guidance separation review, skill contract precedence review, metadata/front matter hygiene review, reference integrity review, or contradiction/gap analysis across README, AGENTS, CLAUDE.md, docs, specs, skills, workbench notes, and other text documentation. Produces an artifact-backed Markdown report and does not edit the target docs.
+description: Evaluate a repository's documentation system when asked for a broad docs audit, AI-readability review, source-of-truth review, link/reachability audit, entrypoint conflict review, stale/deprecated document review, freshness governance review, knowledge-base schema review, agent-readable knowledge system review, provenance/confidence/freshness review, typed relationship hygiene review, TODO/deferred work governance review, ADR/history-vs-canonical separation review, instruction-strength drift review, agent-specific guidance separation review, skill contract precedence review, metadata/front matter hygiene review, reference integrity review, or contradiction/gap analysis across README, AGENTS, CLAUDE.md, docs, specs, skills, workbench notes, and other text documentation. Produces an artifact-backed Markdown report and does not edit the target docs.
 ---
 
 # Docs Evaluator
@@ -62,7 +62,8 @@ If the user gives no mode, infer it from the target and wording. If the request 
 
 5. **Evaluate quality and consistency**
    - Read `references/evaluation-rubric.md`.
-   - Check reachability, entrypoint conflicts, AI readability, necessity/sufficiency, contradictions, instruction-strength drift, stale/deprecated docs or skills, freshness governance, TODO/deferred work governance, duplicated policy, agent-specific guidance separation, skill contract precedence, metadata/front matter hygiene, external reference clarity, documented dependency clarity, spec/contract traceability, canonical-vs-temporary separation, unreflected gaps, terminology consistency, and qualitative reading burden.
+   - When evaluating knowledge-base directories, durable notes, agent-readable knowledge systems, or reusable context stores, read `references/knowledge-system-patterns.md`.
+   - Check reachability, entrypoint conflicts, AI readability, necessity/sufficiency, contradictions, instruction-strength drift, stale/deprecated docs or skills, freshness governance, knowledge-system structure, primary-home/resolver clarity, current-truth-vs-history separation, provenance/confidence/freshness, typed entity and relationship hygiene, raw-source-vs-curated-synthesis boundaries, privacy/data-boundary clarity, TODO/deferred work governance, duplicated policy, agent-specific guidance separation, skill contract precedence, metadata/front matter hygiene, external reference clarity, documented dependency clarity, spec/contract traceability, canonical-vs-temporary separation, unreflected gaps, terminology consistency, and qualitative reading burden.
    - Save raw evidence to `.context/docs-evaluator/<task>/raw-findings.md`.
 
 6. **Run non-mutating checks when reasonable**
@@ -101,6 +102,7 @@ If the user gives no mode, infer it from the target and wording. If the request 
 ## References
 
 - Read `references/evaluation-rubric.md` before evaluating findings.
+- Read `references/knowledge-system-patterns.md` when evaluating knowledge-base directories, durable notes, agent-readable knowledge systems, or documentation intended to preserve reusable context.
 - Read `references/report-template.md` before writing the final report.
 
 ## Validation
