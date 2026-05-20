@@ -1,3 +1,7 @@
 if [ -f "$HOME/.zshenv.local" ]; then
   . "$HOME/.zshenv.local"
 fi
+
+export OP_DOTFILES_ENV_FILE="${OP_DOTFILES_ENV_FILE:-$HOME/.config/op/dotfiles.env}"
+export OP_ACCOUNT="${OP_ACCOUNT:-my.1password.com}"
+export OP_DOTFILES_MATERIALIZE_VAULT="${OP_DOTFILES_MATERIALIZE_VAULT:-Dotfiles Secrets}"

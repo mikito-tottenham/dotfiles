@@ -24,10 +24,12 @@ Manage the WireGuard macOS application through `Brewfile` using Homebrew Bundle'
 - install App Store app `WireGuard` with id `1451685025`
 - do not add `wireguard-tools` unless a future workflow explicitly needs CLI-only WireGuard operation
 
-WireGuard tunnel profiles, private keys, and provider-issued configuration remain user-local state and are not stored in git.
+WireGuard tunnel profiles, private keys, provider-issued configuration, and the individual 1Password item names used to restore them are not stored in git.
+The dotfiles repository owns only the generic materialization tool that reads a 1Password Document item named `Secrets Manifest`.
 
 ## Consequences
 
 New machines can restore the WireGuard application through `brew bundle` after App Store authentication is available.
+After 1Password CLI authentication is available, `opmaterialize` reads `Secrets Manifest` and restores the WireGuard configuration file idempotently according to that manifest.
 Existing `scutil --nc` based automation remains compatible with the App Store application.
 If a future workflow requires `wg` or `wg-quick`, that should be treated as a separate CLI operation and added deliberately.

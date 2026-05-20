@@ -2,6 +2,9 @@
 
 - 日本語で応答すること
 - MCP サーバーよりも CLI ツールの利用を優先して検討すること
+- secret 実値は 1Password に保存し、CLI では `op run --env-file` / `op read` と `op://...` secret reference 経由で受け渡すこと
+- `~/.config/op/dotfiles.env` は管理外の secret reference 置き場とし、実値を書かないこと
+- `~/.zshenv.local` は secret の置き場ではなく、マシン固有の非 secret local override に限定すること
 - 永続的に参照すべき指示や、worktree / セッションをまたいで再現が必要な情報は Memory ではなく git 管理ファイルに保存すること
 - 継続的な指示の保存先は、作業リポジトリの `docs/`、`.claude/`、またはグローバル dotfiles（例: `~/.claude/CLAUDE.md`）を使うこと
 - 恒久性のあるユーザー指示、再発しやすい運用判断、複数回参照しそうな手順は、原則その作業ターン内で git 管理ファイルへ反映すること

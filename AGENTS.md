@@ -5,7 +5,9 @@
 - `dot_*` 配下の変更時は必ず `dotfile-update` スキルを使用すること
 - dotfile 変更前に [chezmoi-knowledge/SKILL.md](/Users/rmanzoku/.local/share/chezmoi/.claude/skills/chezmoi-knowledge/SKILL.md) と [semantics.md](/Users/rmanzoku/.local/share/chezmoi/.claude/skills/chezmoi-knowledge/references/semantics.md) を確認し、source / target / ignore の前提を外さないこと
 - `chezmoi apply` の前とドリフト確認時は `scripts/chezmoi-drift --check-ignore` 相当の `.chezmoiignore` 整合確認を行い、意図せず無効化された source がないことを確認すること
-- 手動編集は `~/.zshenv.local` 等の chezmoi 管理外ファイルに限る
+- secret 実値は 1Password に保存し、CLI では `op run --env-file` / `op read` と `op://...` secret reference 経由で受け渡すこと
+- `~/.config/op/dotfiles.env` は管理外の secret reference 置き場とし、実値を書かないこと
+- `~/.zshenv.local` は secret の置き場ではなく、マシン固有の非 secret local override に限定すること
 
 # Desktop 自動実行設定管理
 

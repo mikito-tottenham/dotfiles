@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+
+env_file="${OP_DOTFILES_ENV_FILE:-$HOME/.config/op/dotfiles.env}"
+
+if ! command -v op >/dev/null 2>&1; then
+  printf '%s\n' "oprun: 1Password CLI 'op' is not installed or not in PATH" >&2
+  exit 127
+fi
+
+if [ "$#" -eq 0 ]; then
+  printf '%s\n' "usage: oprun <command> [args...]" >&2
+  printf '%s\n' "uses: op run --env-file \"$env_file\" -- <command>" >&2
+  exit 64
+fi
+
+if [ ! -r "$env_file" ]; then
+  printf '%s\n' "oprun: env file not readable: $env_file" >&2
+  printf '%s\n' "create it from ~/.config/op/dotfiles.env.example and store only op:// secret references in it" >&2
+  exit 66
+fi
+
+exec op run --env-file "$env_file" -- "$@"

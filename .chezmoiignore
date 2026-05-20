@@ -11,6 +11,13 @@ skills
 
 # Secrets (managed outside chezmoi)
 .zshenv.local
+.config/op/dotfiles.env
+.config/op/materialize.tsv
+.config/op/injected
+.config/op/injected/**
+.config/changer/*.env
+.config/wireguard/*.conf
+.ssh/id_ed25519_github_sqex
 
 # History files
 .zsh_history
