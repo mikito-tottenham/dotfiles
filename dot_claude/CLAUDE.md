@@ -2,6 +2,7 @@
 
 - 日本語で応答すること
 - MCP サーバーよりも CLI ツールの利用を優先して検討すること
+- ファイル探索は `rg --files`、内容検索は `rg` を第一候補とし、`rg` が使えない場合だけ `ag`、最後に `grep` を使うこと
 - secret 実値は 1Password に保存し、CLI では `op run --env-file` / `op read` と `op://...` secret reference 経由で受け渡すこと
 - `~/.config/op/dotfiles.env` は管理外の secret reference 置き場とし、実値を書かないこと
 - `~/.zshenv.local` は secret の置き場ではなく、マシン固有の非 secret local override に限定すること
