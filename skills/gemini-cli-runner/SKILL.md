@@ -93,7 +93,7 @@ Treat any of these as failure:
 
 - Timeout exit, normally exit code `124`.
 - Non-zero process exit.
-- stderr contains authentication, model, permission, quota, trust, policy, or rate-limit errors.
+- stderr contains fatal authentication, model resolution, permission, quota, trust, policy, or rate-limit errors. Non-empty stderr and CLI warnings alone are not failures when the process exits `0`, stream output is present, and expected artifacts are non-empty.
 - Parsed stream-json records contain obvious error records.
 - `run.stream.jsonl` is missing or empty.
 - Expected artifacts are missing or empty.

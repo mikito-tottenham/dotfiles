@@ -15,8 +15,11 @@ from pathlib import Path
 from typing import Any
 
 
-ERROR_RE = re.compile(
-    r"(auth|authentication|api key|login|model|permission|rate limit|rate-limit|quota|overloaded|trust|policy|sandbox)",
+FATAL_STDERR_RE = re.compile(
+    r"(auth(?:entication)?\s+(?:failed|required|error)|api key|login\s+(?:required|failed)|"
+    r"permission\s+(?:denied|required|error)|rate[- ]limit|quota|overloaded|"
+    r"trust\s+(?:required|error)|policy\s+(?:violation|denied|error)|sandbox\s+(?:denied|error)|"
+    r"model\s+(?:not found|unsupported|unavailable|invalid|error))",
     re.IGNORECASE,
 )
 
@@ -201,6 +204,10 @@ def record_is_error(record: dict[str, Any]) -> bool:
     )
 
 
+def stderr_has_cli_error(stderr_text: str) -> bool:
+    return any(FATAL_STDERR_RE.search(line) for line in stderr_text.splitlines())
+
+
 def write_failure(path: Path, summary: dict[str, Any]) -> None:
     command = " ".join(summary["command"])
     last = summary.get("last_error_record") or summary.get("last_stream_record") or {}
@@ -304,7 +311,7 @@ def main() -> int:
     last_stream_record = records[-1] if records else None
     last_error_record = error_records[-1] if error_records else None
     stderr_text = stderr_path.read_text(encoding="utf-8", errors="replace") if stderr_path.exists() else ""
-    stderr_error = bool(ERROR_RE.search(stderr_text))
+    stderr_error = stderr_has_cli_error(stderr_text)
 
     expected = []
     for path in expected_artifact_paths:

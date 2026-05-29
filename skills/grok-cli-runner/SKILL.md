@@ -9,6 +9,11 @@ Use this skill when delegating work to Grok through a file-based runner contract
 
 Frame each delegation as an outcome-first contract: request artifact, expected response artifact, timeout, success criteria, model defaulting, allowed tools, schema expectations, and failure handling. Keep final judgment, editing, and irreversible side effects in the caller.
 
+This runner has two distinct modes:
+
+- `--retrieval-mode x-raw`: fetch as much raw public data as possible for supplied X URLs and return it to the caller in `x-search-results.json` plus the response artifact. Use this when the caller needs source evidence, quote eligibility, Article/card data, counts, or raw context before deciding how to use it.
+- `--retrieval-mode answer`: prepare a Grok final answer for the supplied task using available X and web context. This is the default for backward compatibility.
+
 ## Core Rules
 
 - Put every run under `.context/<task>/`.
@@ -16,11 +21,13 @@ Frame each delegation as an outcome-first contract: request artifact, expected r
 - Do not inline large JSON request bodies into shell arguments.
 - Do not ask for per-run approval solely because the call may use API billing, subscription quota, or local Hermes auth/session state.
 - Use the wrapper's 600-second process timeout default, or pass an explicit timeout override when the task needs a shorter or longer limit.
+- Direct Hermes `x_search_tool` probes use a separate per-query timeout default of 120 seconds; override with `--x-search-timeout-seconds` only when a specific X retrieval needs more or less time.
 - Use `--dry-run` for request-shape validation; it does not call the API and intentionally does not create a response artifact.
 - Require `XAI_API_KEY` for real direct API calls. SuperGrok access alone is not direct API access.
 - Require Hermes Agent setup and `xai-oauth` login for real Hermes calls. `XAI_API_KEY` is not required for this backend.
 - Do not treat 0-byte `run.err` or a missing response artifact alone as a hang; use exit code, timeout, summary fields, and failure reasons.
 - When the user provides an X-related URL, this skill must be used. X-related URL includes `x.com`, `twitter.com`, `mobile.twitter.com`, X/Twitter post URLs, thread URLs, quote-post URLs, reply URLs, and common X mirrors such as Nitter URLs.
+- When the caller needs raw X evidence, use `--retrieval-mode x-raw`; do not infer raw evidence from the default final-answer prose.
 
 ## Hermes Setup
 
@@ -57,7 +64,7 @@ When the request contains an X-related URL, build the request so Grok retrieves 
 
 Required retrieval scope:
 
-- Original post text, author display name, handle, timestamp, visible media/alt text, linked cards, and quoted post.
+- Original post text, author display name, handle, timestamp, visible media/alt text, linked cards, X Article/longform text, and quoted post.
 - Parent posts and the surrounding thread, including earlier and later posts by the author when available.
 - Visible replies, quote posts, repost/reply/like/view counts, and notable reactions or community context when available.
 - Any access limitation such as login wall, deleted/protected post, rate limit, dynamic rendering failure, or missing engagement data.
@@ -66,18 +73,22 @@ Runner behavior:
 
 - The wrapper detects X-related URLs in `request.input`.
 - For Hermes runs, the wrapper calls Hermes `x_search_tool` directly before the one-shot summarization and writes `x-search-results.json` under the output directory.
-- Treat `x-search-results.json` as the primary artifact for engagement counts because it preserves the direct `x_search_tool` JSON response instead of only the model's final prose.
-- Use `x-search-results.json.representative_engagement` as the default count source when present. It is selected from the first structured `exact_url_counts` result. Later `thread_context` or `reaction_search` answers may show different view counts because engagement changes over time; mention that drift when it matters.
+- During direct X retrieval, the wrapper logs progress to stdout and updates `x-search-results.json` before and after each query with `status`, timestamps, and per-query responses. If a query hangs or times out, use the partially written artifact to identify the last running query.
+- In `--retrieval-mode x-raw`, the wrapper skips final-answer synthesis and fails if no X URL is present, direct `x_search_tool` is unavailable, or every direct X query fails.
+- In `--retrieval-mode answer`, the wrapper may still succeed when final-answer synthesis succeeds, but callers must not treat that prose as raw source evidence when `x-search-results.json.available=false`.
+- When `x-search-results.json.available=false`, inspect `x-search-results.json.diagnostics` before retrying. It records Hermes auth status, selected site-packages path, import errors, credential provider, credential presence, `HOME`, `HERMES_HOME`, and `HERMES_PROFILE` so subprocess environment drift is visible. If `check_x_search_requirements()` is false but `hermes auth status xai-oauth` reports logged in, the runner still attempts direct `x_search_tool` calls and records that reason in diagnostics.
+- Treat `x-search-results.json` as the primary artifact for post text, Article/card details, media metadata, and engagement counts because it preserves the direct `x_search_tool` JSON response instead of only the model's final prose.
+- Use `x-search-results.json.representative_engagement` as the default count source when present. It is selected from the first structured `exact_url_full` result. Later `thread_context` or `reaction_search` answers may show different view counts because engagement changes over time; mention that drift when it matters.
 - Treat engagement counts as a time-varying snapshot from the retrieval run, not durable truth. When reporting counts, preserve the artifact and mention snapshot drift if exactness matters.
 - For reactions, prefer a compact list of the top 3-5 notable replies, quote posts, or community reactions when available, plus a limitation statement when only aggregate counts are visible.
 - When count fields and surfaced items disagree, keep the count from `representative_engagement` as the primary count and report surfaced items as partial examples from the relevant query. Example: "quote_count=1, but concrete quote post details were only surfaced by `reaction_search`" or "count indicates quotes exist, but no quote post items were returned."
-- In the final prose, include concrete surfaced items from any successful query (`exact_url_counts`, `thread_context`, or `reaction_search`) when they are relevant. Label the source query when another query's structured list is empty, instead of discarding the item.
+- In the final prose, include concrete surfaced items from any successful query (`exact_url_full`, `article_card_context`, `thread_context`, or `reaction_search`) when they are relevant. Label the source query when another query's structured list is empty, instead of discarding the item.
 - Classify surrounding posts by relationship evidence: reply-to metadata is a parent, embedded quoted content is a quoted post, same-author nearby posts without reply/quote evidence are thread or surrounding author context. If Hermes output is ambiguous, say which relationship is inferred and why.
 - For a generic "content and reactions" request, default to a concise report with: post summary, engagement snapshot, thread/quote/reply context, top 3-5 notable reactions when available, and retrieval limitations.
 - For Hermes runs, it injects explicit X retrieval instructions into the one-shot prompt.
 - For Hermes runs, it also injects a compact version of `x-search-results.json` into the one-shot prompt so final summaries can include counts reliably.
 - For Hermes runs with X URLs, it automatically enables `web,browser,x_search` toolsets for that invocation unless already included.
-- If Grok cannot retrieve the full thread or reactions, the caller should report the limitation and preserve the partial evidence in the final answer.
+- If Grok cannot retrieve the full post, Article/card content, thread, or reactions, the caller should report the limitation and preserve the partial evidence in the final answer.
 
 ## Caller Checklist
 
@@ -86,9 +97,11 @@ Before running Grok, make these decisions explicitly:
 - Task directory: choose `.context/<task>/`.
 - Request artifact: write `.context/<task>/grok-request.json` with top-level `task` and `request`.
 - Response artifact: pass `--response-artifact grok-response.json` unless a different response filename is required.
+- Retrieval mode: use `--retrieval-mode x-raw` for source collection and `--retrieval-mode answer` for Grok-authored analysis or synthesis.
 - Backend: default to `--backend hermes`; pass `--backend xai-api` only when direct API-key billing is explicitly intended.
 - Model: omit `--model` unless the caller, model registry, or role explicitly requires an override. The wrapper defaults to `GROK_MODEL`, then `GROK_X_RESEARCH_MODEL`, then `grok-4.3`.
 - Timeout: rely on the 600-second wrapper default unless the task contract says otherwise. The HTTP timeout defaults to the same value unless `--http-timeout-seconds` is provided.
+- Direct X search timeout: rely on the 120-second per-query default unless the task specifically requires a different limit.
 - Tools: include `web_search`, `x_search`, or other xAI tools in `request.tools` only when the task needs them; set explicit limits in the prompt/request text when doing research. For Hermes backend, pass `--hermes-toolsets <csv>` only when Hermes toolsets are already configured and the task needs them.
 - Structured output: put schema constraints under `request.response_format`, then validate `output_text` in the caller.
 - Expected artifacts: if other files must be created by the caller after reading Grok output, track those outside this wrapper; this wrapper only guarantees the response artifact.
@@ -110,6 +123,19 @@ python3 <skill-dir>/scripts/run_grok_cli.py \
 
 This calls `hermes --oneshot` with `--provider xai-oauth` by default and normalizes the final stdout into `grok-response.json`.
 
+For raw X URL retrieval, use:
+
+```bash
+python3 <skill-dir>/scripts/run_grok_cli.py \
+  --request-file .context/<task>/grok-request.json \
+  --output-dir .context/<task> \
+  --response-artifact grok-response.json \
+  --backend hermes \
+  --retrieval-mode x-raw
+```
+
+This writes `x-search-results.json`, embeds the raw retrieval object in `grok-response.json`, and does not ask Hermes for final prose.
+
 For explicitly requested direct xAI API runs, use:
 
 ```bash
@@ -123,6 +149,7 @@ python3 <skill-dir>/scripts/run_grok_cli.py \
 Add `--model <model>` only when overriding environment/config defaults.
 Add `--timeout-seconds <seconds>` only when overriding the 600-second process timeout.
 Add `--http-timeout-seconds <seconds>` only when the HTTP request needs a different timeout from the process guard.
+Add `--x-search-timeout-seconds <seconds>` only when overriding the direct Hermes X-search per-query timeout.
 Add `--hermes-provider <provider>` only when overriding the Hermes provider from `xai-oauth`.
 Add `--hermes-bin <path>` only when the Hermes executable is not on `PATH`.
 
@@ -130,7 +157,8 @@ The wrapper writes:
 
 - `grok-request.json`: caller-authored request artifact
 - `x-search-results.json`: direct Hermes `x_search_tool` result artifact when X URLs are detected
-- `grok-response.json`: normalized response artifact for real successful calls
+- stdout progress lines: direct X retrieval start, each query start/finish, and completion/unavailable status
+- `grok-response.json`: normalized response artifact for real successful calls; in `x-raw` mode this wraps the raw X retrieval instead of final prose
 - `run.err`: stderr and local wrapper diagnostics
 - `summary.json`: command, exit code, elapsed time, byte counts, model, backend, dry-run flag, detected X URLs, effective Hermes toolsets, produced X search artifact path, response status, `failure_reasons`, and `recommended_next_action`
 - `failure.md`: only when the wrapper run fails
@@ -170,6 +198,7 @@ Require all applicable checks:
 - For real runs, `grok-response.json` exists and is non-empty.
 - Response artifact contains `request`, `response`, `model`, and either `output_text` or a raw `response` object sufficient for the caller to inspect.
 - `summary.json.success` is `true`, `summary.json.failure_reasons` is empty, and `summary.json.response_non_empty` is `true`.
+- For `--retrieval-mode x-raw`, `x-search-results.json.available=true` and `summary.json.x_search_successful_query_count > 0`.
 - For `--dry-run`, success means the outbound payload validated and was written to `summary.json.dry_run_payload`; no response artifact is expected.
 
 ## Failure Criteria
@@ -185,6 +214,7 @@ Treat any of these as failure:
 - `missing_hermes` in `summary.json.failure_reasons` means the Homebrew `hermes-agent` formula is missing or `--hermes-bin` points to the wrong executable.
 - HTTP/API authentication, model, permission, policy, or rate-limit errors.
 - Real run response artifact is missing or empty.
+- In `--retrieval-mode x-raw`, missing X URLs, unavailable direct `x_search_tool`, or zero successful direct X queries.
 
 On failure, inspect `.context/<task>/summary.json` first:
 
@@ -196,6 +226,9 @@ On failure, inspect `.context/<task>/summary.json` first:
 - `x_urls_detected`
 - `hermes_toolsets`
 - `x_search_results_artifact`
+- `x_search_available` and `x_search_successful_query_count`
+- `x_search_timeout_seconds`
+- `x-search-results.json.diagnostics` when direct X search is unavailable
 - `dry_run`
 - `failure_reasons`
 - `api_error`
@@ -219,7 +252,9 @@ Use these patterns when testing the wrapper itself without making a backend call
 - Run `--dry-run` with a valid request artifact. It should exit `0`, write `summary.json`, and not require `XAI_API_KEY`.
 - Run with an invalid request artifact to confirm `failure.md` and `summary.json.failure_reasons` are generated.
 - Run a dry-run or direct helper-level check with an X URL request to confirm prompt conversion includes X retrieval requirements.
-- Run a real Hermes X URL smoke when credentials are available and confirm `x-search-results.json` is written with `credential_source: xai-oauth` and visible engagement counts when xAI returns them.
+- Run `--retrieval-mode x-raw` with a real X URL and confirm `summary.json.x_search_successful_query_count > 0`.
+- For any real X smoke, confirm stdout emits progress and `x-search-results.json` appears before the first direct query finishes.
+- Run a real Hermes X URL smoke when credentials are available and confirm `x-search-results.json` is written with `credential_source: xai-oauth`, `available=true`, Article/card fields when present, and visible engagement counts when xAI returns them.
 - Run with a fake backend script via `--backend-script <path>` only for controlled tests. Do not use fake backend scripts for real Grok delegation.
 - Do not hand-edit `summary.json`, `run.err`, `grok-response.json`, or `failure.md`. If a controlled test needs explanation, write a separate `notes.md`.
 

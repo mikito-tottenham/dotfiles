@@ -114,16 +114,20 @@ Fields:
 - `tool`: `hermes_x_search_tool`
 - `x_urls`: detected X-related URLs
 - `available`: whether Hermes `x_search_tool` credentials/checks passed
-- `queries`: direct `x_search_tool` probes, normally `exact_url_counts`, `thread_context`, and `reaction_search`
+- `status`: `running`, `completed`, or `failed`; the file is written before the first direct query and updated as queries finish
+- `query_timeout_seconds`: per-query timeout used for direct `x_search_tool` calls
+- `queries`: direct `x_search_tool` probes, normally `exact_url_full`, `article_card_context`, `thread_context`, and `reaction_search`
+- `queries[].status`: `running`, `completed`, or `failed`
+- `queries[].started_at` / `queries[].finished_at`: UTC timestamps for query progress
 - `queries[].response`: JSON returned by Hermes `x_search_tool`, including `credential_source`, `model`, `answer`, `citations`, and `inline_citations`
 - `queries[].parsed_answer`: parsed JSON when Grok returned JSON in `answer`, otherwise `null`
-- `representative_engagement`: default engagement/count source selected from the first structured `exact_url_counts` parsed answer
+- `representative_engagement`: default engagement/count source selected from the first structured `exact_url_full` parsed answer
 - `representative_engagement.snapshot_note`: reminder that engagement counts are a time-varying snapshot
 
 `reaction_search` should aim to capture a compact top 3-5 notable replies, quote posts, or community reactions when available. Some X responses only expose aggregate counts; preserve that limitation in the final answer.
 
 When aggregate counts and surfaced items disagree, do not overwrite the count or invent missing items. Use `representative_engagement` for the count snapshot and describe surfaced items as partial examples from `thread_context` or `reaction_search`.
 
-Final prose should include concrete surfaced items from any successful query when relevant. If `exact_url_counts.quote_posts` is empty but `reaction_search` surfaces a quote post, report it as source-labeled partial evidence from `reaction_search`.
+Final prose should include concrete surfaced items from any successful query when relevant. If `exact_url_full.quote_posts` is empty but `reaction_search` surfaces a quote post, report it as source-labeled partial evidence from `reaction_search`.
 
 Use this artifact as the source of truth for engagement counts when present.
