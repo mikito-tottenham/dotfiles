@@ -54,7 +54,9 @@ ghq/**/*.p8
 .codex/auth.json
 .codex/.codex-global-state.json
 .codex/.personality_migration
-.codex/automations/.run-jitter-salt
+.codex/automations/*
+!.codex/automations/daily-ai-brew-upgrade
+!.codex/automations/daily-ai-brew-upgrade/automation.toml
 .codex/automations/*/memory.md
 .codex/archived_sessions
 .codex/history.jsonl

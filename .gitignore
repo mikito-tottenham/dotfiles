@@ -1,2 +1,5 @@
 .context/
 .DS_Store
+dot_codex/automations/*
+!dot_codex/automations/daily-ai-brew-upgrade/
+!dot_codex/automations/daily-ai-brew-upgrade/automation.toml
