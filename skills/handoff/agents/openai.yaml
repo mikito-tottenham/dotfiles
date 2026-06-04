@@ -1,0 +1,4 @@
+interface:
+  display_name: "Handoff"
+  short_description: "Create context handoffs for continuation"
+  default_prompt: "Use $handoff to prepare a concise continuation handoff for this work."
