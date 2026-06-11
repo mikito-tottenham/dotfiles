@@ -205,6 +205,14 @@ def record_is_error(record: dict[str, Any]) -> bool:
     )
 
 
+def record_is_final_success(record: dict[str, Any] | None) -> bool:
+    if not record:
+        return False
+    record_type = str(record.get("type", "")).lower()
+    record_status = str(record.get("status", "")).lower()
+    return record_type == "result" and record_status == "success"
+
+
 def stderr_has_cli_error(stderr_text: str) -> bool:
     return any(FATAL_STDERR_RE.search(line) for line in stderr_text.splitlines())
 
@@ -316,6 +324,7 @@ def main() -> int:
     error_records = [record for record in records if record_is_error(record)]
     last_stream_record = records[-1] if records else None
     last_error_record = error_records[-1] if error_records else None
+    final_stream_success = record_is_final_success(last_stream_record)
     stderr_text = stderr_path.read_text(encoding="utf-8", errors="replace") if stderr_path.exists() else ""
     stream_text = stream_path.read_text(encoding="utf-8", errors="replace") if stream_path.exists() else ""
     stderr_error = stderr_has_cli_error(stderr_text)
@@ -334,20 +343,38 @@ def main() -> int:
             }
         )
 
+    stream_missing = not stream_path.exists() or stream_path.stat().st_size == 0
+    missing_expected_artifact = any(not item["exists"] or not item["non_empty"] for item in expected)
+    success_evidence_ok = (
+        proc.returncode == 0
+        and not stream_missing
+        and final_stream_success
+        and not raw_mode_error
+        and not missing_expected_artifact
+    )
     failure_reasons: list[str] = []
+    nonfatal_reasons: list[str] = []
     if proc.returncode == 124:
         failure_reasons.append("timeout")
     elif proc.returncode != 0:
         failure_reasons.append("nonzero_exit")
     if stderr_error:
-        failure_reasons.append("stderr_cli_error")
+        if success_evidence_ok:
+            nonfatal_reasons.append("stderr_cli_error")
+        else:
+            failure_reasons.append("stderr_cli_error")
     if raw_mode_error:
         failure_reasons.append("raw_mode_tty_error")
     if error_records:
-        failure_reasons.append("stream_error")
-    if not stream_path.exists() or stream_path.stat().st_size == 0:
+        if success_evidence_ok:
+            nonfatal_reasons.append("stream_error")
+        else:
+            failure_reasons.append("stream_error")
+    if stream_missing:
         failure_reasons.append("missing_stream")
-    if any(not item["exists"] or not item["non_empty"] for item in expected):
+    elif not final_stream_success:
+        failure_reasons.append("missing_final_success")
+    if missing_expected_artifact:
         failure_reasons.append("missing_expected_artifact")
 
     if "timeout" in failure_reasons:
@@ -358,6 +385,14 @@ def main() -> int:
         recommended = "Fix authentication, model, permission, trust, policy, quota, or rate-limit settings before rerunning."
     elif "missing_expected_artifact" in failure_reasons:
         recommended = "Check the prompt artifact path contract and rerun with an explicit expected output path."
+    elif "missing_final_success" in failure_reasons:
+        recommended = "Inspect the last stream record; rerun if Gemini did not emit a final result success."
+    elif "stream_error" in failure_reasons:
+        recommended = "Inspect last_error_record, run.stream.jsonl, and run.err, then rerun with an adjusted prompt or access policy."
+    elif nonfatal_reasons:
+        recommended = "Run succeeded with non-fatal Gemini warnings; inspect nonfatal_reasons, last_error_record, and run.err if task quality is suspicious."
+    elif not failure_reasons:
+        recommended = "Run succeeded; evaluate task-specific artifact quality against the source prompt."
     else:
         recommended = "Inspect run.stream.jsonl and run.err, then rerun with adjusted prompt, model, approval mode, extra args, or timeout."
 
@@ -380,11 +415,13 @@ def main() -> int:
         "record_count": len(records),
         "last_stream_record": last_stream_record,
         "last_error_record": last_error_record,
+        "final_stream_success": final_stream_success,
         "stderr_cli_error": stderr_error,
         "raw_mode_tty_error": raw_mode_error,
         "expected_artifacts": expected,
         "success": not failure_reasons,
         "failure_reasons": failure_reasons,
+        "nonfatal_reasons": nonfatal_reasons,
         "recommended_next_action": recommended,
     }
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

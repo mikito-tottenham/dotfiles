@@ -263,8 +263,10 @@ The wrapper also writes `.context/<task>/failure.md` with:
 Use these patterns when testing the wrapper itself without making a backend call:
 
 - Run `--dry-run` with a valid request artifact. It should exit `0`, write `summary.json`, and not require `XAI_API_KEY`.
+- For successful `--dry-run`, inspect `summary.json.dry_run_payload`; no `grok-response.json` is expected.
 - Run with an invalid request artifact to confirm `failure.md` and `summary.json.failure_reasons` are generated.
 - Run a dry-run or direct helper-level check with an X URL request to confirm prompt conversion includes X retrieval requirements.
+- For X URL `--dry-run`, verify `summary.json.x_urls_detected` is non-empty and `summary.json.hermes_toolsets` includes `web`, `browser`, and `x_search`; this confirms routing without calling Hermes or xAI.
 - Run `--retrieval-mode x-raw` with a real X URL and confirm `summary.json.x_search_successful_query_count > 0`.
 - For any real X smoke, confirm stdout emits progress and `x-search-results.json` appears before the first direct query finishes.
 - Run a real Hermes X URL smoke when credentials are available and confirm `x-search-results.json` is written with `credential_source: xai-oauth`, `available=true`, Article/card fields when present, and visible engagement counts when xAI returns them.

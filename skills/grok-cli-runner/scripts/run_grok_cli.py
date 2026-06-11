@@ -1013,6 +1013,8 @@ def classify_failure_reasons(
 
 
 def recommended_next_action(args: argparse.Namespace, failure_reasons: list[str]) -> str:
+    if args.dry_run and not failure_reasons:
+        return "Dry-run succeeded; inspect summary.json dry_run_payload, x_urls_detected, and hermes_toolsets before making a real call."
     if "timeout" in failure_reasons:
         if "hermes_response_watchdog_timeout" in failure_reasons:
             return "Direct X search completed but Hermes final-answer materialization exceeded the response watchdog; use existing x-search-results.json and let the caller materialize a blocked artifact."

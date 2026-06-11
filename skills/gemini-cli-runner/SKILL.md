@@ -60,7 +60,7 @@ The wrapper writes:
 - `run.prompt.md`: launch prompt sent to Gemini, including any prompt profile adapter
 - `run.stream.jsonl`: Gemini stream-json stdout
 - `run.err`: stderr
-- `summary.json`: command, `target_cwd`, `process_cwd`, exit code, elapsed time, byte counts, parsed errors, prompt profile, `failure_reasons`, `recommended_next_action`, and `expected_artifacts`
+- `summary.json`: command, `target_cwd`, `process_cwd`, exit code, elapsed time, byte counts, parsed errors, prompt profile, `final_stream_success`, `failure_reasons`, `nonfatal_reasons`, `recommended_next_action`, and `expected_artifacts`
 - `failure.md`: only when the wrapper run fails
 
 ## Prompt Profiles
@@ -83,8 +83,9 @@ Require all applicable checks:
 
 - Process exit code is `0`.
 - `run.stream.jsonl` exists and is non-empty.
+- The last parsed stream-json record is a final success result: `type=result` and `status=success`.
 - Every expected artifact exists and is non-empty.
-- Parsed stream-json records do not contain obvious error records.
+- Parsed stream-json records contain no obvious error records, or only intermediate error records followed by a final success result with all expected artifacts materialized. Intermediate recovered errors are recorded in `summary.json.nonfatal_reasons`.
 - `summary.json.success` is `true`, `summary.json.failure_reasons` is empty, and every item in `summary.json.expected_artifacts` has `exists=true` and `non_empty=true`.
 
 These checks prove runner execution and non-empty artifact materialization only. The caller must still evaluate task-specific artifact quality against the source prompt.
@@ -96,9 +97,10 @@ Treat any of these as failure:
 - Timeout exit, normally exit code `124`.
 - Non-zero process exit.
 - `run.stream.jsonl` or `run.err` contains `setRawMode EIO` or `setRawMode EBADF`; treat this as `raw_mode_tty_error`, a noninteractive TTY failure, not as task output.
-- stderr contains fatal authentication, model resolution, permission, quota, trust, policy, or rate-limit errors. Non-empty stderr and CLI warnings alone are not failures when the process exits `0`, stream output is present, and expected artifacts are non-empty.
-- Parsed stream-json records contain obvious error records.
+- stderr contains fatal authentication, model resolution, permission, quota, trust, policy, or rate-limit errors that do not recover into exit `0`, a final success result, and non-empty expected artifacts. Non-empty stderr and recovered CLI warnings alone are not failures when the process exits `0`, stream output is present, the final stream result is successful, and expected artifacts are non-empty.
+- Parsed stream-json records contain obvious error records that do not recover into a final success result with non-empty expected artifacts.
 - `run.stream.jsonl` is missing or empty.
+- The final stream-json record is not a success result.
 - Expected artifacts are missing or empty.
 
 On failure, inspect `.context/<task>/summary.json` first:
@@ -109,7 +111,9 @@ On failure, inspect `.context/<task>/summary.json` first:
 - `elapsed_seconds`
 - `stream_bytes` and `stderr_bytes`
 - `failure_reasons`
+- `nonfatal_reasons`
 - `raw_mode_tty_error`
+- `final_stream_success`
 - `last_error_record` or `last_stream_record`
 - `expected_artifacts`
 - `recommended_next_action`
@@ -132,7 +136,8 @@ Use these patterns when testing the wrapper itself without spending Gemini API b
 
 - For command-construction checks only, pass `--timeout-bin /usr/bin/true`. This bypasses Gemini entirely and should fail wrapper success checks because no stream-json output or expected artifact is produced.
 - For end-to-end wrapper success without API spend, create a small fake Gemini executable under `.context/<task>/bin/` and pass it with `--gemini-bin <path-to-fake-gemini>`. The fake CLI must write JSONL stdout and create the expected artifact.
-- Minimal fake behavior: exit `0`, print one non-error JSON object such as `{"type":"message","status":"ok"}`, and write the requested expected artifact such as `result.md`.
+- Minimal fake behavior: exit `0`, print one final success JSON object such as `{"type":"result","status":"success"}`, and write the requested expected artifact such as `result.md`.
+- Fake Gemini executables run with `process_cwd=--output-dir`, so a relative expected artifact such as `--expected-artifact result.md` can be created by writing `result.md` in the fake script. For wrapper-only validation, the source `prompt.md` may be a minimal valid task contract such as "Write result.md."
 - Use an absolute `--gemini-bin` path for fake CLIs unless you have verified the relative path resolves from the wrapper output directory; real Gemini runs execute with `process_cwd=--output-dir`.
 - Keep fake CLIs under `.context/<task>/bin/` and use them only in validation. Do not use `--gemini-bin` for real Gemini delegation.
 - Do not hand-edit `summary.json`, `run.stream.jsonl`, `run.err`, or `failure.md`. If a controlled test needs explanation, write a separate `notes.md`.
