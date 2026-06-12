@@ -60,7 +60,7 @@ opmaterialize restore
 
 ### サブエージェントの復元
 
-`private-secretary` や `senior-engineer` などのサブエージェントは skill ではなく、Claude Code / Codex の private agent 定義として管理します。
+`personal` や `tech` などのサブエージェントは skill ではなく、Claude Code / Codex の private agent 定義として管理します。
 定義ファイルや private secretary の facts / assets は git に入れず、1Password の `Secrets Manifest` から `opmaterialize restore` で復元します。
 
 新しいマシンでは 1Password にサインインして `opmaterialize restore` を実行した後、サブエージェント関連 target を再 apply します。
@@ -77,10 +77,12 @@ chezmoi apply --parent-dirs \
 復元確認:
 
 ```bash
-test -r ~/.claude/agents/private-secretary.md
-test -r ~/.claude/agents/senior-engineer.md
-test -r ~/.codex/agents/private-secretary.toml
-test -r ~/.codex/agents/senior-engineer.toml
+test -r ~/.claude/agents/personal.md
+test -r ~/.claude/agents/biz.md
+test -r ~/.claude/agents/tech.md
+test -r ~/.codex/agents/personal.toml
+test -r ~/.codex/agents/biz.toml
+test -r ~/.codex/agents/tech.toml
 test -r ~/.config/private-secretary/facts.jsonl
 ```
 
