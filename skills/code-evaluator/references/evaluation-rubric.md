@@ -12,18 +12,24 @@ Use this rubric to evaluate code quality while keeping the final report evidence
 1. **Architecture and boundaries**
    - Separation of concerns, dependency direction, layering, module ownership, circular dependencies, and hidden globals.
    - Pattern fit: avoid both under-structured coupling and unnecessary architecture.
+   - Directory and package grain should match ownership and exported responsibility well enough for navigation, without requiring one universal structure.
 
 2. **Implementation quality and maintainability**
    - Readability, simple control flow, robust error handling, observability, validation, security hygiene, performance hygiene, operational readiness signals, and testability.
    - Prefer idiomatic use of language/framework features over custom abstractions without clear benefit.
+   - Public component, directory, function, and module names should describe responsibility or ownership, not authoring method, AI involvement, or generator provenance.
+   - Semantic UI object names should own the object contract they imply, such as relevant state, variants, accessibility, interaction, layout/composition, and data/source responsibility; leaf text, formatter, wrapper, or selector helpers should use names and placement that reflect their narrower role.
 
 3. **Tests and verification**
    - Critical behavior coverage, edge cases, deterministic tests, test isolation, useful fixtures, checks that can run in CI, and local/CI parity.
    - Report checks not run and how that affects confidence.
+   - Local audit/lint checks should enforce current low-false-positive invariants and avoid broad regex guesses for semantic ownership.
+   - Stable test selectors and automation contracts may intentionally keep historical wording; evaluate them separately from internal implementation responsibility names.
 
 4. **Documentation and project knowledge**
    - README, architecture docs, ADRs, API contracts, comments that explain intent, and alignment between docs and code.
    - Separate project-specific compliance from general best practice.
+   - When AI-assisted work is part of the workflow, missing or ambiguous entry-gate and artifact contracts are maintainability risks, not only documentation gaps.
 
 5. **Dependency necessity and ecosystem fit**
    - Whether dependencies are necessary, official, maintained, license-compatible for the use context, and used idiomatically.
@@ -36,6 +42,7 @@ Use this rubric to evaluate code quality while keeping the final report evidence
 7. **AI/LLM ergonomics**
    - Clear structure, chunkable files, explicit interfaces/types, predictable naming, low boilerplate, focused modules, and tests/docs that let future agents reason with limited context.
    - Treat this as supplementary to human readability, domain idiom, and maintainability; do not reward AI convenience at their expense.
+   - Future agents should be able to identify source taxonomy, ownership layer, canonical docs, and verification gates before editing.
 
 ## Dependency Triage
 
@@ -106,5 +113,7 @@ Call out existing structures that should not constrain future improvement:
 - Cross-layer imports or abstractions that encode accidental history.
 - Duplicate libraries for one purpose.
 - Design choices that match current code but conflict with ideal architecture.
+- Public names that encode authoring method or generator status instead of responsibility.
+- Regex gates that appear to enforce semantic ownership but cannot do so with low false positives.
 
 This section is design opinion, not a deletion or refactor mandate. Do not apply it to product behavior, public APIs, data migrations, security boundaries, or legal obligations without explicit caution.

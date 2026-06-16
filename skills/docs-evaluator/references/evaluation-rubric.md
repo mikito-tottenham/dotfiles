@@ -26,6 +26,7 @@ Use this rubric to score the documentation system as a graph of active guidance,
 - Temporary notes, workbench docs, and `.context/` artifacts do not carry unreflected policy.
 - Multiple files do not claim canonical authority for the same topic unless the precedence rule is explicit.
 - Canonical claims name the current source, not just historical rationale.
+- Detailed schemas for skills, gates, artifacts, or workflow contracts have one identifiable canonical owner; summaries and ADRs link to or summarize that owner instead of repeating the full schema.
 
 ### AI Readability
 
@@ -33,6 +34,8 @@ Use this rubric to score the documentation system as a graph of active guidance,
 - Reading order is explicit enough to avoid both missed rules and unnecessary deep dives.
 - Documents are chunkable: scoped headings, concise sections, stable names, and structured lists where useful.
 - The required reading path has a reasonable qualitative burden and does not force agents through irrelevant history.
+- Gate or phase artifacts expose machine-checkable status fields when docs say work cannot proceed on `FAIL` or `QUESTION`; prose-only completion claims are a risk when downstream agents or validators need stable state.
+- Docs separate low-false-positive static checks from semantic human/agent review instead of asking scripts to infer task-local intent or ownership without context.
 
 ### Consistency
 
@@ -43,6 +46,8 @@ Use this rubric to score the documentation system as a graph of active guidance,
 - Shared guidance and agent-specific guidance are separated intentionally across AGENTS, CLAUDE.md, GEMINI.md, QWEN.md, Codex guidance, and skill docs.
 - Skill docs explain whether they inherit repo rules, override a specific procedure, or provide a narrower contract.
 - Terminology for repeated operational concepts is stable enough that agents can match equivalent rules without guessing; do not treat general prose style as a finding.
+- Naming taxonomy docs distinguish responsibility/ownership names from authoring-method labels and generated-artifact labels.
+- Stable external selectors, test IDs, public automation contracts, and implementation responsibility names are documented as separate concerns when renaming one would break the other.
 
 ### Reference Integrity
 
@@ -56,6 +61,7 @@ Use this rubric to score the documentation system as a graph of active guidance,
 - TODO, Deferred Work, known gaps, and follow-up tasks have an owner, status, destination, or expiry.
 - Follow-up notes are not scattered across ADRs, scratchpads, comments, and docs without a canonical tracker.
 - Temporary findings that should change canonical docs are tracked until reflected or explicitly rejected.
+- Gate artifacts use explicit fields such as status, blocking failures, and open questions when the workflow needs deterministic continuation rules.
 
 ### Metadata Hygiene
 
@@ -83,6 +89,9 @@ Use this rubric to score the documentation system as a graph of active guidance,
 - `overreach`: navigation forces agents through unnecessary or low-value docs.
 - `source-of-truth-gap`: active guidance exists only in ADR/history/temporary notes.
 - `canonical-claim-conflict`: multiple docs claim canonical authority for the same topic without precedence.
+- `schema-drift`: detailed schemas are copied across skills, rules, ADRs, or other docs without a single canonical owner.
+- `artifact-contract`: workflow, phase, or gate artifacts lack explicit fields needed for deterministic continuation or validation.
+- `machine-check-boundary`: docs blur what scripts can safely check with regex/static rules and what requires semantic review.
 - `temporary-gap`: temporary content has not been reflected, tracked, or expired.
 - `contradiction`: docs conflict on active behavior, rules, paths, or responsibilities.
 - `instruction-strength-drift`: the same rule changes strength across docs.
@@ -102,6 +111,7 @@ Use this rubric to score the documentation system as a graph of active guidance,
 - `ai-readability`: document shape makes agent reading inefficient or error-prone.
 - `reference-quality`: anchors, relative paths, named paths, or worktree-crossing references are ambiguous or broken.
 - `terminology-drift`: repeated concepts use inconsistent terms that obscure whether rules are equivalent.
+- `naming-taxonomy`: docs blur responsibility names, authoring-method labels, generated-artifact labels, or stable external selectors.
 - `reading-cost`: required docs path is qualitatively too long or indirect for the task it supports; do not assign pseudo-precise token or minute estimates.
 
 ## Confidence
