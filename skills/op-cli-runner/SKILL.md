@@ -16,10 +16,10 @@ If `op whoami`, `op vault list`, or `opmaterialize diff` fails with `account is 
 ## Safety
 
 - Do not print secret values.
-- Do not run `op read`, `op item get --reveal`, or commands expected to write secret values to stdout unless the caller explicitly provides a secret-safe output path and reporting plan.
+- Do not run `op read`, `op item get --reveal`, or commands expected to write secret values to stdout. The wrapper rejects known stdout-secret forms before execution.
 - Prefer commands that write secrets directly to files, such as `op document get --out-file ...`, or workflows like `opmaterialize` that avoid printing secret contents.
 - Treat `op://...` references as sensitive operational material. The wrapper redacts them from metadata, but avoid passing them through command lines when a file or env-file handoff is available.
-- Save logs under `.context/<task>/`, not `/tmp`.
+- Save logs under `.context/<task>/`, not `/tmp`. The wrapper rejects `--output-dir` outside the command `--cwd` repository's `.context/` directory.
 
 ## Wrapper
 
@@ -35,8 +35,18 @@ python3 skills/op-cli-runner/scripts/run_op_cli.py \
 The wrapper writes:
 
 - `command.redacted.json`: command arguments with `op://...` references redacted
-- `run.log`: timestamped runner log and subprocess output
+- `run.log`: timestamped runner log and redacted subprocess output
 - `summary.json`: mode, cwd, command metadata, exit code, elapsed time, and failure classification
+
+Relative `--output-dir` values are resolved under `--cwd`, so `--cwd /repo --output-dir .context/task/op` writes to `/repo/.context/task/op`.
+
+## Fake Validation Pattern
+
+When testing this skill without live 1Password, set `--cwd` explicitly and treat `.context/<task>/` as relative to that `--cwd`. Prefer inline fake commands such as `sh -c 'echo account is not signed in >&2; exit 1'`; if a helper script is necessary, put it under `.context/<task>/helpers/`.
+
+Treat a non-zero wrapper exit as a successful test when `summary.json.failure_kind` matches the expected failure. Use non-real dummy `op://...` values only when testing redaction or rejection, and do not save raw unsafe literals in helpers or scan artifacts. Build unsafe-looking test output from fragments when needed. Scan wrapper-generated artifacts such as `summary.json`, `command.redacted.json`, and `run.log`; save only scan exit code, counts, booleans, and redacted or empty output.
+
+For rejection tests, passing a blocked `op` command to the wrapper is allowed because the wrapper rejects it before subprocess execution; report it as "not executed" rather than as a live `op` call. For guard/redaction validation, scan the whole `.context/<task>/` validation area, including externally captured guard stderr/stdout and wrapper artifacts, but never persist raw match lines containing unsafe literals.
 
 ## Direct Execution
 
@@ -102,8 +112,10 @@ Classify failures from `summary.json.failure_kind`:
 - `auth_timeout`: the auth prompt did not complete before 1Password CLI timed out.
 - `signin_unverified`: `op signin` exited without error, but `op whoami` did not confirm a usable session.
 - `timeout`: command exceeded the wrapper timeout.
+- `rejected_secret_stdout`: command was not executed because it is known to print secret values to stdout.
 - `command_failed`: command exited non-zero without a known auth signature.
 - exit 127 from `opmaterialize`: wrapper missing or not on `PATH`; check wrapper availability before auth troubleshooting.
+- output-dir guard failure: wrapper exits `2` before creating `summary.json`; correct `--output-dir` to live under `<cwd>/.context/` and rerun, or capture stderr/exit externally when testing the guard itself.
 
 For recurring `prompt_error`, `auth_timeout`, or silent waits, do not add another fallback inside this skill. Report the failure and update the environment, 1Password app integration, or caller workflow so the direct command can succeed or fail deterministically.
 
