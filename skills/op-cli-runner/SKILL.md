@@ -40,6 +40,14 @@ The wrapper writes:
 
 Relative `--output-dir` values are resolved under `--cwd`, so `--cwd /repo --output-dir .context/task/op` writes to `/repo/.context/task/op`.
 
+## Fake Validation Pattern
+
+When testing this skill without live 1Password, set `--cwd` explicitly and treat `.context/<task>/` as relative to that `--cwd`. Prefer inline fake commands such as `sh -c 'echo account is not signed in >&2; exit 1'`; if a helper script is necessary, put it under `.context/<task>/helpers/`.
+
+Treat a non-zero wrapper exit as a successful test when `summary.json.failure_kind` matches the expected failure. Use non-real dummy `op://...` values only when testing redaction or rejection, and do not save raw unsafe literals in helpers or scan artifacts. Build unsafe-looking test output from fragments when needed. Scan wrapper-generated artifacts such as `summary.json`, `command.redacted.json`, and `run.log`; save only scan exit code, counts, booleans, and redacted or empty output.
+
+For rejection tests, passing a blocked `op` command to the wrapper is allowed because the wrapper rejects it before subprocess execution; report it as "not executed" rather than as a live `op` call. For guard/redaction validation, scan the whole `.context/<task>/` validation area, including externally captured guard stderr/stdout and wrapper artifacts, but never persist raw match lines containing unsafe literals.
+
 ## Direct Execution
 
 Use the wrapper for direct execution:
@@ -107,6 +115,7 @@ Classify failures from `summary.json.failure_kind`:
 - `rejected_secret_stdout`: command was not executed because it is known to print secret values to stdout.
 - `command_failed`: command exited non-zero without a known auth signature.
 - exit 127 from `opmaterialize`: wrapper missing or not on `PATH`; check wrapper availability before auth troubleshooting.
+- output-dir guard failure: wrapper exits `2` before creating `summary.json`; correct `--output-dir` to live under `<cwd>/.context/` and rerun, or capture stderr/exit externally when testing the guard itself.
 
 For recurring `prompt_error`, `auth_timeout`, or silent waits, do not add another fallback inside this skill. Report the failure and update the environment, 1Password app integration, or caller workflow so the direct command can succeed or fail deterministically.
 
