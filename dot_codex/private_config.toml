@@ -5,31 +5,42 @@ service_tier = "fast"
 approval_policy = "never"
 sandbox_mode = "danger-full-access"
 
-notify = ["/Users/rmanzoku/.codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient", "turn-ended"]
+notify = ["/Users/mikito/.codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient", "turn-ended"]
 
 [features]
 codex_hooks = true
 collaboration_modes = true
 multi_agent = true
 goals = true
+js_repl = false
 
 [mcp_servers.pencil]
 command = "/Applications/Pencil.app/Contents/Resources/app.asar.unpacked/out/mcp-server-darwin-arm64"
 args = [ "--app", "desktop" ]
 
-[projects."/Users/rmanzoku/conductor/repos"]
+[mcp_servers.node_repl]
+args = []
+command = "/Applications/Codex.app/Contents/Resources/cua_node/bin/node_repl"
+startup_timeout_sec = 120
+
+[mcp_servers.node_repl.env]
+NODE_REPL_NATIVE_PIPE_CONNECT_TIMEOUT_MS = "1000"
+NODE_REPL_NODE_MODULE_DIRS = "/Applications/Codex.app/Contents/Resources/cua_node/lib/node_modules"
+NODE_REPL_NODE_PATH = "/Applications/Codex.app/Contents/Resources/cua_node/bin/node"
+NODE_REPL_TRUSTED_CODE_PATHS = "/Users/mikito/.codex"
+CODEX_HOME = "/Users/mikito/.codex"
+NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S = "099cb5ac09333da8389063d49d03a7e277fc87d858b0526a538f0871af93bf68"
+BROWSER_USE_AVAILABLE_BACKENDS = "chrome,iab"
+NODE_REPL_INSTRUCTIONS_USE_CASE_BROWSER = "Control the in-app browser in conjunction with the Browser Plugin."
+NODE_REPL_INSTRUCTIONS_USE_CASE_CHROME = "Control the Chrome browser in conjunction with the Chrome Plugin. Prefer this method of controlling Chrome over alternatives (such as Computer Use) unless the user explicitly mentions an alternative."
+BROWSER_USE_CODEX_APP_BUILD_FLAVOR = "prod"
+BROWSER_USE_CODEX_APP_VERSION = "26.611.61753"
+CODEX_CLI_PATH = "/Applications/Codex.app/Contents/Resources/codex"
+
+[projects."/Users/mikito/.local/share/chezmoi"]
 trust_level = "trusted"
 
-[projects."/Users/rmanzoku/ghq"]
-trust_level = "trusted"
-
-[projects."/Users/rmanzoku/.local/share/chezmoi"]
-trust_level = "trusted"
-
-[projects."/Users/rmanzoku/conductor/repos/ow-management-v1"]
-trust_level = "trusted"
-
-[projects."/Users/rmanzoku/conductor/repos/changer-all"]
+[projects."/Users/mikito/workspace/github.com/rmanzoku"]
 trust_level = "trusted"
 
 [plugins."github@openai-curated"]
@@ -61,3 +72,10 @@ enabled = true
 
 [plugins."chrome@openai-bundled"]
 enabled = true
+
+[plugins."pdf@openai-primary-runtime"]
+enabled = true
+
+[desktop]
+conversationDetailMode = "STEPS_COMMANDS"
+ambient-suggestions-enabled = false

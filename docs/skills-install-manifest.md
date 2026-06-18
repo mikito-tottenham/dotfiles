@@ -1,6 +1,6 @@
 ---
 title: "Skill Install Manifest"
-updated_at: 2026-06-16
+updated_at: 2026-06-18
 ---
 
 # Skill Install Manifest
@@ -95,14 +95,14 @@ done
 ### `empirical-prompt-tuning`
 
 - upstream: [mizchi/chezmoi-dotfiles `dot_claude/skills/empirical-prompt-tuning/SKILL.md`](https://github.com/mizchi/chezmoi-dotfiles/blob/main/dot_claude%2Fskills%2Fempirical-prompt-tuning%2FSKILL.md)
-- status: installed globally for Claude Code and Codex
+- status: unavailable upstream; not restored on new machines
 - install mode: fetch upstream `SKILL.md`, stage it locally, then install with `gh skill --from-local`
 - reason: upstream repo is not a publisher-layout repo, so direct `gh skill install OWNER/REPO skill` is unavailable
-- update note: `gh skill update --dry-run empirical-prompt-tuning` currently reports missing GitHub metadata, so refresh by re-fetching and reinstalling
+- update note: 2026-06-18 時点で upstream path は 404、`gh skill preview mizchi/chezmoi-dotfiles empirical-prompt-tuning` も not found を返す。復活または代替 upstream が確認できるまで復元対象外とする。
 
 #### Claude Code / Codex refresh
 
-repo root で実行する。
+現在は実行しない。復活または代替 upstream が確認できた場合のみ、以下の手順を再検証してから使う。
 
 ```bash
 mkdir -p .context/skill-bootstrap/empirical-prompt-tuning/skills/empirical-prompt-tuning
