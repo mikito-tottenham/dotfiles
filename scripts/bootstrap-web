@@ -9,6 +9,8 @@ set -euo pipefail
 #   3. 配布スキルを再インストール
 #        - first-party (repo skills/): 必須。欠落・検証失敗があれば最後に exit 1。
 #        - third-party (公開 GitHub): best-effort。取得失敗は skip し、集計して継続する。
+#   4. runner CLI を best-effort で用意 (codex/gemini/ghq)。op/gh/gws/grok は入手経路・
+#      OAuth headless・契約の制約があり対象外 (各 runner SKILL.md の手動セットアップに委ねる)。
 #
 # 再現対象は「web で復元可能なサブセット」であり、manifest 全体ではない。
 # empirical-prompt-tuning は upstream 不在 (404) のため対象外。
@@ -64,8 +66,11 @@ make_tmp() {
 first_party_failed=()
 third_party_installed=()
 third_party_skipped=()   # "name: reason"
+runner_cli_installed=()
+runner_cli_skipped=()     # "name: reason"
 
 record_tp_skipped() { third_party_skipped+=("$1: $2"); }
+record_cli_skipped() { runner_cli_skipped+=("$1: $2"); }
 
 # first-party skill のエージェント別リスト。docs/skills-install-manifest.md と対応させること。
 # Claude Code には codex-cli-runner、Codex には claude-cli-runner を入れる差分に注意。
@@ -222,6 +227,54 @@ install_third_party() {
   info "third-party skill 完了 (installed:${#third_party_installed[@]} / skipped:${#third_party_skipped[@]})"
 }
 
+# runner スキルが叩く CLI を best-effort で用意する。
+# 認証不要 (ghq) と env 由来の認証で headless 完走できるもの (codex, gemini) のみ対象。
+# op / gh / gws / grok は入手経路ブロック・OAuth headless 不可・契約必須のため対象外
+# (docs-only manifest / 各 runner SKILL.md の手動セットアップに委ねる)。
+ensure_runner_clis() {
+  info "runner CLI を用意中 (best-effort)..."
+
+  # codex: CLI (npm) + 認証 (CODEX_AUTH_JSON -> ~/.codex/auth.json)
+  if command -v codex >/dev/null 2>&1; then
+    runner_cli_installed+=("codex (既存)")
+  elif command -v npm >/dev/null 2>&1 && npm install -g @openai/codex >/dev/null 2>&1 && command -v codex >/dev/null 2>&1; then
+    runner_cli_installed+=("codex")
+  else
+    record_cli_skipped "codex" "npm install 失敗 (npm 無し?)"
+  fi
+  if [ -n "${CODEX_AUTH_JSON:-}" ] && command -v codex >/dev/null 2>&1; then
+    mkdir -p "$HOME/.codex"
+    printf '%s' "$CODEX_AUTH_JSON" > "$HOME/.codex/auth.json"
+    chmod 600 "$HOME/.codex/auth.json"
+    info "  codex auth を CODEX_AUTH_JSON から materialize"
+  elif command -v codex >/dev/null 2>&1; then
+    warn "  CODEX_AUTH_JSON 未設定: codex は実行時に認証が要る"
+  fi
+
+  # gemini: CLI (npm)。認証は実行時の GEMINI_API_KEY。
+  if command -v gemini >/dev/null 2>&1; then
+    runner_cli_installed+=("gemini (既存)")
+  elif command -v npm >/dev/null 2>&1 && npm install -g @google/gemini-cli >/dev/null 2>&1 && command -v gemini >/dev/null 2>&1; then
+    runner_cli_installed+=("gemini")
+  else
+    record_cli_skipped "gemini" "npm install 失敗 (npm 無し?)"
+  fi
+  if [ -z "${GEMINI_API_KEY:-}" ] && command -v gemini >/dev/null 2>&1; then
+    warn "  GEMINI_API_KEY 未設定: gemini は導入済みだが実行時に認証が要る"
+  fi
+
+  # ghq: 認証不要 (go install)
+  if command -v ghq >/dev/null 2>&1; then
+    runner_cli_installed+=("ghq (既存)")
+  elif command -v go >/dev/null 2>&1 && GOBIN=/usr/local/bin go install github.com/x-motemen/ghq@latest >/dev/null 2>&1 && command -v ghq >/dev/null 2>&1; then
+    runner_cli_installed+=("ghq")
+  else
+    record_cli_skipped "ghq" "go install 失敗 (go 無し?)"
+  fi
+
+  info "runner CLI 完了 (installed:${#runner_cli_installed[@]} / skipped:${#runner_cli_skipped[@]})"
+}
+
 write_status() { # $1=overall_success(true/false) [$2=failure_stage]
   local overall="$1" stage="${2:-}" dir
   dir="$(dirname "$STATUS_FILE")"
@@ -234,7 +287,9 @@ write_status() { # $1=overall_success(true/false) [$2=failure_stage]
     printf '  "failure_reason": %s,\n' "$(json_string "$FAILURE_REASON")"
     printf '  "first_party_failed": %s,\n' "$(json_array ${first_party_failed[@]+"${first_party_failed[@]}"})"
     printf '  "third_party_installed": %s,\n' "$(json_array ${third_party_installed[@]+"${third_party_installed[@]}"})"
-    printf '  "third_party_skipped": %s\n' "$(json_array ${third_party_skipped[@]+"${third_party_skipped[@]}"})"
+    printf '  "third_party_skipped": %s,\n' "$(json_array ${third_party_skipped[@]+"${third_party_skipped[@]}"})"
+    printf '  "runner_cli_installed": %s,\n' "$(json_array ${runner_cli_installed[@]+"${runner_cli_installed[@]}"})"
+    printf '  "runner_cli_skipped": %s\n' "$(json_array ${runner_cli_skipped[@]+"${runner_cli_skipped[@]}"})"
     printf '}\n'
   } > "$STATUS_FILE"
   _STATUS_WRITTEN=true
@@ -259,6 +314,7 @@ main() {
   STAGE="apply_chezmoi"; apply_chezmoi
   STAGE="install_first_party"; install_first_party
   STAGE="install_third_party"; install_third_party
+  STAGE="ensure_runner_clis"; ensure_runner_clis
   STAGE="finalize"
 
   info "==== サマリ ===="
@@ -266,6 +322,8 @@ main() {
   if [ "${#first_party_failed[@]}" -gt 0 ]; then warn "  失敗: ${first_party_failed[*]}"; fi
   info "third-party (best-effort): installed ${#third_party_installed[@]} / skipped ${#third_party_skipped[@]}"
   if [ "${#third_party_skipped[@]}" -gt 0 ]; then warn "  skipped: ${third_party_skipped[*]}"; fi
+  info "runner CLI (best-effort): installed ${#runner_cli_installed[@]} / skipped ${#runner_cli_skipped[@]}"
+  if [ "${#runner_cli_skipped[@]}" -gt 0 ]; then warn "  skipped: ${runner_cli_skipped[*]}"; fi
 
   local overall=true stage=""
   if [ "${#first_party_failed[@]}" -gt 0 ]; then
