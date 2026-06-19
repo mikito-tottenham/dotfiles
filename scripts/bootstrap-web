@@ -299,8 +299,12 @@ ensure_runner_clis() {
   else
     record_cli_skipped "gws" "GitHub release 取得失敗"
   fi
-  if command -v gws >/dev/null 2>&1 && [ -z "${GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE:-}" ]; then
-    warn "  GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE 未設定: gws は実行時に OAuth credential JSON が要る"
+  if command -v gws >/dev/null 2>&1; then
+    if [ -n "${GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE:-}" ] || compgen -G "$HOME/.config/gws/accounts/*.json" >/dev/null 2>&1; then
+      info "  gws 認証材料を検出 (env か ~/.config/gws/accounts/*.json)。scripts/gws-as <name> で切り替え可"
+    else
+      warn "  gws 認証材料なし: ~/.config/gws/accounts/<name>.json を opmaterialize restore で配置すること"
+    fi
   fi
 
   # copilot: GitHub Copilot CLI (npm)。認証は COPILOT_GITHUB_TOKEN/GH_TOKEN/GITHUB_TOKEN (要 Copilot 契約)。
