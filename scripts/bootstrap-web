@@ -10,7 +10,7 @@ set -euo pipefail
 #        - first-party (repo skills/): 必須。欠落・検証失敗があれば最後に exit 1。
 #        - third-party (公開 GitHub): best-effort。取得失敗は skip し、集計して継続する。
 #   4. runner CLI を best-effort で用意 (codex/gemini/ghq/gh/gws/copilot)。認証は env / 1Password
-#      由来 (GH_TOKEN・GOOGLE_APPLICATION_CREDENTIALS・COPILOT_GITHUB_TOKEN 等、未設定なら warn)。
+#      由来 (GH_TOKEN・GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE・COPILOT_GITHUB_TOKEN 等、未設定なら warn)。
 #      grok は xAI OAuth、soundcore は対話ブラウザのため対象外。
 #   5. フル 1Password 化: OP_SERVICE_ACCOUNT_TOKEN があれば op を導入し opmaterialize restore を
 #      実行し、dotfiles.env (op:// 参照)・secret-backed file・private subagent を一括復元する。
@@ -290,7 +290,8 @@ ensure_runner_clis() {
     warn "  GH_TOKEN/GITHUB_TOKEN 未設定: gh skill の remote 操作は実行時に認証が要る"
   fi
 
-  # gws: Google Workspace CLI。認証は GOOGLE_APPLICATION_CREDENTIALS (service account JSON, 非対話)。
+  # gws: Google Workspace CLI。認証は GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE (OAuth credential JSON, 非対話)。
+  # opmaterialize restore で ~/.config/gws/accounts/<name>.json が配置された後に有効。
   if command -v gws >/dev/null 2>&1; then
     runner_cli_installed+=("gws (既存)")
   elif install_gws && command -v gws >/dev/null 2>&1; then
@@ -298,8 +299,8 @@ ensure_runner_clis() {
   else
     record_cli_skipped "gws" "GitHub release 取得失敗"
   fi
-  if command -v gws >/dev/null 2>&1 && [ -z "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]; then
-    warn "  GOOGLE_APPLICATION_CREDENTIALS 未設定: gws は実行時に service account JSON が要る"
+  if command -v gws >/dev/null 2>&1 && [ -z "${GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE:-}" ]; then
+    warn "  GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE 未設定: gws は実行時に OAuth credential JSON が要る"
   fi
 
   # copilot: GitHub Copilot CLI (npm)。認証は COPILOT_GITHUB_TOKEN/GH_TOKEN/GITHUB_TOKEN (要 Copilot 契約)。
