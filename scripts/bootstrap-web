@@ -9,16 +9,19 @@ set -euo pipefail
 #   3. 配布スキルを再インストール
 #        - first-party (repo skills/): 必須。欠落・検証失敗があれば最後に exit 1。
 #        - third-party (公開 GitHub): best-effort。取得失敗は skip し、集計して継続する。
-#   4. runner CLI を best-effort で用意 (codex/gemini/ghq)。op/gh/gws/grok は入手経路・
-#      OAuth headless・契約の制約があり対象外 (各 runner SKILL.md の手動セットアップに委ねる)。
+#   4. runner CLI を best-effort で用意 (codex/gemini/ghq)。gh/gws/grok は OAuth headless・
+#      契約の制約があり対象外 (各 runner SKILL.md の手動セットアップに委ねる)。
+#   5. フル 1Password 化: OP_SERVICE_ACCOUNT_TOKEN があれば op を導入し opmaterialize restore を
+#      実行し、dotfiles.env (op:// 参照)・secret-backed file・private subagent を一括復元する。
 #
 # 再現対象は「web で復元可能なサブセット」であり、manifest 全体ではない。
 # empirical-prompt-tuning は upstream 不在 (404) のため対象外。
 #
-# 扱わないもの (手動復元):
-#   - 1Password 由来の secret 実値、secret-backed file
-#   - private subagent (personal / biz / tech)
-#   サインイン後に `opmaterialize restore` で復元すること。
+# OP_SERVICE_ACCOUNT_TOKEN が無い / op を導入できない (network policy 遮断) 場合、step 5 は
+# skip され、1Password 由来の secret・secret-backed file・private subagent は復元されない。
+# その場合は op が使える環境で `opmaterialize restore` を手動実行すること。
+# GEMINI_API_KEY 等の API キーは 1Password に置き dotfiles.env に op:// 参照を書き、
+# 各 runner は `oprun <cmd>` 経由で実行する (規約準拠)。
 #
 # 注意: chezmoi apply --force はハーネスが書いた ~/.gitconfig 等の target も上書きする。
 #       hook 後のコミットは dotfiles の git identity を使う (ADR-0045 参照)。
@@ -68,6 +71,7 @@ third_party_installed=()
 third_party_skipped=()   # "name: reason"
 runner_cli_installed=()
 runner_cli_skipped=()     # "name: reason"
+onepassword_status="not-run"
 
 record_tp_skipped() { third_party_skipped+=("$1: $2"); }
 record_cli_skipped() { runner_cli_skipped+=("$1: $2"); }
@@ -275,6 +279,58 @@ ensure_runner_clis() {
   info "runner CLI 完了 (installed:${#runner_cli_installed[@]} / skipped:${#runner_cli_skipped[@]})"
 }
 
+# 1Password CLI を公式配布から best-effort 導入する (downloads/cache hosts 許可時のみ成功)。
+# version は OP_CLI_VERSION で上書き可。zip 展開は python3 を使い unzip 依存を避ける。
+install_op() {
+  command -v curl >/dev/null 2>&1 || return 1
+  command -v python3 >/dev/null 2>&1 || return 1
+  local ver="${OP_CLI_VERSION:-2.31.1}" arch
+  case "$(uname -m)" in
+    x86_64|amd64) arch=amd64 ;;
+    aarch64|arm64) arch=arm64 ;;
+    *) return 1 ;;
+  esac
+  make_tmp
+  local d="$TMP_LAST"
+  curl -fsSL "https://cache.agilebits.com/dist/1P/op2/pkg/v${ver}/op_linux_${arch}_v${ver}.zip" -o "$d/op.zip" 2>/dev/null || return 1
+  python3 -c 'import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$d/op.zip" "$d" 2>/dev/null || return 1
+  [ -f "$d/op" ] && install -m 0755 "$d/op" /usr/local/bin/op 2>/dev/null
+}
+
+# フル 1Password 化: service account 認証で opmaterialize restore を実行し、
+# dotfiles.env (op:// 参照)・secret-backed file・private subagent を一括復元する。
+# best-effort。OP_SERVICE_ACCOUNT_TOKEN 未設定や op 未導入なら理由を残して skip。
+ensure_onepassword() {
+  info "1Password 連携 (opmaterialize restore) を確認中 (best-effort)..."
+  if [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+    onepassword_status="skipped: OP_SERVICE_ACCOUNT_TOKEN 未設定"
+    warn "  OP_SERVICE_ACCOUNT_TOKEN 未設定: 1Password 連携を skip (env 追加で有効化)"
+    return 0
+  fi
+  if ! command -v op >/dev/null 2>&1; then
+    info "  op 未検出。公式配布から導入を試行 (OP_CLI_VERSION で version 指定可)..."
+    install_op || true
+  fi
+  if ! command -v op >/dev/null 2>&1; then
+    onepassword_status="skipped: op 未導入 (network policy で 1Password 配布が遮断?)"
+    warn "  op を導入できず skip。network policy で cache.agilebits.com / downloads.1password.com を許可すること"
+    return 0
+  fi
+  if ! op whoami >/dev/null 2>&1; then
+    onepassword_status="skipped: op 認証失敗 (token 無効?)"
+    warn "  op whoami 失敗: OP_SERVICE_ACCOUNT_TOKEN を確認すること"
+    return 0
+  fi
+  info "  opmaterialize restore 実行中..."
+  if command -v opmaterialize >/dev/null 2>&1 && opmaterialize restore >/dev/null 2>&1; then
+    onepassword_status="restored"
+    info "  opmaterialize restore 完了 (dotfiles.env / secret-backed file / private subagent を復元)"
+  else
+    onepassword_status="skipped: opmaterialize restore 失敗"
+    warn "  opmaterialize restore 失敗: Secrets Manifest / vault アクセスを確認すること"
+  fi
+}
+
 write_status() { # $1=overall_success(true/false) [$2=failure_stage]
   local overall="$1" stage="${2:-}" dir
   dir="$(dirname "$STATUS_FILE")"
@@ -289,7 +345,8 @@ write_status() { # $1=overall_success(true/false) [$2=failure_stage]
     printf '  "third_party_installed": %s,\n' "$(json_array ${third_party_installed[@]+"${third_party_installed[@]}"})"
     printf '  "third_party_skipped": %s,\n' "$(json_array ${third_party_skipped[@]+"${third_party_skipped[@]}"})"
     printf '  "runner_cli_installed": %s,\n' "$(json_array ${runner_cli_installed[@]+"${runner_cli_installed[@]}"})"
-    printf '  "runner_cli_skipped": %s\n' "$(json_array ${runner_cli_skipped[@]+"${runner_cli_skipped[@]}"})"
+    printf '  "runner_cli_skipped": %s,\n' "$(json_array ${runner_cli_skipped[@]+"${runner_cli_skipped[@]}"})"
+    printf '  "onepassword": %s\n' "$(json_string "$onepassword_status")"
     printf '}\n'
   } > "$STATUS_FILE"
   _STATUS_WRITTEN=true
@@ -315,6 +372,7 @@ main() {
   STAGE="install_first_party"; install_first_party
   STAGE="install_third_party"; install_third_party
   STAGE="ensure_runner_clis"; ensure_runner_clis
+  STAGE="ensure_onepassword"; ensure_onepassword
   STAGE="finalize"
 
   info "==== サマリ ===="
@@ -324,6 +382,7 @@ main() {
   if [ "${#third_party_skipped[@]}" -gt 0 ]; then warn "  skipped: ${third_party_skipped[*]}"; fi
   info "runner CLI (best-effort): installed ${#runner_cli_installed[@]} / skipped ${#runner_cli_skipped[@]}"
   if [ "${#runner_cli_skipped[@]}" -gt 0 ]; then warn "  skipped: ${runner_cli_skipped[*]}"; fi
+  info "1Password (opmaterialize): ${onepassword_status}"
 
   local overall=true stage=""
   if [ "${#first_party_failed[@]}" -gt 0 ]; then
