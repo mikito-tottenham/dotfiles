@@ -9,8 +9,9 @@ set -euo pipefail
 #   3. 配布スキルを再インストール
 #        - first-party (repo skills/): 必須。欠落・検証失敗があれば最後に exit 1。
 #        - third-party (公開 GitHub): best-effort。取得失敗は skip し、集計して継続する。
-#   4. runner CLI を best-effort で用意 (codex/gemini/ghq)。gh/gws/grok は OAuth headless・
-#      契約の制約があり対象外 (各 runner SKILL.md の手動セットアップに委ねる)。
+#   4. runner CLI を best-effort で用意 (codex/gemini/ghq/gh/gws/copilot)。認証は env / 1Password
+#      由来 (GH_TOKEN・GOOGLE_APPLICATION_CREDENTIALS・COPILOT_GITHUB_TOKEN 等、未設定なら warn)。
+#      grok は xAI OAuth、soundcore は対話ブラウザのため対象外。
 #   5. フル 1Password 化: OP_SERVICE_ACCOUNT_TOKEN があれば op を導入し opmaterialize restore を
 #      実行し、dotfiles.env (op:// 参照)・secret-backed file・private subagent を一括復元する。
 #
@@ -276,6 +277,43 @@ ensure_runner_clis() {
     record_cli_skipped "ghq" "go install 失敗 (go 無し?)"
   fi
 
+  # gh: GitHub CLI (skill-manager の gh skill backend, 2.90+ で gh skill 標準搭載)。
+  # 認証は GH_TOKEN / GITHUB_TOKEN (1Password 由来)。
+  if command -v gh >/dev/null 2>&1; then
+    runner_cli_installed+=("gh (既存)")
+  elif install_gh && command -v gh >/dev/null 2>&1; then
+    runner_cli_installed+=("gh")
+  else
+    record_cli_skipped "gh" "GitHub release 取得失敗"
+  fi
+  if command -v gh >/dev/null 2>&1 && [ -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]; then
+    warn "  GH_TOKEN/GITHUB_TOKEN 未設定: gh skill の remote 操作は実行時に認証が要る"
+  fi
+
+  # gws: Google Workspace CLI。認証は GOOGLE_APPLICATION_CREDENTIALS (service account JSON, 非対話)。
+  if command -v gws >/dev/null 2>&1; then
+    runner_cli_installed+=("gws (既存)")
+  elif install_gws && command -v gws >/dev/null 2>&1; then
+    runner_cli_installed+=("gws")
+  else
+    record_cli_skipped "gws" "GitHub release 取得失敗"
+  fi
+  if command -v gws >/dev/null 2>&1 && [ -z "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]; then
+    warn "  GOOGLE_APPLICATION_CREDENTIALS 未設定: gws は実行時に service account JSON が要る"
+  fi
+
+  # copilot: GitHub Copilot CLI (npm)。認証は COPILOT_GITHUB_TOKEN/GH_TOKEN/GITHUB_TOKEN (要 Copilot 契約)。
+  if command -v copilot >/dev/null 2>&1; then
+    runner_cli_installed+=("copilot (既存)")
+  elif command -v npm >/dev/null 2>&1 && npm install -g @github/copilot >/dev/null 2>&1 && command -v copilot >/dev/null 2>&1; then
+    runner_cli_installed+=("copilot")
+  else
+    record_cli_skipped "copilot" "npm install 失敗 (npm 無し?)"
+  fi
+  if command -v copilot >/dev/null 2>&1 && [ -z "${COPILOT_GITHUB_TOKEN:-}${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]; then
+    warn "  Copilot 認証 env 未設定: copilot は実行時に GitHub トークン (要 Copilot 契約) が要る"
+  fi
+
   info "runner CLI 完了 (installed:${#runner_cli_installed[@]} / skipped:${#runner_cli_skipped[@]})"
 }
 
@@ -295,6 +333,46 @@ install_op() {
   curl -fsSL "https://cache.agilebits.com/dist/1P/op2/pkg/v${ver}/op_linux_${arch}_v${ver}.zip" -o "$d/op.zip" 2>/dev/null || return 1
   python3 -c 'import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$d/op.zip" "$d" 2>/dev/null || return 1
   [ -f "$d/op" ] && install -m 0755 "$d/op" /usr/local/bin/op 2>/dev/null
+}
+
+# GitHub CLI を公式 release から best-effort 導入する。latest tag は github.com の
+# releases/latest redirect から解決 (api.github.com はポリシーで 403 のため使わない)。
+install_gh() {
+  command -v curl >/dev/null 2>&1 || return 1
+  local arch tag ver
+  case "$(uname -m)" in
+    x86_64|amd64) arch=amd64 ;;
+    aarch64|arm64) arch=arm64 ;;
+    *) return 1 ;;
+  esac
+  tag=$(curl -fsSI --max-time 15 "https://github.com/cli/cli/releases/latest" 2>/dev/null \
+    | grep -i '^location:' | tr -d '\r' | awk -F/ '{print $NF}')
+  [ -n "$tag" ] || return 1
+  ver=${tag#v}
+  make_tmp
+  local d="$TMP_LAST"
+  curl -fsSL --max-time 90 "https://github.com/cli/cli/releases/download/${tag}/gh_${ver}_linux_${arch}.tar.gz" -o "$d/gh.tgz" 2>/dev/null || return 1
+  tar -xzf "$d/gh.tgz" -C "$d" 2>/dev/null || return 1
+  [ -f "$d/gh_${ver}_linux_${arch}/bin/gh" ] && install -m 0755 "$d/gh_${ver}_linux_${arch}/bin/gh" /usr/local/bin/gh 2>/dev/null
+}
+
+# Google Workspace CLI (gws) を公式 release から best-effort 導入する。pin は manifest に
+# 合わせ v0.22.5、GWS_CLI_VERSION で上書き可。gnu (glibc) ビルドを使う。
+install_gws() {
+  command -v curl >/dev/null 2>&1 || return 1
+  local ver="${GWS_CLI_VERSION:-0.22.5}" arch
+  case "$(uname -m)" in
+    x86_64|amd64) arch=x86_64 ;;
+    aarch64|arm64) arch=aarch64 ;;
+    *) return 1 ;;
+  esac
+  make_tmp
+  local d="$TMP_LAST"
+  curl -fsSL --max-time 90 "https://github.com/googleworkspace/cli/releases/download/v${ver}/google-workspace-cli-${arch}-unknown-linux-gnu.tar.gz" -o "$d/gws.tgz" 2>/dev/null || return 1
+  tar -xzf "$d/gws.tgz" -C "$d" 2>/dev/null || return 1
+  local bin
+  bin=$(find "$d" -maxdepth 2 -type f -name gws 2>/dev/null | head -1)
+  [ -n "$bin" ] && install -m 0755 "$bin" /usr/local/bin/gws 2>/dev/null
 }
 
 # フル 1Password 化: service account 認証で opmaterialize restore を実行し、

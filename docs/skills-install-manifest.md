@@ -75,7 +75,7 @@ third-party external skill はここへ追加で列挙する。
 - pin: `v0.22.5`
 - reason: upstream provides official per-service gws skills; keep them external and do not vendor them into this repo
 - scope: install only `gws-shared`, `gws-drive`, and `gws-drive-upload`
-- prerequisite: `googleworkspace-cli` must be installed, currently managed by `Brewfile`
+- prerequisite: `googleworkspace-cli` must be installed; managed by `Brewfile` on macOS, and installed from the GitHub release (`v0.22.5`, gnu build) by `scripts/bootstrap-web` in web sessions
 - update note: keep the skill pin aligned with the installed `googleworkspace-cli` version
 
 #### Claude Code / Codex refresh
