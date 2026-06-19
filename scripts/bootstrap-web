@@ -22,6 +22,7 @@ set -euo pipefail
 #       hook 後のコミットは dotfiles の git identity を使う (ADR-0045 参照)。
 #
 # 機械可読な実行結果を $BOOTSTRAP_WEB_STATUS (既定 ~/.cache/bootstrap-web/status.json) に書く。
+# 早期致命終了 (git 無し / chezmoi 導入失敗 / apply 失敗等) でも EXIT trap が失敗ステータスを残す。
 # 冪等。複数回実行しても安全。
 #
 # 設計判断は docs/adr/0045-reproduce-web-session-environment-via-session-start-hook.md を参照。
@@ -31,9 +32,14 @@ CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
 CODEX_SKILLS_DIR="$HOME/.codex/skills"
 STATUS_FILE="${BOOTSTRAP_WEB_STATUS:-$HOME/.cache/bootstrap-web/status.json}"
 
+# 実行ステージと結果書き込み状態 (EXIT trap が早期失敗時に status を書くため)
+STAGE="preflight"
+FAILURE_REASON=""
+_STATUS_WRITTEN=false
+
 info() { printf '\033[1;34m[bootstrap-web]\033[0m %s\n' "$1"; }
 warn() { printf '\033[1;33m[bootstrap-web:warn]\033[0m %s\n' "$1"; }
-fail() { printf '\033[1;31m[bootstrap-web:fail]\033[0m %s\n' "$*" >&2; exit 1; }
+fail() { FAILURE_REASON="$*"; printf '\033[1;31m[bootstrap-web:fail]\033[0m %s\n' "$*" >&2; exit 1; }
 
 # 一時ディレクトリは登録制にして単一の EXIT trap で必ず後始末する (失敗・abort 時も漏らさない)。
 _TMP_DIRS=()
@@ -46,7 +52,7 @@ cleanup_tmp() {
     done
   fi
 }
-trap cleanup_tmp EXIT
+trap finalize EXIT
 make_tmp() {
   # 注意: コマンド置換 ($(...)) で呼ぶと subshell になり登録が親へ伝播しないため、
   #       結果は TMP_LAST 経由で受け渡す。
@@ -75,6 +81,14 @@ codex_skills=(
   copilot-cli-runner ai-usage-coach soundcore-minutes ghq-repo-placement op-cli-runner
   onepassword-secret-materialize handoff git-branch-review
 )
+
+# 単純な文字列を JSON 文字列にする (\ と " をエスケープ)。制御文字は対象外。
+json_string() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  printf '"%s"' "$s"
+}
 
 # 単純名向けの JSON 配列生成。空要素は除外する。
 json_array() {
@@ -208,28 +222,44 @@ install_third_party() {
   info "third-party skill 完了 (installed:${#third_party_installed[@]} / skipped:${#third_party_skipped[@]})"
 }
 
-write_status() { # $1=overall_success(true/false)
-  local overall="$1" dir
+write_status() { # $1=overall_success(true/false) [$2=failure_stage]
+  local overall="$1" stage="${2:-}" dir
   dir="$(dirname "$STATUS_FILE")"
   mkdir -p "$dir"
   {
     printf '{\n'
     printf '  "timestamp": "%s",\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf '  "overall_success": %s,\n' "$overall"
+    printf '  "failure_stage": %s,\n' "$(json_string "$stage")"
+    printf '  "failure_reason": %s,\n' "$(json_string "$FAILURE_REASON")"
     printf '  "first_party_failed": %s,\n' "$(json_array ${first_party_failed[@]+"${first_party_failed[@]}"})"
     printf '  "third_party_installed": %s,\n' "$(json_array ${third_party_installed[@]+"${third_party_installed[@]}"})"
     printf '  "third_party_skipped": %s\n' "$(json_array ${third_party_skipped[@]+"${third_party_skipped[@]}"})"
     printf '}\n'
   } > "$STATUS_FILE"
+  _STATUS_WRITTEN=true
+}
+
+# EXIT trap: 一時ディレクトリを必ず後始末し、main がステータスを書かずに
+# 早期終了した場合は失敗ステータスを残す (契約: status は必ず書く)。
+finalize() {
+  local rc=$?
+  cleanup_tmp || true
+  if [ "$_STATUS_WRITTEN" != true ]; then
+    write_status false "$STAGE" || true
+  fi
+  exit "$rc"
 }
 
 main() {
+  STAGE="preflight"
   command -v git >/dev/null 2>&1 || fail "git が必要"
   info "rmanzoku 環境の再現を開始 (REPO_DIR=$REPO_DIR)"
-  ensure_chezmoi
-  apply_chezmoi
-  install_first_party
-  install_third_party
+  STAGE="ensure_chezmoi"; ensure_chezmoi
+  STAGE="apply_chezmoi"; apply_chezmoi
+  STAGE="install_first_party"; install_first_party
+  STAGE="install_third_party"; install_third_party
+  STAGE="finalize"
 
   info "==== サマリ ===="
   info "first-party: 失敗 ${#first_party_failed[@]} 件"
@@ -237,13 +267,17 @@ main() {
   info "third-party (best-effort): installed ${#third_party_installed[@]} / skipped ${#third_party_skipped[@]}"
   if [ "${#third_party_skipped[@]}" -gt 0 ]; then warn "  skipped: ${third_party_skipped[*]}"; fi
 
-  local overall=true
-  if [ "${#first_party_failed[@]}" -gt 0 ]; then overall=false; fi
-  write_status "$overall"
+  local overall=true stage=""
+  if [ "${#first_party_failed[@]}" -gt 0 ]; then
+    overall=false
+    stage="install_first_party"
+    FAILURE_REASON="first-party skill (必須) の欠落・検証失敗あり"
+  fi
+  write_status "$overall" "$stage"
   info "ステータス: $STATUS_FILE"
 
   if [ "$overall" != true ]; then
-    fail "first-party skill (必須) の欠落・検証失敗あり。再現は不完全。詳細は $STATUS_FILE"
+    fail "$FAILURE_REASON。再現は不完全。詳細は $STATUS_FILE"
   fi
   info "完了。1Password 由来の secret / private subagent は 'opmaterialize restore' で別途復元すること。"
 }
