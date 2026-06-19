@@ -10,6 +10,8 @@ updated_at: 2026-06-16
 当面は script を作らず、docs-only の install manifest として維持する。
 将来 `gh` 側に manifest 機能が入ったら、そちらへ移行を検討する。
 
+Claude Code on the web の ephemeral 環境に限り、`scripts/bootstrap-web`（SessionStart hook 経由）がこの一覧と同じスキルを自動再インストールする（ADR-0045）。スキルを追加・削除したときは、この manifest と `scripts/bootstrap-web` のリストを同期すること。
+
 ## First-party publisher skills
 
 repo root を install source にして実行する。

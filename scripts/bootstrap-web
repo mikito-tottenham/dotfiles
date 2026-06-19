@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# bootstrap-web: Claude Code on the web の ephemeral セッションで rmanzoku 環境を再現する。
+#
+# 実行内容:
+#   1. chezmoi を用意する (なければ公式 installer、不可なら go build)
+#   2. .chezmoiignore 整合を確認してから chezmoi apply
+#   3. 配布スキルを再インストール (first-party は repo skills/、third-party は公開 GitHub)
+#
+# 扱わないもの (手動復元):
+#   - 1Password 由来の secret 実値、secret-backed file
+#   - private subagent (personal / biz / tech)
+#   サインイン後に `opmaterialize restore` で復元すること。
+#
+# 設計判断は docs/adr/0045-reproduce-web-session-environment-via-session-start-hook.md を参照。
+# 冪等。複数回実行しても安全。
+
+REPO_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
+CODEX_SKILLS_DIR="$HOME/.codex/skills"
+
+info() { printf '\033[1;34m[bootstrap-web]\033[0m %s\n' "$1"; }
+warn() { printf '\033[1;33m[bootstrap-web:warn]\033[0m %s\n' "$1"; }
+fail() { printf '\033[1;31m[bootstrap-web:fail]\033[0m %s\n' "$*" >&2; exit 1; }
+
+# first-party skill のエージェント別リスト。docs/skills-install-manifest.md と対応させること。
+# Claude Code には codex-cli-runner、Codex には claude-cli-runner を入れる差分に注意。
+claude_skills=(
+  skill-manager docs-entrypoint-check docs-evaluator grok-cli-runner code-evaluator
+  opus-4-7-tuning opus-4-8-tuning gpt-5-5-tuning codex-cli-runner gemini-cli-runner
+  copilot-cli-runner agent-orchestration-evaluator ai-usage-coach soundcore-minutes
+  ghq-repo-placement op-cli-runner onepassword-secret-materialize handoff git-branch-review
+)
+codex_skills=(
+  skill-manager docs-entrypoint-check docs-evaluator grok-cli-runner code-evaluator
+  opus-4-7-tuning opus-4-8-tuning gpt-5-5-tuning claude-cli-runner gemini-cli-runner
+  copilot-cli-runner ai-usage-coach soundcore-minutes ghq-repo-placement op-cli-runner
+  onepassword-secret-materialize handoff git-branch-review
+)
+
+ensure_chezmoi() {
+  if command -v chezmoi >/dev/null 2>&1; then
+    info "chezmoi は利用可能: $(command -v chezmoi)"
+    return 0
+  fi
+
+  # 主経路: 公式 installer。失敗は隠さず warn してから go build へ切り替える (AGENTS.md の fallback 観測性ルール)。
+  info "chezmoi 未検出。公式 installer を試行..."
+  if sh -c "$(curl -fsSL https://get.chezmoi.io 2>/dev/null)" -- -b /usr/local/bin >/dev/null 2>&1 \
+       && command -v chezmoi >/dev/null 2>&1; then
+    info "公式 installer で chezmoi を導入: $(command -v chezmoi)"
+    return 0
+  fi
+
+  warn "公式 installer は利用不可 (network policy 等)。go build へ切り替える。"
+  command -v go >/dev/null 2>&1 || fail "go が無いため chezmoi を build できない"
+  local src
+  src="$(mktemp -d)"
+  info "chezmoi を clone & build 中 (初回は数分かかる): $src"
+  git clone --depth 1 https://github.com/twpayne/chezmoi.git "$src/chezmoi" >/dev/null 2>&1 \
+    || fail "chezmoi の clone に失敗"
+  ( cd "$src/chezmoi" && go build -o /usr/local/bin/chezmoi . ) || fail "chezmoi の build に失敗"
+  rm -rf "$src"
+  command -v chezmoi >/dev/null 2>&1 || fail "chezmoi build 後も PATH に見つからない"
+  info "go build で chezmoi を導入: $(command -v chezmoi)"
+}
+
+apply_chezmoi() {
+  info ".chezmoiignore 整合を確認中..."
+  ( cd "$REPO_DIR" && scripts/chezmoi-drift --check-ignore >/dev/null ) \
+    || fail ".chezmoiignore と source state の不整合。scripts/chezmoi-drift --check-ignore を確認すること"
+  # SessionStart hook には TTY が無い。--force で対話プロンプト無しに target を上書きする。
+  # ハーネスが session 起動時に書き換えた ~/.gitconfig 等も dotfiles の内容へ揃える。
+  info "chezmoi apply 実行中 (source=$REPO_DIR, --force)..."
+  chezmoi apply --force --source "$REPO_DIR"
+  info "chezmoi apply 完了"
+}
+
+install_local_skill() { # $1=name $2=dest_dir
+  local name="$1" dest="$2"
+  local src="$REPO_DIR/skills/$name"
+  [ -d "$src" ] || { warn "first-party skill が repo に欠落: $name"; return 0; }
+  mkdir -p "$dest"
+  rm -rf "${dest:?}/$name"
+  cp -a "$src" "$dest/$name"
+}
+
+install_external_skill() { # $1=src_dir $2=name
+  local src="$1" name="$2" dest
+  for dest in "$CLAUDE_SKILLS_DIR" "$CODEX_SKILLS_DIR"; do
+    mkdir -p "$dest"
+    rm -rf "${dest:?}/$name"
+    cp -a "$src" "$dest/$name"
+  done
+}
+
+install_first_party() {
+  info "first-party skill を再インストール (claude:${#claude_skills[@]} / codex:${#codex_skills[@]})..."
+  local s
+  for s in "${claude_skills[@]}"; do install_local_skill "$s" "$CLAUDE_SKILLS_DIR"; done
+  for s in "${codex_skills[@]}"; do install_local_skill "$s" "$CODEX_SKILLS_DIR"; done
+  info "first-party skill 完了"
+}
+
+install_third_party() {
+  info "third-party skill を公開 GitHub から取得中..."
+  local tmp
+  tmp="$(mktemp -d)"
+
+  info "  [1/2] googleworkspace/cli@v0.22.5 を clone (gws-shared/drive/drive-upload)..."
+  if git clone --depth 1 --branch v0.22.5 https://github.com/googleworkspace/cli.git "$tmp/gws" >/dev/null 2>&1; then
+    local s
+    for s in gws-shared gws-drive gws-drive-upload; do
+      if [ -d "$tmp/gws/skills/$s" ]; then
+        install_external_skill "$tmp/gws/skills/$s" "$s"
+        info "    installed: $s"
+      else
+        warn "    upstream に欠落: $s"
+      fi
+    done
+  else
+    warn "  googleworkspace/cli の clone に失敗 (gws-* を skip)"
+  fi
+
+  info "  [2/2] mattpocock/skills を clone (grill-me)..."
+  if git clone --depth 1 https://github.com/mattpocock/skills.git "$tmp/mp" >/dev/null 2>&1; then
+    if [ -d "$tmp/mp/skills/productivity/grill-me" ]; then
+      install_external_skill "$tmp/mp/skills/productivity/grill-me" grill-me
+      info "    installed: grill-me"
+    else
+      warn "    grill-me が upstream で見つからない"
+    fi
+  else
+    warn "  mattpocock/skills の clone に失敗 (grill-me を skip)"
+  fi
+
+  rm -rf "$tmp"
+  info "third-party skill 完了"
+}
+
+main() {
+  command -v git >/dev/null 2>&1 || fail "git が必要"
+  info "rmanzoku 環境の再現を開始 (REPO_DIR=$REPO_DIR)"
+  ensure_chezmoi
+  apply_chezmoi
+  install_first_party
+  install_third_party
+  info "完了。1Password 由来の secret / private subagent は 'opmaterialize restore' で別途復元すること。"
+}
+
+main "$@"

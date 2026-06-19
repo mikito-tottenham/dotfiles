@@ -63,6 +63,7 @@
 - 配布する repo オリジナル skill は publisher layout の `skills/` 配下を正本として git 管理すること
 - publisher layout の skill は `gh skill install --from-local <repo-root> <skill> --agent <agent> --scope user` を標準配備経路とし、chezmoi で `~/.claude/skills/` や `~/.codex/skills/` へ直接配備しないこと
 - 新しいマシン向けの復元情報は当面 script 化せず、`docs/skills-install-manifest.md` の docs-only manifest を正本として保存すること
+- ただし Claude Code on the web の ephemeral 環境に限り、`scripts/bootstrap-web` と SessionStart hook（`.claude/hooks/session-start.sh`）で `chezmoi apply` とスキル再インストールを自動化してよい（ADR-0045）。これはセッション起動時の再現専用で、ローカル / macOS の標準配備は引き続き `gh skill install` と docs-only manifest を正本とすること
 - external skill はこの repo に vendoring せず、`gh skill` による install / update / remove を標準運用とすること
 - third-party external skill が upstream publisher layout を持たない場合は、`docs/skills-install-manifest.md` に `fetch + gh skill install --from-local` 手順を残して管理すること
 - Codex `.system/skill-installer` は Codex-only の補助入口として認識し、恒久的な外部 skill 管理は `gh skill` と `docs/skills-install-manifest.md` を正本にすること
