@@ -10,7 +10,7 @@ updated_at: 2026-06-16
 当面は script を作らず、docs-only の install manifest として維持する。
 将来 `gh` 側に manifest 機能が入ったら、そちらへ移行を検討する。
 
-Claude Code on the web の ephemeral 環境に限り、`scripts/bootstrap-web`（SessionStart hook 経由）がこの一覧と同じスキルを自動再インストールする（ADR-0045）。スキルを追加・削除したときは、この manifest と `scripts/bootstrap-web` のリストを同期すること。
+Claude Code on the web の ephemeral 環境に限り、`scripts/bootstrap-web`（SessionStart hook 経由）が **web で復元可能なサブセット**を自動再インストールする（ADR-0045）。サブセットは「first-party 全部（必須）＋ 公開 third-party のうち取得できたもの（best-effort）」で、manifest 全体とは一致しない。first-party の欠落は bootstrap を失敗させ、third-party の取得失敗は skip して継続する。upstream 不在の skill（下記 `empirical-prompt-tuning`）は対象外。スキルを追加・削除したときは、この manifest と `scripts/bootstrap-web` のリストを同期すること。
 
 ## First-party publisher skills
 
@@ -99,10 +99,11 @@ done
 ### `empirical-prompt-tuning`
 
 - upstream: [mizchi/chezmoi-dotfiles `dot_claude/skills/empirical-prompt-tuning/SKILL.md`](https://github.com/mizchi/chezmoi-dotfiles/blob/main/dot_claude%2Fskills%2Fempirical-prompt-tuning%2FSKILL.md)
-- status: installed globally for Claude Code and Codex
+- status: **unavailable (upstream removed)**。2026-06-19 時点で upstream raw URL が HTTP 404 を返し、`mizchi/chezmoi-dotfiles` main から削除されている。
+- 復元可否: 現在は復元不可。`scripts/bootstrap-web`（web サブセット）の対象外であり、グローバルにもインストールされていない前提で扱う。
 - install mode: fetch upstream `SKILL.md`, stage it locally, then install with `gh skill --from-local`
 - reason: upstream repo is not a publisher-layout repo, so direct `gh skill install OWNER/REPO skill` is unavailable
-- update note: `gh skill update --dry-run empirical-prompt-tuning` currently reports missing GitHub metadata, so refresh by re-fetching and reinstalling
+- update note: upstream が復活したら下記 refresh 手順で再導入し、status を戻すこと。それまで refresh 手順は失敗する。
 
 #### Claude Code / Codex refresh
 
@@ -119,7 +120,7 @@ gh skill install ./.context/skill-bootstrap/empirical-prompt-tuning empirical-pr
 
 ### `grill-me`
 
-- upstream: [mattpocock/skills `grill-me`](https://github.com/mattpocock/skills/tree/main/grill-me)
+- upstream: [mattpocock/skills `skills/productivity/grill-me`](https://github.com/mattpocock/skills/tree/main/skills/productivity/grill-me)
 - status: installed globally for Claude Code and Codex
 - install mode: direct `gh skill install` from upstream GitHub repository
 - reason: upstream is publisher-discoverable on GitHub, so direct external install is the standard path
