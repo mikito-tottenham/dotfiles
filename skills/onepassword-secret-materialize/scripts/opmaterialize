@@ -221,9 +221,13 @@ process_manifest() {
     case "$kind" in
       field)
         if [ "${vault:-}" = "-" ] || [ -z "${vault:-}" ]; then
-          op item get "$item" --fields content > "$tmp"
+          op item get "$item" --format json \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); v=next((f.get('value') or '' for f in d.get('fields',[]) if f.get('label')=='content'),''); sys.stdout.write(v)" \
+            > "$tmp"
         else
-          op item get "$item" --vault "$vault" --fields content > "$tmp"
+          op item get "$item" --vault "$vault" --format json \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); v=next((f.get('value') or '' for f in d.get('fields',[]) if f.get('label')=='content'),''); sys.stdout.write(v)" \
+            > "$tmp"
         fi
         ;;
       document)
