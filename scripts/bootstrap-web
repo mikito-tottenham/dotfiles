@@ -392,8 +392,16 @@ install_gws() {
 # フル 1Password 化: service account 認証で opmaterialize restore を実行し、
 # dotfiles.env (op:// 参照)・secret-backed file・private subagent を一括復元する。
 # best-effort。OP_SERVICE_ACCOUNT_TOKEN 未設定や op 未導入なら理由を残して skip。
+# BOOTSTRAP_WEB_SKIP_OP=true のときは restore を実行しない。これは environment の
+# Setup script (キャッシュされ、結果がスナップショットに焼き込まれる) から呼ぶ用途で、
+# secret をスナップショットに残さず on-demand restore に委ねるための明示スイッチ。
 ensure_onepassword() {
   info "1Password 連携 (opmaterialize restore) を確認中 (best-effort)..."
+  if [ "${BOOTSTRAP_WEB_SKIP_OP:-}" = "true" ]; then
+    onepassword_status="skipped: BOOTSTRAP_WEB_SKIP_OP=true (cached setup のため secret 非復元。必要時に opmaterialize restore)"
+    info "  BOOTSTRAP_WEB_SKIP_OP=true: op restore を skip し on-demand 運用に委ねる (secret をスナップショットに残さない)"
+    return 0
+  fi
   if [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
     onepassword_status="skipped: OP_SERVICE_ACCOUNT_TOKEN 未設定"
     warn "  OP_SERVICE_ACCOUNT_TOKEN 未設定: 1Password 連携を skip (env 追加で有効化)"
