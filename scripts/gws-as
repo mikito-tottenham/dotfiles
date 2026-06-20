@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# gws-as: 名前付き Google アカウントを選んで gws を実行するラッパー。
+#
+# 各アカウントの OAuth クレデンシャル (gws auth export --unmasked の出力) を
+#   $GWS_ACCOUNTS_DIR/<name>.json   (既定 ~/.config/gws/accounts/<name>.json)
+# に置いておき、GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE 経由で切り替える。
+# クレデンシャル JSON は秘密 (refresh token 入り) なので 1Password (opmaterialize)
+# 管理にし、git には入れないこと。
+#
+# 使い方:
+#   gws-as <name> <gws-args...>   指定アカウントで gws を実行
+#   gws-as <name>                 そのアカウントの認証状態を表示 (gws auth status)
+#   gws-as --list | -l            利用可能なアカウント名を列挙
+#   gws-as --help | -h            このヘルプ
+#
+# 例:
+#   gws-as work drive list
+#   gws-as personal drive list
+#
+# クレデンシャルの用意 (Mac でアカウントごとに 1 回):
+#   1. そのアカウント所有の GCP プロジェクトで OAuth クライアントを作る
+#   2. gws auth login (ブラウザ認証)
+#   3. mkdir -p ~/.config/gws/accounts
+#      gws auth export --unmasked > ~/.config/gws/accounts/<name>.json
+#      chmod 600 ~/.config/gws/accounts/<name>.json
+#   4. opmaterialize add ~/.config/gws/accounts/<name>.json
+
+ACCOUNTS_DIR="${GWS_ACCOUNTS_DIR:-${GOOGLE_WORKSPACE_CLI_CONFIG_DIR:-$HOME/.config/gws}/accounts}"
+[ -n "${GWS_ACCOUNTS_DIR:-}" ] || ACCOUNTS_DIR="$HOME/.config/gws/accounts"
+
+info() { printf '\033[1;34m[gws-as]\033[0m %s\n' "$1"; }
+fail() { printf '\033[1;31m[gws-as]\033[0m %s\n' "$*" >&2; exit 1; }
+
+usage() {
+  sed -n '3,28p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+list_accounts() {
+  if [ ! -d "$ACCOUNTS_DIR" ]; then
+    info "アカウントディレクトリが無い: $ACCOUNTS_DIR"
+    return 0
+  fi
+  local found=0 f name
+  for f in "$ACCOUNTS_DIR"/*.json; do
+    [ -e "$f" ] || continue
+    name="$(basename "$f" .json)"
+    printf '%s\n' "$name"
+    found=1
+  done
+  [ "$found" -eq 1 ] || info "登録済みアカウントなし ($ACCOUNTS_DIR/*.json)"
+}
+
+main() {
+  if [ "$#" -eq 0 ]; then
+    usage
+    exit 1
+  fi
+
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    -l|--list) list_accounts; exit 0 ;;
+  esac
+
+  command -v gws >/dev/null 2>&1 || fail "gws が見つからない (PATH を確認すること)"
+
+  local name="$1"; shift
+  local cred="$ACCOUNTS_DIR/$name.json"
+  if [ ! -f "$cred" ]; then
+    printf '\033[1;31m[gws-as]\033[0m アカウントのクレデンシャルが無い: %s\n' "$cred" >&2
+    printf '  利用可能:\n' >&2
+    list_accounts | sed 's/^/    /' >&2
+    exit 1
+  fi
+
+  export GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE="$cred"
+
+  if [ "$#" -eq 0 ]; then
+    # 引数省略時はそのアカウントの認証状態を表示する。
+    exec gws auth status
+  fi
+  exec gws "$@"
+}
+
+main "$@"

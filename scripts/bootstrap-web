@@ -1,0 +1,498 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# bootstrap-web: Claude Code on the web の ephemeral セッションで rmanzoku 環境を再現する。
+#
+# 実行内容:
+#   1. chezmoi を用意する (なければ公式 installer、不可なら go build)
+#   2. .chezmoiignore 整合を確認してから chezmoi apply --force
+#   3. 配布スキルを再インストール
+#        - first-party (repo skills/): 必須。欠落・検証失敗があれば最後に exit 1。
+#        - third-party (公開 GitHub): best-effort。取得失敗は skip し、集計して継続する。
+#   4. runner CLI を best-effort で用意 (codex/gemini/ghq/gh/gws/copilot)。認証は env / 1Password
+#      由来 (GH_TOKEN・GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE・COPILOT_GITHUB_TOKEN 等、未設定なら warn)。
+#      grok は xAI OAuth、soundcore は対話ブラウザのため対象外。
+#   5. フル 1Password 化: OP_SERVICE_ACCOUNT_TOKEN があれば op を導入し opmaterialize restore を
+#      実行し、dotfiles.env (op:// 参照)・secret-backed file・private subagent を一括復元する。
+#
+# 再現対象は「web で復元可能なサブセット」であり、manifest 全体ではない。
+# empirical-prompt-tuning は upstream 不在 (404) のため対象外。
+#
+# OP_SERVICE_ACCOUNT_TOKEN が無い / op を導入できない (network policy 遮断) 場合、step 5 は
+# skip され、1Password 由来の secret・secret-backed file・private subagent は復元されない。
+# その場合は op が使える環境で `opmaterialize restore` を手動実行すること。
+# GEMINI_API_KEY 等の API キーは 1Password に置き dotfiles.env に op:// 参照を書き、
+# 各 runner は `oprun <cmd>` 経由で実行する (規約準拠)。
+#
+# 注意: chezmoi apply --force はハーネスが書いた ~/.gitconfig 等の target も上書きする。
+#       hook 後のコミットは dotfiles の git identity を使う (ADR-0045 参照)。
+#
+# 機械可読な実行結果を $BOOTSTRAP_WEB_STATUS (既定 ~/.cache/bootstrap-web/status.json) に書く。
+# 早期致命終了 (git 無し / chezmoi 導入失敗 / apply 失敗等) でも EXIT trap が失敗ステータスを残す。
+# 冪等。複数回実行しても安全。
+#
+# 設計判断は docs/adr/0045-reproduce-web-session-environment-via-session-start-hook.md を参照。
+
+REPO_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
+CODEX_SKILLS_DIR="$HOME/.codex/skills"
+STATUS_FILE="${BOOTSTRAP_WEB_STATUS:-$HOME/.cache/bootstrap-web/status.json}"
+
+# SessionStart hook は profile を source しない非ログイン実行で、最小 PATH しか持たない。
+# chezmoi が配置する ~/.local/bin の実行ファイル (opmaterialize / oprun 等) を解決できるよう
+# 明示的に PATH へ前置する。これが無いと ensure_onepassword の command -v opmaterialize が
+# false になり、materialize 済みでも restore が skip される。
+export PATH="$HOME/.local/bin:$PATH"
+
+# 実行ステージと結果書き込み状態 (EXIT trap が早期失敗時に status を書くため)
+STAGE="preflight"
+FAILURE_REASON=""
+_STATUS_WRITTEN=false
+
+info() { printf '\033[1;34m[bootstrap-web]\033[0m %s\n' "$1"; }
+warn() { printf '\033[1;33m[bootstrap-web:warn]\033[0m %s\n' "$1"; }
+fail() { FAILURE_REASON="$*"; printf '\033[1;31m[bootstrap-web:fail]\033[0m %s\n' "$*" >&2; exit 1; }
+
+# 一時ディレクトリは登録制にして単一の EXIT trap で必ず後始末する (失敗・abort 時も漏らさない)。
+_TMP_DIRS=()
+TMP_LAST=""
+cleanup_tmp() {
+  local d
+  if [ "${#_TMP_DIRS[@]}" -gt 0 ]; then
+    for d in "${_TMP_DIRS[@]}"; do
+      [ -n "$d" ] && rm -rf "$d"
+    done
+  fi
+}
+trap finalize EXIT
+make_tmp() {
+  # 注意: コマンド置換 ($(...)) で呼ぶと subshell になり登録が親へ伝播しないため、
+  #       結果は TMP_LAST 経由で受け渡す。
+  TMP_LAST="$(mktemp -d)"
+  _TMP_DIRS+=("$TMP_LAST")
+}
+
+# 集計用 (status / サマリ)
+first_party_failed=()
+third_party_installed=()
+third_party_skipped=()   # "name: reason"
+runner_cli_installed=()
+runner_cli_skipped=()     # "name: reason"
+onepassword_status="not-run"
+
+record_tp_skipped() { third_party_skipped+=("$1: $2"); }
+record_cli_skipped() { runner_cli_skipped+=("$1: $2"); }
+
+# first-party skill のエージェント別リスト。docs/skills-install-manifest.md と対応させること。
+# Claude Code には codex-cli-runner、Codex には claude-cli-runner を入れる差分に注意。
+claude_skills=(
+  skill-manager docs-entrypoint-check docs-evaluator grok-cli-runner code-evaluator
+  opus-4-7-tuning opus-4-8-tuning gpt-5-5-tuning codex-cli-runner gemini-cli-runner
+  copilot-cli-runner agent-orchestration-evaluator ai-usage-coach soundcore-minutes
+  ghq-repo-placement op-cli-runner onepassword-secret-materialize handoff git-branch-review
+)
+codex_skills=(
+  skill-manager docs-entrypoint-check docs-evaluator grok-cli-runner code-evaluator
+  opus-4-7-tuning opus-4-8-tuning gpt-5-5-tuning claude-cli-runner gemini-cli-runner
+  copilot-cli-runner ai-usage-coach soundcore-minutes ghq-repo-placement op-cli-runner
+  onepassword-secret-materialize handoff git-branch-review
+)
+
+# 単純な文字列を JSON 文字列にする (\ と " をエスケープ)。制御文字は対象外。
+json_string() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  printf '"%s"' "$s"
+}
+
+# 単純名向けの JSON 配列生成。空要素は除外する。
+json_array() {
+  local out="" item
+  for item in "$@"; do
+    [ -n "$item" ] || continue
+    item="${item//\\/\\\\}"
+    item="${item//\"/\\\"}"
+    out="$out,\"$item\""
+  done
+  printf '[%s]' "${out#,}"
+}
+
+dir_non_empty() { # $1=dir -> 0 if exists & non-empty
+  [ -d "$1" ] && [ -n "$(ls -A "$1" 2>/dev/null)" ]
+}
+
+ensure_chezmoi() {
+  if command -v chezmoi >/dev/null 2>&1; then
+    info "chezmoi は利用可能: $(command -v chezmoi)"
+    return 0
+  fi
+
+  # 主経路: 公式 installer。失敗は隠さず warn してから go build へ切り替える (AGENTS.md の fallback 観測性ルール)。
+  info "chezmoi 未検出。公式 installer を試行..."
+  if sh -c "$(curl -fsSL https://get.chezmoi.io 2>/dev/null)" -- -b /usr/local/bin >/dev/null 2>&1 \
+       && command -v chezmoi >/dev/null 2>&1; then
+    info "公式 installer で chezmoi を導入: $(command -v chezmoi)"
+    return 0
+  fi
+
+  warn "公式 installer は利用不可 (network policy 等)。go build へ切り替える。"
+  command -v go >/dev/null 2>&1 || fail "go が無いため chezmoi を build できない"
+  make_tmp
+  local src="$TMP_LAST"
+  info "chezmoi を clone & build 中 (初回は数分かかる): $src"
+  git clone --depth 1 https://github.com/twpayne/chezmoi.git "$src/chezmoi" >/dev/null 2>&1 \
+    || fail "chezmoi の clone に失敗"
+  ( cd "$src/chezmoi" && go build -o /usr/local/bin/chezmoi . ) || fail "chezmoi の build に失敗"
+  command -v chezmoi >/dev/null 2>&1 || fail "chezmoi build 後も PATH に見つからない"
+  info "go build で chezmoi を導入: $(command -v chezmoi)"
+}
+
+apply_chezmoi() {
+  info ".chezmoiignore 整合を確認中..."
+  ( cd "$REPO_DIR" && scripts/chezmoi-drift --check-ignore >/dev/null ) \
+    || fail ".chezmoiignore と source state の不整合。scripts/chezmoi-drift --check-ignore を確認すること"
+  # SessionStart hook には TTY が無い。--force で対話プロンプト無しに target を上書きする。
+  # ハーネスが session 起動時に書き換えた ~/.gitconfig 等も dotfiles の内容へ揃える。
+  info "chezmoi apply 実行中 (source=$REPO_DIR, --force)..."
+  chezmoi apply --force --source "$REPO_DIR"
+  info "chezmoi apply 完了"
+}
+
+install_local_skill() { # $1=name $2=dest_dir  (first-party=必須)
+  local name="$1" dest="$2"
+  local src="$REPO_DIR/skills/$name"
+  if [ ! -d "$src" ]; then
+    warn "first-party skill (必須) が repo に欠落: $name"
+    first_party_failed+=("$name -> $dest")
+    return 0
+  fi
+  mkdir -p "$dest"
+  rm -rf "${dest:?}/$name"
+  cp -a "$src" "$dest/$name"
+  if ! dir_non_empty "$dest/$name"; then
+    warn "first-party skill のインストール後検証に失敗: $name -> $dest"
+    first_party_failed+=("$name -> $dest")
+  fi
+}
+
+install_external_skill() { # $1=src_dir $2=name  -> 0 ok / 1 検証失敗
+  local src="$1" name="$2" dest rc=0
+  for dest in "$CLAUDE_SKILLS_DIR" "$CODEX_SKILLS_DIR"; do
+    mkdir -p "$dest"
+    rm -rf "${dest:?}/$name"
+    cp -a "$src" "$dest/$name"
+    dir_non_empty "$dest/$name" || rc=1
+  done
+  return $rc
+}
+
+install_first_party() {
+  info "first-party skill を再インストール (必須 / claude:${#claude_skills[@]} codex:${#codex_skills[@]})..."
+  local s
+  for s in "${claude_skills[@]}"; do install_local_skill "$s" "$CLAUDE_SKILLS_DIR"; done
+  for s in "${codex_skills[@]}"; do install_local_skill "$s" "$CODEX_SKILLS_DIR"; done
+  info "first-party skill 完了 (失敗 ${#first_party_failed[@]} 件)"
+}
+
+install_third_party() {
+  info "third-party skill を公開 GitHub から取得中 (best-effort)..."
+  make_tmp
+  local tmp="$TMP_LAST"
+
+  info "  [1/2] googleworkspace/cli@v0.22.5 を clone (gws-shared/drive/drive-upload)..."
+  if git clone --depth 1 --branch v0.22.5 https://github.com/googleworkspace/cli.git "$tmp/gws" >/dev/null 2>&1; then
+    local s
+    for s in gws-shared gws-drive gws-drive-upload; do
+      if [ -d "$tmp/gws/skills/$s" ]; then
+        if install_external_skill "$tmp/gws/skills/$s" "$s"; then
+          third_party_installed+=("$s"); info "    installed: $s"
+        else
+          record_tp_skipped "$s" "install verify failed"; warn "    install 検証失敗: $s"
+        fi
+      else
+        record_tp_skipped "$s" "missing in upstream"; warn "    upstream に欠落: $s"
+      fi
+    done
+  else
+    local s
+    for s in gws-shared gws-drive gws-drive-upload; do record_tp_skipped "$s" "clone failed"; done
+    warn "  googleworkspace/cli の clone に失敗 (gws-* を skip)"
+  fi
+
+  info "  [2/2] mattpocock/skills を clone (grill-me)..."
+  if git clone --depth 1 https://github.com/mattpocock/skills.git "$tmp/mp" >/dev/null 2>&1; then
+    if [ -d "$tmp/mp/skills/productivity/grill-me" ]; then
+      if install_external_skill "$tmp/mp/skills/productivity/grill-me" grill-me; then
+        third_party_installed+=("grill-me"); info "    installed: grill-me"
+      else
+        record_tp_skipped "grill-me" "install verify failed"; warn "    install 検証失敗: grill-me"
+      fi
+    else
+      record_tp_skipped "grill-me" "missing in upstream"; warn "    grill-me が upstream で見つからない"
+    fi
+  else
+    record_tp_skipped "grill-me" "clone failed"; warn "  mattpocock/skills の clone に失敗 (grill-me を skip)"
+  fi
+
+  info "third-party skill 完了 (installed:${#third_party_installed[@]} / skipped:${#third_party_skipped[@]})"
+}
+
+# runner スキルが叩く CLI を best-effort で用意する。いずれも headless 認証経路があるもの:
+#   codex (CODEX_AUTH_JSON), gemini (GEMINI_API_KEY), ghq (認証不要),
+#   gh (GH_TOKEN/GITHUB_TOKEN), gws (GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE), copilot (COPILOT_GITHUB_TOKEN)。
+# トークン/クレデンシャル未設定時は導入だけ行い、実行時認証が要る旨を warn する。
+# grok (xAI OAuth)・soundcore (対話ブラウザ必須) は headless 経路が無いため対象外。
+ensure_runner_clis() {
+  info "runner CLI を用意中 (best-effort)..."
+
+  # codex: CLI (npm) + 認証 (CODEX_AUTH_JSON -> ~/.codex/auth.json)
+  if command -v codex >/dev/null 2>&1; then
+    runner_cli_installed+=("codex (既存)")
+  elif command -v npm >/dev/null 2>&1 && npm install -g @openai/codex >/dev/null 2>&1 && command -v codex >/dev/null 2>&1; then
+    runner_cli_installed+=("codex")
+  else
+    record_cli_skipped "codex" "npm install 失敗 (npm 無し?)"
+  fi
+  if [ -n "${CODEX_AUTH_JSON:-}" ] && command -v codex >/dev/null 2>&1; then
+    mkdir -p "$HOME/.codex"
+    printf '%s' "$CODEX_AUTH_JSON" > "$HOME/.codex/auth.json"
+    chmod 600 "$HOME/.codex/auth.json"
+    info "  codex auth を CODEX_AUTH_JSON から materialize"
+  elif command -v codex >/dev/null 2>&1; then
+    warn "  CODEX_AUTH_JSON 未設定: codex は実行時に認証が要る"
+  fi
+
+  # gemini: CLI (npm)。認証は実行時の GEMINI_API_KEY。
+  if command -v gemini >/dev/null 2>&1; then
+    runner_cli_installed+=("gemini (既存)")
+  elif command -v npm >/dev/null 2>&1 && npm install -g @google/gemini-cli >/dev/null 2>&1 && command -v gemini >/dev/null 2>&1; then
+    runner_cli_installed+=("gemini")
+  else
+    record_cli_skipped "gemini" "npm install 失敗 (npm 無し?)"
+  fi
+  if [ -z "${GEMINI_API_KEY:-}" ] && command -v gemini >/dev/null 2>&1; then
+    warn "  GEMINI_API_KEY 未設定: gemini は導入済みだが実行時に認証が要る"
+  fi
+
+  # ghq: 認証不要 (go install)
+  if command -v ghq >/dev/null 2>&1; then
+    runner_cli_installed+=("ghq (既存)")
+  elif command -v go >/dev/null 2>&1 && GOBIN=/usr/local/bin go install github.com/x-motemen/ghq@latest >/dev/null 2>&1 && command -v ghq >/dev/null 2>&1; then
+    runner_cli_installed+=("ghq")
+  else
+    record_cli_skipped "ghq" "go install 失敗 (go 無し?)"
+  fi
+
+  # gh: GitHub CLI (skill-manager の gh skill backend, 2.90+ で gh skill 標準搭載)。
+  # 認証は GH_TOKEN / GITHUB_TOKEN (1Password 由来)。
+  if command -v gh >/dev/null 2>&1; then
+    runner_cli_installed+=("gh (既存)")
+  elif install_gh && command -v gh >/dev/null 2>&1; then
+    runner_cli_installed+=("gh")
+  else
+    record_cli_skipped "gh" "GitHub release 取得失敗"
+  fi
+  if command -v gh >/dev/null 2>&1 && [ -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]; then
+    warn "  GH_TOKEN/GITHUB_TOKEN 未設定: gh skill の remote 操作は実行時に認証が要る"
+  fi
+
+  # gws: Google Workspace CLI。認証は GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE (OAuth credential JSON, 非対話)。
+  # opmaterialize restore で ~/.config/gws/accounts/<name>.json が配置された後に有効。
+  if command -v gws >/dev/null 2>&1; then
+    runner_cli_installed+=("gws (既存)")
+  elif install_gws && command -v gws >/dev/null 2>&1; then
+    runner_cli_installed+=("gws")
+  else
+    record_cli_skipped "gws" "GitHub release 取得失敗"
+  fi
+  # 注意: この検出は ensure_onepassword (opmaterialize restore) より前に走る。restore で
+  # accounts/*.json が後から配置される正常ケースもあるため、未検出は失敗ではなく現時点の情報として出す。
+  if command -v gws >/dev/null 2>&1; then
+    if [ -n "${GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE:-}" ] || compgen -G "$HOME/.config/gws/accounts/*.json" >/dev/null 2>&1; then
+      info "  gws 認証材料を検出 (env か ~/.config/gws/accounts/*.json)。scripts/gws-as <name> で切り替え可"
+    else
+      info "  gws 認証材料は現時点で未検出。この後の opmaterialize restore で ~/.config/gws/accounts/*.json が配置される想定 (未配置なら手動 restore)"
+    fi
+  fi
+
+  # copilot: GitHub Copilot CLI (npm)。認証は COPILOT_GITHUB_TOKEN/GH_TOKEN/GITHUB_TOKEN (要 Copilot 契約)。
+  if command -v copilot >/dev/null 2>&1; then
+    runner_cli_installed+=("copilot (既存)")
+  elif command -v npm >/dev/null 2>&1 && npm install -g @github/copilot >/dev/null 2>&1 && command -v copilot >/dev/null 2>&1; then
+    runner_cli_installed+=("copilot")
+  else
+    record_cli_skipped "copilot" "npm install 失敗 (npm 無し?)"
+  fi
+  if command -v copilot >/dev/null 2>&1 && [ -z "${COPILOT_GITHUB_TOKEN:-}${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]; then
+    warn "  Copilot 認証 env 未設定: copilot は実行時に GitHub トークン (要 Copilot 契約) が要る"
+  fi
+
+  info "runner CLI 完了 (installed:${#runner_cli_installed[@]} / skipped:${#runner_cli_skipped[@]})"
+}
+
+# 1Password CLI を公式配布から best-effort 導入する (downloads/cache hosts 許可時のみ成功)。
+# version は OP_CLI_VERSION で上書き可。zip 展開は python3 を使い unzip 依存を避ける。
+install_op() {
+  command -v curl >/dev/null 2>&1 || return 1
+  command -v python3 >/dev/null 2>&1 || return 1
+  local ver="${OP_CLI_VERSION:-2.31.1}" arch
+  case "$(uname -m)" in
+    x86_64|amd64) arch=amd64 ;;
+    aarch64|arm64) arch=arm64 ;;
+    *) return 1 ;;
+  esac
+  make_tmp
+  local d="$TMP_LAST"
+  curl -fsSL "https://cache.agilebits.com/dist/1P/op2/pkg/v${ver}/op_linux_${arch}_v${ver}.zip" -o "$d/op.zip" 2>/dev/null || return 1
+  python3 -c 'import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$d/op.zip" "$d" 2>/dev/null || return 1
+  [ -f "$d/op" ] && install -m 0755 "$d/op" /usr/local/bin/op 2>/dev/null
+}
+
+# GitHub CLI を公式 release から best-effort 導入する。latest tag は github.com の
+# releases/latest redirect から解決 (api.github.com はポリシーで 403 のため使わない)。
+install_gh() {
+  command -v curl >/dev/null 2>&1 || return 1
+  local arch tag ver
+  case "$(uname -m)" in
+    x86_64|amd64) arch=amd64 ;;
+    aarch64|arm64) arch=arm64 ;;
+    *) return 1 ;;
+  esac
+  tag=$(curl -fsSI --max-time 15 "https://github.com/cli/cli/releases/latest" 2>/dev/null \
+    | grep -i '^location:' | tr -d '\r' | awk -F/ '{print $NF}')
+  [ -n "$tag" ] || return 1
+  ver=${tag#v}
+  make_tmp
+  local d="$TMP_LAST"
+  curl -fsSL --max-time 90 "https://github.com/cli/cli/releases/download/${tag}/gh_${ver}_linux_${arch}.tar.gz" -o "$d/gh.tgz" 2>/dev/null || return 1
+  tar -xzf "$d/gh.tgz" -C "$d" 2>/dev/null || return 1
+  [ -f "$d/gh_${ver}_linux_${arch}/bin/gh" ] && install -m 0755 "$d/gh_${ver}_linux_${arch}/bin/gh" /usr/local/bin/gh 2>/dev/null
+}
+
+# Google Workspace CLI (gws) を公式 release から best-effort 導入する。pin は manifest に
+# 合わせ v0.22.5、GWS_CLI_VERSION で上書き可。gnu (glibc) ビルドを使う。
+install_gws() {
+  command -v curl >/dev/null 2>&1 || return 1
+  local ver="${GWS_CLI_VERSION:-0.22.5}" arch
+  case "$(uname -m)" in
+    x86_64|amd64) arch=x86_64 ;;
+    aarch64|arm64) arch=aarch64 ;;
+    *) return 1 ;;
+  esac
+  make_tmp
+  local d="$TMP_LAST"
+  curl -fsSL --max-time 90 "https://github.com/googleworkspace/cli/releases/download/v${ver}/google-workspace-cli-${arch}-unknown-linux-gnu.tar.gz" -o "$d/gws.tgz" 2>/dev/null || return 1
+  tar -xzf "$d/gws.tgz" -C "$d" 2>/dev/null || return 1
+  local bin
+  bin=$(find "$d" -maxdepth 2 -type f -name gws 2>/dev/null | head -1)
+  [ -n "$bin" ] && install -m 0755 "$bin" /usr/local/bin/gws 2>/dev/null
+}
+
+# フル 1Password 化: service account 認証で opmaterialize restore を実行し、
+# dotfiles.env (op:// 参照)・secret-backed file・private subagent を一括復元する。
+# best-effort。OP_SERVICE_ACCOUNT_TOKEN 未設定や op 未導入なら理由を残して skip。
+ensure_onepassword() {
+  info "1Password 連携 (opmaterialize restore) を確認中 (best-effort)..."
+  if [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+    onepassword_status="skipped: OP_SERVICE_ACCOUNT_TOKEN 未設定"
+    warn "  OP_SERVICE_ACCOUNT_TOKEN 未設定: 1Password 連携を skip (env 追加で有効化)"
+    return 0
+  fi
+  if ! command -v op >/dev/null 2>&1; then
+    info "  op 未検出。公式配布から導入を試行 (OP_CLI_VERSION で version 指定可)..."
+    install_op || true
+  fi
+  if ! command -v op >/dev/null 2>&1; then
+    onepassword_status="skipped: op 未導入 (network policy で 1Password 配布が遮断?)"
+    warn "  op を導入できず skip。network policy で cache.agilebits.com / downloads.1password.com を許可すること"
+    return 0
+  fi
+  if ! op whoami >/dev/null 2>&1; then
+    onepassword_status="skipped: op 認証失敗 (token 無効?)"
+    warn "  op whoami 失敗: OP_SERVICE_ACCOUNT_TOKEN を確認すること"
+    return 0
+  fi
+  info "  opmaterialize restore 実行中..."
+  if command -v opmaterialize >/dev/null 2>&1 && opmaterialize restore >/dev/null 2>&1; then
+    onepassword_status="restored"
+    info "  opmaterialize restore 完了 (dotfiles.env / secret-backed file / private subagent を復元)"
+  else
+    onepassword_status="skipped: opmaterialize restore 失敗"
+    warn "  opmaterialize restore 失敗: Secrets Manifest / vault アクセスを確認すること"
+  fi
+}
+
+write_status() { # $1=overall_success(true/false) [$2=failure_stage]
+  local overall="$1" stage="${2:-}" dir
+  dir="$(dirname "$STATUS_FILE")"
+  mkdir -p "$dir"
+  {
+    printf '{\n'
+    printf '  "timestamp": "%s",\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf '  "overall_success": %s,\n' "$overall"
+    printf '  "failure_stage": %s,\n' "$(json_string "$stage")"
+    printf '  "failure_reason": %s,\n' "$(json_string "$FAILURE_REASON")"
+    printf '  "first_party_failed": %s,\n' "$(json_array ${first_party_failed[@]+"${first_party_failed[@]}"})"
+    printf '  "third_party_installed": %s,\n' "$(json_array ${third_party_installed[@]+"${third_party_installed[@]}"})"
+    printf '  "third_party_skipped": %s,\n' "$(json_array ${third_party_skipped[@]+"${third_party_skipped[@]}"})"
+    printf '  "runner_cli_installed": %s,\n' "$(json_array ${runner_cli_installed[@]+"${runner_cli_installed[@]}"})"
+    printf '  "runner_cli_skipped": %s,\n' "$(json_array ${runner_cli_skipped[@]+"${runner_cli_skipped[@]}"})"
+    printf '  "onepassword": %s\n' "$(json_string "$onepassword_status")"
+    printf '}\n'
+  } > "$STATUS_FILE"
+  _STATUS_WRITTEN=true
+}
+
+# EXIT trap: 一時ディレクトリを必ず後始末し、main がステータスを書かずに
+# 早期終了した場合は失敗ステータスを残す (契約: status は必ず書く)。
+finalize() {
+  local rc=$?
+  cleanup_tmp || true
+  if [ "$_STATUS_WRITTEN" != true ]; then
+    write_status false "$STAGE" || true
+  fi
+  exit "$rc"
+}
+
+main() {
+  STAGE="preflight"
+  command -v git >/dev/null 2>&1 || fail "git が必要"
+  info "rmanzoku 環境の再現を開始 (REPO_DIR=$REPO_DIR)"
+  STAGE="ensure_chezmoi"; ensure_chezmoi
+  STAGE="apply_chezmoi"; apply_chezmoi
+  STAGE="install_first_party"; install_first_party
+  STAGE="install_third_party"; install_third_party
+  STAGE="ensure_runner_clis"; ensure_runner_clis
+  STAGE="ensure_onepassword"; ensure_onepassword
+  STAGE="finalize"
+
+  info "==== サマリ ===="
+  info "first-party: 失敗 ${#first_party_failed[@]} 件"
+  if [ "${#first_party_failed[@]}" -gt 0 ]; then warn "  失敗: ${first_party_failed[*]}"; fi
+  info "third-party (best-effort): installed ${#third_party_installed[@]} / skipped ${#third_party_skipped[@]}"
+  if [ "${#third_party_skipped[@]}" -gt 0 ]; then warn "  skipped: ${third_party_skipped[*]}"; fi
+  info "runner CLI (best-effort): installed ${#runner_cli_installed[@]} / skipped ${#runner_cli_skipped[@]}"
+  if [ "${#runner_cli_skipped[@]}" -gt 0 ]; then warn "  skipped: ${runner_cli_skipped[*]}"; fi
+  info "1Password (opmaterialize): ${onepassword_status}"
+
+  local overall=true stage=""
+  if [ "${#first_party_failed[@]}" -gt 0 ]; then
+    overall=false
+    stage="install_first_party"
+    FAILURE_REASON="first-party skill (必須) の欠落・検証失敗あり"
+  fi
+  write_status "$overall" "$stage"
+  info "ステータス: $STATUS_FILE"
+
+  if [ "$overall" != true ]; then
+    fail "$FAILURE_REASON。再現は不完全。詳細は $STATUS_FILE"
+  fi
+  if [ "$onepassword_status" = "restored" ]; then
+    info "完了。1Password 由来の secret / secret-backed file / private subagent は opmaterialize restore で復元済み。"
+  else
+    info "完了。1Password 連携は未実行 ($onepassword_status)。secret / secret-backed file / private subagent は op が使える環境で 'opmaterialize restore' を手動実行して復元すること。"
+  fi
+}
+
+main "$@"
