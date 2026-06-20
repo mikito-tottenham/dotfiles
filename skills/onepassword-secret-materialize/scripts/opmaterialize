@@ -221,9 +221,9 @@ process_manifest() {
     case "$kind" in
       field)
         if [ "${vault:-}" = "-" ] || [ -z "${vault:-}" ]; then
-          op read "op:///${item}/content" > "$tmp"
+          op item get "$item" --fields content > "$tmp"
         else
-          op read "op://${vault}/${item}/content" > "$tmp"
+          op item get "$item" --vault "$vault" --fields content > "$tmp"
         fi
         ;;
       document)
