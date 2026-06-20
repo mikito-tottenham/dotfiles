@@ -38,6 +38,12 @@ CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
 CODEX_SKILLS_DIR="$HOME/.codex/skills"
 STATUS_FILE="${BOOTSTRAP_WEB_STATUS:-$HOME/.cache/bootstrap-web/status.json}"
 
+# SessionStart hook は profile を source しない非ログイン実行で、最小 PATH しか持たない。
+# chezmoi が配置する ~/.local/bin の実行ファイル (opmaterialize / oprun 等) を解決できるよう
+# 明示的に PATH へ前置する。これが無いと ensure_onepassword の command -v opmaterialize が
+# false になり、materialize 済みでも restore が skip される。
+export PATH="$HOME/.local/bin:$PATH"
+
 # 実行ステージと結果書き込み状態 (EXIT trap が早期失敗時に status を書くため)
 STAGE="preflight"
 FAILURE_REASON=""
@@ -232,10 +238,11 @@ install_third_party() {
   info "third-party skill 完了 (installed:${#third_party_installed[@]} / skipped:${#third_party_skipped[@]})"
 }
 
-# runner スキルが叩く CLI を best-effort で用意する。
-# 認証不要 (ghq) と env 由来の認証で headless 完走できるもの (codex, gemini) のみ対象。
-# op / gh / gws / grok は入手経路ブロック・OAuth headless 不可・契約必須のため対象外
-# (docs-only manifest / 各 runner SKILL.md の手動セットアップに委ねる)。
+# runner スキルが叩く CLI を best-effort で用意する。いずれも headless 認証経路があるもの:
+#   codex (CODEX_AUTH_JSON), gemini (GEMINI_API_KEY), ghq (認証不要),
+#   gh (GH_TOKEN/GITHUB_TOKEN), gws (GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE), copilot (COPILOT_GITHUB_TOKEN)。
+# トークン/クレデンシャル未設定時は導入だけ行い、実行時認証が要る旨を warn する。
+# grok (xAI OAuth)・soundcore (対話ブラウザ必須) は headless 経路が無いため対象外。
 ensure_runner_clis() {
   info "runner CLI を用意中 (best-effort)..."
 
@@ -299,11 +306,13 @@ ensure_runner_clis() {
   else
     record_cli_skipped "gws" "GitHub release 取得失敗"
   fi
+  # 注意: この検出は ensure_onepassword (opmaterialize restore) より前に走る。restore で
+  # accounts/*.json が後から配置される正常ケースもあるため、未検出は失敗ではなく現時点の情報として出す。
   if command -v gws >/dev/null 2>&1; then
     if [ -n "${GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE:-}" ] || compgen -G "$HOME/.config/gws/accounts/*.json" >/dev/null 2>&1; then
       info "  gws 認証材料を検出 (env か ~/.config/gws/accounts/*.json)。scripts/gws-as <name> で切り替え可"
     else
-      warn "  gws 認証材料なし: ~/.config/gws/accounts/<name>.json を opmaterialize restore で配置すること"
+      info "  gws 認証材料は現時点で未検出。この後の opmaterialize restore で ~/.config/gws/accounts/*.json が配置される想定 (未配置なら手動 restore)"
     fi
   fi
 
@@ -479,7 +488,11 @@ main() {
   if [ "$overall" != true ]; then
     fail "$FAILURE_REASON。再現は不完全。詳細は $STATUS_FILE"
   fi
-  info "完了。1Password 由来の secret / private subagent は 'opmaterialize restore' で別途復元すること。"
+  if [ "$onepassword_status" = "restored" ]; then
+    info "完了。1Password 由来の secret / secret-backed file / private subagent は opmaterialize restore で復元済み。"
+  else
+    info "完了。1Password 連携は未実行 ($onepassword_status)。secret / secret-backed file / private subagent は op が使える環境で 'opmaterialize restore' を手動実行して復元すること。"
+  fi
 }
 
 main "$@"
