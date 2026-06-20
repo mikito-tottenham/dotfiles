@@ -20,20 +20,24 @@ usage:
   opmaterialize add <file> [--vault <vault>] [--item <name>] [--out-path <path>] [--mode <mode>] [--manifest-item <name>] [--manifest-vault <vault>]
 
 diff:
-  Download the manifest and compare declared 1Password Documents with local
+  Download the manifest and compare declared 1Password items with local
   files without printing secret contents or writing target files.
 
 restore:
-  Download a tab-separated manifest from the 1Password Document item
+  Download a tab-separated manifest from the 1Password item
   "Secrets Manifest" and materialize declared files into their paths.
 
 add:
-  Save a local file as a 1Password Document, then add or update the matching
-  row in "Secrets Manifest". The manifest stores the document item name,
+  Save a local file as a 1Password Secure Note field, then add or update
+  the matching row in "Secrets Manifest". The manifest stores the item name,
   output path, mode, and vault; git stores none of those individual entries.
 
 Manifest columns:
   type    item    out_path    mode    vault
+
+Supported types:
+  field     - Secure Note with "content" field (service-account compatible)
+  document  - Legacy 1Password Document (requires personal account auth)
 EOF
 }
 
@@ -138,10 +142,10 @@ mkdir -p "$work_dir"
 
 expand_home() {
   case "$1" in
-    "\$HOME"/*)
+    "\$HOME"/*)  
       printf '%s/%s\n' "$HOME" "${1#\$HOME/}"
       ;;
-    '~'/*)
+    '~'/*)  
       printf '%s/%s\n' "$HOME" "${1#\~/}"
       ;;
     *)
@@ -152,7 +156,7 @@ expand_home() {
 
 home_path() {
   case "$1" in
-    "$HOME"/*)
+    "$HOME"/*)  
       printf "\$HOME/%s\n" "${1#"$HOME"/}"
       ;;
     *)
@@ -173,6 +177,12 @@ download_manifest() {
   fi
 
   if [ -n "$manifest_vault" ]; then
+    # Try Secure Note field first (service-account compatible)
+    if op read "op://${manifest_vault}/${manifest_item}/notesPlain" > "$destination" 2>/dev/null && [ -s "$destination" ]; then
+      chmod 0600 "$destination"
+      return 0
+    fi
+    # Fall back to legacy Document
     op document get "$manifest_item" --vault "$manifest_vault" --out-file "$destination" --file-mode 0600 --force >/dev/null
   else
     op document get "$manifest_item" --out-file "$destination" --file-mode 0600 --force >/dev/null
@@ -209,6 +219,13 @@ process_manifest() {
     mkdir -p "$target_dir"
 
     case "$kind" in
+      field)
+        if [ "${vault:-}" = "-" ] || [ -z "${vault:-}" ]; then
+          op read "op:///${item}/content" > "$tmp"
+        else
+          op read "op://${vault}/${item}/content" > "$tmp"
+        fi
+        ;;
       document)
         if [ "${vault:-}" = "-" ] || [ -z "${vault:-}" ]; then
           op document get "$item" --out-file "$tmp" --file-mode "$file_mode" --force >/dev/null
@@ -290,7 +307,7 @@ update_manifest_file() {
       /^#/ || NF == 0 { print; next }
       $2 == item || $3 == out_path {
         if (!updated) {
-          print "document", item, out_path, mode, vault
+          print "field", item, out_path, mode, vault
           updated = 1
         }
         next
@@ -298,7 +315,7 @@ update_manifest_file() {
       { print }
       END {
         if (!updated) {
-          print "document", item, out_path, mode, vault
+          print "field", item, out_path, mode, vault
         }
       }
     ' "$manifest" > "$next_manifest"
@@ -306,17 +323,18 @@ update_manifest_file() {
 
 upload_manifest() {
   manifest="$1"
+  notes_content="$(cat "$manifest")"
   if [ "$manifest_exists" = true ]; then
     if [ -n "$manifest_vault" ]; then
-      op document edit "$manifest_item" "$manifest" --vault "$manifest_vault" --file-name "secrets-manifest.tsv" --title "$manifest_item" >/dev/null
+      op item edit "$manifest_item" --vault "$manifest_vault" "notesPlain=$notes_content" >/dev/null
     else
-      op document edit "$manifest_item" "$manifest" --file-name "secrets-manifest.tsv" --title "$manifest_item" >/dev/null
+      op item edit "$manifest_item" "notesPlain=$notes_content" >/dev/null
     fi
   else
     if [ -n "$manifest_vault" ]; then
-      op document create "$manifest" --vault "$manifest_vault" --file-name "secrets-manifest.tsv" --title "$manifest_item" >/dev/null
+      op item create --category "Secure Note" --title "$manifest_item" --vault "$manifest_vault" "notesPlain=$notes_content" >/dev/null
     else
-      op document create "$manifest" --file-name "secrets-manifest.tsv" --title "$manifest_item" >/dev/null
+      op item create --category "Secure Note" --title "$manifest_item" "notesPlain=$notes_content" >/dev/null
     fi
   fi
 }
@@ -337,11 +355,13 @@ add_file() {
     manifest_vault="$add_vault"
   fi
 
-  if op document edit "$add_item" "$source_abs" --vault "$add_vault" --file-name "$(basename "$source_abs")" --title "$add_item" >/dev/null 2>&1; then
-    printf '%s\n' "updated document: $add_item"
+  file_content="$(cat "$source_abs")"
+  if op item get "$add_item" --vault "$add_vault" >/dev/null 2>&1; then
+    op item edit "$add_item" --vault "$add_vault" "content[text]=$file_content" >/dev/null
+    printf '%s\n' "updated field: $add_item"
   else
-    op document create "$source_abs" --vault "$add_vault" --file-name "$(basename "$source_abs")" --title "$add_item" >/dev/null
-    printf '%s\n' "created document: $add_item"
+    op item create --category "Secure Note" --title "$add_item" --vault "$add_vault" "content[text]=$file_content" >/dev/null
+    printf '%s\n' "created field: $add_item"
   fi
 
   manifest="$work_dir/secrets-manifest.tsv"
