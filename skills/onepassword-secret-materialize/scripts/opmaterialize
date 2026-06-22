@@ -173,9 +173,15 @@ download_manifest() {
   fi
 
   if [ -n "$manifest_vault" ]; then
-    op document get "$manifest_item" --vault "$manifest_vault" --out-file "$destination" --file-mode 0600 --force >/dev/null
+    op document get "$manifest_item" --vault "$manifest_vault" --out-file "$destination" --file-mode 0600 --force >/dev/null 2>&1 && return 0
+    # Fallback: manifest stored as SECURE_NOTE (notesPlain field)
+    op item get "$manifest_item" --vault "$manifest_vault" --fields "label=notesPlain" 2>/dev/null \
+      | sed -e '1s/^"//' -e '$s/"$//' > "$destination"
   else
-    op document get "$manifest_item" --out-file "$destination" --file-mode 0600 --force >/dev/null
+    op document get "$manifest_item" --out-file "$destination" --file-mode 0600 --force >/dev/null 2>&1 && return 0
+    # Fallback: manifest stored as SECURE_NOTE (notesPlain field)
+    op item get "$manifest_item" --fields "label=notesPlain" 2>/dev/null \
+      | sed -e '1s/^"//' -e '$s/"$//' > "$destination"
   fi
 }
 
@@ -214,6 +220,15 @@ process_manifest() {
           op document get "$item" --out-file "$tmp" --file-mode "$file_mode" --force >/dev/null
         else
           op document get "$item" --vault "$vault" --out-file "$tmp" --file-mode "$file_mode" --force >/dev/null
+        fi
+        ;;
+      field)
+        if [ "${vault:-}" = "-" ] || [ -z "${vault:-}" ]; then
+          op item get "$item" --fields "label=content" 2>/dev/null \
+            | sed -e '1s/^"//' -e '$s/"$//' -e 's/""/"/g' > "$tmp"
+        else
+          op item get "$item" --vault "$vault" --fields "label=content" 2>/dev/null \
+            | sed -e '1s/^"//' -e '$s/"$//' -e 's/""/"/g' > "$tmp"
         fi
         ;;
       *)
