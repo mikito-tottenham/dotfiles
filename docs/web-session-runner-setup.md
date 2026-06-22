@@ -188,8 +188,9 @@ CLAUDE_PROJECT_DIR=/opt/dotfiles /opt/dotfiles/scripts/bootstrap-web
 runner 系 skill の実用可否は「背後 CLI の導入 × 認証材料 × network egress（backend 到達性）」で
 決まる。codex の egress は **経路で分けて理解する**こと: web セッションのコンテナは直接の外部
 egress を持たず、通信は Claude Code 管理 proxy 経由になる（`CLAUDE_CODE_PROXY_RESOLVES_HOSTS`）。
-一般 HTTP では proxy が `api.openai.com` / `chatgpt.com` を拒否する（2026-06-22 実測: proxy 経由で
-**403**、proxy を外すと **DNS 解決自体が不可**）。**ただし** Claude Code の `openai-codex` プラグインの
+一般 HTTP では `api.openai.com` / `chatgpt.com` に到達できない（2026-06-22 実測。挙動はセッション/
+環境依存で、**proxy 経由で 403** になる場合と **proxy 有無とも DNS 解決不可** になる場合がある。
+いずれも素の egress では openai 不達という点は共通）。**ただし** Claude Code の `openai-codex` プラグインの
 companion runtime（`CODEX_COMPANION_SESSION_ID`）経由では codex CLI が実行できる（実測で
 `codex exec` 成功・web セッション内で Codex レビューを実行できている）。詳細は ADR-0045 参照。
 新しいクラウドセッションで以下を流すと導入・認証の一覧を確認できる。
