@@ -3,8 +3,8 @@
 [url "https://"]
 	insteadOf = git://
 [user]
-	email = manzoku.ryo@gmail.com
-	name = rmanzoku
+	email = 32815656+mikito-tottenham@users.noreply.github.com
+	name = Mikito Ebishima
 [credential "https://github.com"]
 	helper =
 	helper = !/opt/homebrew/bin/gh auth git-credential
