@@ -411,7 +411,7 @@ ensure_onepassword() {
   fi
   if ! command -v op >/dev/null 2>&1; then
     onepassword_status="skipped: op 未導入 (network policy で 1Password 配布が遮断?)"
-    warn "  op を導入できず skip。network policy で cache.agilebits.com / downloads.1password.com を許可すること"
+    warn "  op を導入できず skip。network policy で cache.agilebits.com (op 配布) と *.1password.com (op API) を許可すること"
     return 0
   fi
   # restore を行わないケース (op は導入済み):
