@@ -186,8 +186,12 @@ CLAUDE_PROJECT_DIR=/opt/dotfiles /opt/dotfiles/scripts/bootstrap-web
 ## runner skill の実態確認（CLI 導入 × 認証 × egress）
 
 runner 系 skill の実用可否は「背後 CLI の導入 × 認証材料 × network egress（backend 到達性）」で
-決まる。特に **codex は認証済でも、web の egress 許可に `api.openai.com` / `chatgpt.com` が無いと
-モデル API に到達できず実行不可**（2026-06-22 時点で両者 403。ADR-0045）。
+決まる。codex の egress は **経路で分けて理解する**こと: web セッションのコンテナは直接の外部
+egress を持たず、通信は Claude Code 管理 proxy 経由になる（`CLAUDE_CODE_PROXY_RESOLVES_HOSTS`）。
+一般 HTTP では proxy が `api.openai.com` / `chatgpt.com` を拒否する（2026-06-22 実測: proxy 経由で
+**403**、proxy を外すと **DNS 解決自体が不可**）。**ただし** Claude Code の `openai-codex` プラグインの
+companion runtime（`CODEX_COMPANION_SESSION_ID`）経由では codex CLI が実行できる（実測で
+`codex exec` 成功・web セッション内で Codex レビューを実行できている）。詳細は ADR-0045 参照。
 新しいクラウドセッションで以下を流すと導入・認証の一覧を確認できる。
 
 ```bash
@@ -203,7 +207,7 @@ ls ~/.config/gws/accounts/*.json 2>/dev/null | wc -l    # gws アカウント数
 
 | skill | 背後 CLI | 認証材料 | 既定の扱い |
 | :-- | :-- | :-- | :-- |
-| codex-cli-runner | codex | `CODEX_AUTH_JSON` → `~/.codex/auth.json` | スコープ内・認証済。ただし web egress 不許可時は実行不可（ADR-0045） |
+| codex-cli-runner | codex | `CODEX_AUTH_JSON` → `~/.codex/auth.json`（+ openai-codex companion runtime） | スコープ内・認証済。素のコンテナ egress では openai 不達だが、openai-codex プラグイン proxy 経由なら実行可（ADR-0045） |
 | op-cli-runner | op | `OP_SERVICE_ACCOUNT_TOKEN` | スコープ内・認証済 |
 | onepassword-secret-materialize | opmaterialize + op + jq | 上記 op に依存（field 方式は `jq` 必須） | スコープ内・認証済 |
 | gws-drive / -upload / -shared | gws (+ gws-as) | `~/.config/gws/accounts/<name>.json`（restore 後） | スコープ内・restore 後に有効 |
