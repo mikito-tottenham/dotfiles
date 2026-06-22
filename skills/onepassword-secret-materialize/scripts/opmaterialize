@@ -5,6 +5,7 @@ command="restore"
 manifest_item="${OP_DOTFILES_MATERIALIZE_ITEM:-Secrets Manifest}"
 manifest_vault="${OP_DOTFILES_MATERIALIZE_VAULT:-Dotfiles Secrets}"
 manifest_file="${OP_DOTFILES_MATERIALIZE_FILE:-}"
+field_label="${OP_DOTFILES_MATERIALIZE_FIELD_LABEL:-content}"
 work_dir="${OP_DOTFILES_MATERIALIZE_WORK_DIR:-$HOME/.config/op/injected}"
 force=false
 add_item=""
@@ -20,20 +21,25 @@ usage:
   opmaterialize add <file> [--vault <vault>] [--item <name>] [--out-path <path>] [--mode <mode>] [--manifest-item <name>] [--manifest-vault <vault>]
 
 diff:
-  Download the manifest and compare declared 1Password Documents with local
+  Read the manifest and compare declared 1Password secret files with local
   files without printing secret contents or writing target files.
 
 restore:
-  Download a tab-separated manifest from the 1Password Document item
-  "Secrets Manifest" and materialize declared files into their paths.
+  Read a tab-separated manifest from the Secure Note "Secrets Manifest"
+  (notesPlain field) and materialize declared files into their paths.
 
 add:
   Save a local file as a 1Password Document, then add or update the matching
-  row in "Secrets Manifest". The manifest stores the document item name,
-  output path, mode, and vault; git stores none of those individual entries.
+  row in "Secrets Manifest". 'add' is document-based; against a field-based
+  (Secure Note) manifest it refuses, so register field-based secrets manually.
 
 Manifest columns:
   type    item    out_path    mode    vault
+
+Manifest 'type' values:
+  document  a 1Password Document item (file body)
+  field     a Secure Note field (default label 'content', override with
+            OP_DOTFILES_MATERIALIZE_FIELD_LABEL)
 EOF
 }
 
@@ -172,11 +178,13 @@ download_manifest() {
     return 0
   fi
 
-  if [ -n "$manifest_vault" ]; then
-    op document get "$manifest_item" --vault "$manifest_vault" --out-file "$destination" --file-mode 0600 --force >/dev/null
-  else
-    op document get "$manifest_item" --out-file "$destination" --file-mode 0600 --force >/dev/null
+  if [ -z "$manifest_vault" ]; then
+    printf '%s\n' "opmaterialize: a vault is required to read the manifest note (set OP_DOTFILES_MATERIALIZE_VAULT or pass --manifest-vault)" >&2
+    exit 64
   fi
+  # The manifest is stored as the notesPlain field of a Secure Note item.
+  op read "op://$manifest_vault/$manifest_item/notesPlain" --out-file "$destination" --no-newline --force >/dev/null
+  chmod 0600 "$destination"
 }
 
 process_manifest() {
@@ -215,6 +223,31 @@ process_manifest() {
         else
           op document get "$item" --vault "$vault" --out-file "$tmp" --file-mode "$file_mode" --force >/dev/null
         fi
+        ;;
+      field)
+        if ! command -v jq >/dev/null 2>&1; then
+          rm -f "$manifest" "$tmp"
+          printf '%s\n' "opmaterialize: 'jq' is required to materialize type=field rows" >&2
+          exit 127
+        fi
+        row_vault="$vault"
+        if [ "${row_vault:-}" = "-" ] || [ -z "${row_vault:-}" ]; then
+          row_vault="$manifest_vault"
+        fi
+        if [ -z "$row_vault" ]; then
+          rm -f "$manifest" "$tmp"
+          printf '%s\n' "opmaterialize: a vault is required for type=field row $line_no" >&2
+          exit 65
+        fi
+        # Item titles can contain '/', which is unsafe in an op:// path, so
+        # resolve the immutable item id first and reference the field by id.
+        item_id="$(op item get "$item" --vault "$row_vault" --format json | jq -r '.id // empty')"
+        if [ -z "$item_id" ]; then
+          rm -f "$manifest" "$tmp"
+          printf '%s\n' "opmaterialize: cannot resolve type=field item on row $line_no: $item" >&2
+          exit 65
+        fi
+        op read "op://$row_vault/$item_id/$field_label" --out-file "$tmp" --no-newline --force >/dev/null
         ;;
       *)
         rm -f "$manifest" "$tmp"
@@ -325,6 +358,17 @@ add_file() {
   if [ ! -r "$source_file" ]; then
     printf '%s\n' "opmaterialize: file not readable: $source_file" >&2
     exit 66
+  fi
+  # 'add' is document-based. If the manifest item is a field-based Secure Note,
+  # refuse before creating anything so we neither orphan a Document nor leave
+  # the manifest half-updated. Field-mode 'add' is a documented follow-up.
+  if command -v jq >/dev/null 2>&1 && [ -n "$manifest_vault" ]; then
+    manifest_category="$(op item get "$manifest_item" --vault "$manifest_vault" --format json 2>/dev/null | jq -r '.category // empty' 2>/dev/null || true)"
+    if [ -n "$manifest_category" ] && [ "$manifest_category" != "DOCUMENT" ]; then
+      printf '%s\n' "opmaterialize: 'add' is document-based but manifest '$manifest_item' is '$manifest_category' (field-based vault)." >&2
+      printf '%s\n' "opmaterialize: register the secret as a Secure Note '$field_label' field plus a 'field' manifest row manually, or extend 'add' for field mode." >&2
+      exit 64
+    fi
   fi
   source_abs="$(cd "$(dirname "$source_file")" && pwd)/$(basename "$source_file")"
   if [ -z "$add_out_path" ]; then
