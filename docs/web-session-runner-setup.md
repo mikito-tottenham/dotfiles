@@ -183,7 +183,7 @@ codex login status                             # "Logged in" 確認
 CLAUDE_PROJECT_DIR=/opt/dotfiles /opt/dotfiles/scripts/bootstrap-web
 ```
 
-## runner skill の実態確認（CLI 導入 × 認証）
+## runner skill の実態確認（CLI 導入 × 認証 × egress）
 
 runner 系 skill の実用可否は「背後 CLI の導入 × 認証材料 × network egress（backend 到達性）」で
 決まる。特に **codex は認証済でも、web の egress 許可に `api.openai.com` / `chatgpt.com` が無いと
