@@ -3,6 +3,8 @@ title: "Use 1Password For Secret Handoff"
 date: 2026-05-20
 agent: "Codex GPT-5"
 status: "accepted"
+updated_at: 2026-06-22
+updated_by_agent_model: "Claude Code"
 ---
 
 # Context
@@ -47,3 +49,7 @@ AI agents use the `onepassword-secret-materialize` skill as the workflow entrypo
 - New file-based secrets should be registered with `opmaterialize add` instead of editing the manifest by hand when possible.
 - Run `opmaterialize diff` before restore when deciding whether local secret-backed files will change.
 - Keep the repo-local `onepassword-secret-materialize` skill aligned with `opmaterialize` behavior when the workflow changes.
+
+# Update (2026-06-22)
+
+デプロイ済みの `Dotfiles Secrets` vault は、1Password Document ではなく field 方式（各ファイルは `content` フィールドを持つ Secure Note、マニフェストは `Secrets Manifest` ノートの `notesPlain` フィールド）で運用されている。`opmaterialize restore`/`diff` を `type=field` 行と `notesPlain` からのマニフェスト読み取りに対応させた（`type=document` も引き続きサポート）。詳細は ADR 0046 を参照。

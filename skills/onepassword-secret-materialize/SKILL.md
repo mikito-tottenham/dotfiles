@@ -20,6 +20,15 @@ The repository owns the generic tool and policy. 1Password owns the sensitive ma
 
 Do not print secret file contents. Do not add materialized files, manifest rows, VPN configs, API keys, tokens, private keys, or real `op://...` references to git.
 
+## Manifest Layout
+
+The manifest is a TSV with columns `type  item  out_path  mode  vault`, stored in the `notesPlain` field of the `Secrets Manifest` Secure Note. Each row's `type` is one of:
+
+- `field`: the file body is a Secure Note field (default label `content`, override with `OP_DOTFILES_MATERIALIZE_FIELD_LABEL`). This is the default layout for `Dotfiles Secrets`.
+- `document`: the file body is a 1Password Document.
+
+`restore` and `diff` support both types. `add` is document-based only and refuses against a field-based (Secure Note) manifest; register field-based secrets manually in 1Password (a Secure Note with a `content` field plus a `field` manifest row).
+
 ## Stable Invocation
 
 Before any live 1Password operation, verify the command path and authentication state without printing secret material:
@@ -39,6 +48,8 @@ Run `opmaterialize add` for one file at a time. Do not pass multiple secret-back
 ### Save Or Register A Local Secret-Backed File
 
 Use this when the user says a file is ready and should be saved for other PCs.
+
+> Note: `add` is document-based and refuses against the field-based default vault (see Manifest Layout). Register field-based secrets manually for now.
 
 1. Confirm the file exists without printing its contents:
 
@@ -77,7 +88,7 @@ opmaterialize diff
 Interpretation:
 
 - `missing`: a manifest-declared file is absent locally
-- `changed`: local file differs from the 1Password Document
+- `changed`: local file differs from the stored 1Password secret
 - `unchanged`: local file already matches
 - exit `1`: at least one file is missing or changed
 - exit `0`: no differences
@@ -112,6 +123,7 @@ Use this when setting up a new machine or rehydrating ignored local config files
 - If `op` requires authentication, let the user unlock/sign in to 1Password from their normal terminal; do not ask them to paste secrets into chat, and do not keep retrying AI-side permission prompts after the readiness probe still fails.
 - If `opmaterialize` exits `127` or the wrapper is not found, use the bundled script with `OP_ACCOUNT=my.1password.com` and `OP_DOTFILES_MATERIALIZE_VAULT="Dotfiles Secrets"`.
 - If `Dotfiles Secrets` or `Secrets Manifest` is missing, create or ask the user to create it in 1Password rather than storing its content in git.
+- If `op document get` reports `<id> is not a document`, the item is a Secure Note, not a Document. The manifest and field-based files use Secure Notes; rely on `opmaterialize` (which reads `notesPlain` and `type=field` rows), not a bare `op document get`.
 - If `opmaterialize add` fails after multiple positional paths, retry as separate one-file `add` invocations.
 - If a requested generated path is not ignored, update `.chezmoiignore` before registering the file.
 - If changing the managed script, README, ADR, `.chezmoiignore`, or deployed dotfiles, follow the repository `dotfile-update` workflow.

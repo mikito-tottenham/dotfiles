@@ -209,7 +209,7 @@ op read 'op://<vault>/<item>/<field>'
 
 ### Secret-backed file の配置
 
-VPN 設定のようにファイルとして必要な secret は、repo に実値や個別 item 名を置かず、1Password の Document アイテム `Secrets Manifest` に生成ルールを保存します。
+VPN 設定のようにファイルとして必要な secret は、repo に実値や個別 item 名を置かず、1Password の `Secrets Manifest`（`Dotfiles Secrets` では既定で Secure Note）に生成ルールを保存します。
 新しいマシンでは 1Password にサインインした後に以下を実行します。
 
 ```bash
@@ -218,6 +218,7 @@ opmaterialize restore
 ```
 
 `Secrets Manifest` は tab-separated 形式で、列は `type`、`item`、`out_path`、`mode`、`vault` です。
+`type` は `field`（Secure Note の `content` フィールド。既定。`OP_DOTFILES_MATERIALIZE_FIELD_LABEL` で上書き可）または `document`（1Password Document）で、`restore`/`diff` は両対応です。`Dotfiles Secrets` の既定は `field` 方式です。
 `vault` は任意で、不要な場合は `-` にします。
 `opmaterialize` は実行時だけ manifest を取得し、処理後にローカルコピーを削除します。
 
@@ -238,6 +239,7 @@ opmaterialize restore --force
 ローカルにある secret-backed file を 1Password の指定 Vault に保存し、`Secrets Manifest` に登録する場合は `add` を使います。
 `--out-path` を省略すると現在の絶対パスを `$HOME/...` 形式に正規化して登録します。
 `--item` を省略すると `dotfiles:<out-path>` が 1Password Document の item 名になります。
+なお `add` は Document 方式のため、`Dotfiles Secrets` のような field 方式の manifest（Secure Note）に対しては実行を拒否します。その場合は 1Password 上で手動登録します（`content` フィールドを持つ Secure Note ＋ manifest への `field` 行）。詳細は ADR 0046 と onepassword-secret-materialize skill を参照。
 
 ```bash
 opmaterialize add "$HOME/.config/wireguard/example.conf"
