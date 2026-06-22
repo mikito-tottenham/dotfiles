@@ -58,7 +58,7 @@ allowed domains に以下を追加し、「Also include default list of common p
 
 ```
 cache.agilebits.com       # op バイナリ配布
-downloads.1password.com   # op バイナリ配布（予備）
+downloads.1password.com   # op バイナリ配布（手動確認用。現状 install_op は cache.agilebits.com のみ使用）
 *.1password.com           # op 実行時の 1Password API
 ```
 
@@ -73,7 +73,9 @@ if [ ! -d "$DOTFILES/.git" ]; then
     || { echo "[setup] dotfiles clone failed"; exit 0; }
 fi
 ln -sf "$DOTFILES/scripts/gws-as" /usr/local/bin/gws-as 2>/dev/null || true
-BOOTSTRAP_WEB_SKIP_OP=true "$DOTFILES/scripts/bootstrap-web" \
+# bootstrap-web は REPO_DIR を CLAUDE_PROJECT_DIR 優先で解決するため、source を /opt/dotfiles に
+# 固定する（CLAUDE_PROJECT_DIR がセッション repo を指していると別プロジェクトが source になる）。
+CLAUDE_PROJECT_DIR="$DOTFILES" BOOTSTRAP_WEB_SKIP_OP=true "$DOTFILES/scripts/bootstrap-web" \
   || echo "[setup] bootstrap-web non-zero (継続)"
 exit 0
 ```
@@ -170,10 +172,15 @@ gws-as <name> drive files list                 # Drive 一覧が返れば成功
 codex login status                             # "Logged in" 確認
 ```
 
-`status.json` の `onepassword` が `op 未導入 (network policy で遮断?)` の場合は、setup フェーズ
-で 1Password 配布元への network が通っていない。その場合は in-session で `bootstrap-web` を
-1 回実行して op を導入し（token がセッションにあるのでそのまま restore まで通る）、対処後に
-network policy / Setup script を見直す。
+`status.json` の `onepassword` が `skipped: op 未導入 (network policy で 1Password 配布が遮断?)`
+の場合は、setup フェーズで 1Password 配布元への network が通っていない。その場合は in-session で
+（source 固定のため `CLAUDE_PROJECT_DIR` を上書きして）bootstrap-web を 1 回実行し op を導入する
+（token がセッションにあるのでそのまま restore まで通る）。対処後に network policy / Setup script
+を見直す。
+
+```bash
+CLAUDE_PROJECT_DIR=/opt/dotfiles /opt/dotfiles/scripts/bootstrap-web
+```
 
 ## 関連
 
