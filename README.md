@@ -4,6 +4,8 @@
 
 配布 skill の復元一覧は [docs/skills-install-manifest.md](docs/skills-install-manifest.md) を正本にします。
 
+Claude Code on the web（クラウドセッション）で runner CLI と 1Password secret を再現する手順は [docs/web-session-runner-setup.md](docs/web-session-runner-setup.md) を参照します。
+
 ## セットアップ (新しいマシン)
 
 git も Homebrew も入っていない完全に新しい Mac では、Terminal で以下を実行します。
