@@ -1,6 +1,6 @@
 ---
 title: "Web Session Runner & 1Password Setup Runbook"
-updated_at: 2026-06-20
+updated_at: 2026-06-22
 ---
 
 # Web Session Runner & 1Password Setup Runbook
@@ -183,9 +183,57 @@ codex login status                             # "Logged in" 確認
 CLAUDE_PROJECT_DIR=/opt/dotfiles /opt/dotfiles/scripts/bootstrap-web
 ```
 
+## runner skill の実態確認（CLI 導入 × 認証 × egress）
+
+runner 系 skill の実用可否は「背後 CLI の導入 × 認証材料 × network egress（backend 到達性）」で
+決まる。特に **codex は認証済でも、web の egress 許可に `api.openai.com` / `chatgpt.com` が無いと
+モデル API に到達できず実行不可**（2026-06-22 時点で両者 403。ADR-0045）。
+新しいクラウドセッションで以下を流すと導入・認証の一覧を確認できる。
+
+```bash
+for c in codex gemini copilot grok op gws gws-as gh ghq opmaterialize jq; do
+  printf '%-14s %s\n' "$c" "$(command -v "$c" 2>/dev/null || echo '未導入')"
+done
+codex login status 2>&1 | head -1                      # codex 認証
+gh auth status 2>&1 | head -1                            # gh 認証（web では未認証が既定）
+ls ~/.config/gws/accounts/*.json 2>/dev/null | wc -l    # gws アカウント数（restore 後に増える）
+```
+
+期待状態（スコープ内 = 既定で揃える / 任意 = 使う時だけ認証を足す）:
+
+| skill | 背後 CLI | 認証材料 | 既定の扱い |
+| :-- | :-- | :-- | :-- |
+| codex-cli-runner | codex | `CODEX_AUTH_JSON` → `~/.codex/auth.json` | スコープ内・認証済。ただし web egress 不許可時は実行不可（ADR-0045） |
+| op-cli-runner | op | `OP_SERVICE_ACCOUNT_TOKEN` | スコープ内・認証済 |
+| onepassword-secret-materialize | opmaterialize + op + jq | 上記 op に依存（field 方式は `jq` 必須） | スコープ内・認証済 |
+| gws-drive / -upload / -shared | gws (+ gws-as) | `~/.config/gws/accounts/<name>.json`（restore 後） | スコープ内・restore 後に有効 |
+| ghq-repo-placement | ghq | 不要 | スコープ内・常時可 |
+| skill-manager | gh（`gh skill`） | `GH_TOKEN` / `GITHUB_TOKEN`（web では未設定） | 下記参照 |
+| gemini-cli-runner | gemini | `GEMINI_API_KEY` | 任意（導入のみ・使う時に認証） |
+| copilot-cli-runner | copilot | `COPILOT_GITHUB_TOKEN` / `GH_TOKEN` / `GITHUB_TOKEN` | 任意（導入のみ・使う時に認証） |
+| grok-cli-runner | （bootstrap 対象外） | xAI OAuth（Hermes） | 任意・**bootstrap 未導入**（headless 経路なし） |
+
+> gemini / copilot は「導入はされるが未認証」が既定で、使う時だけ environment 変数または
+> 1Password 経由で認証材料を足す。grok は headless 認証経路が無いため bootstrap-web の導入対象外で、
+> 使うなら別途 CLI 導入 + xAI OAuth が要る（ADR-0045）。
+
+### skill-manager と gh skill の扱い
+
+`gh`（2.90.0+）には `gh skill` サブコマンドがあり起動自体はできるが、web セッションでは
+gh CLI が未認証（`GH_TOKEN` / `GITHUB_TOKEN` 無し）のため `gh skill search/install/update` の
+ような GitHub 操作はできない。`dot_gitconfig` の credential helper（`!gh auth git-credential`）は
+git 認証用で、gh CLI を `gh skill` 向けに認証するものではない。
+
+これは想定どおりで、**web での skill 配置は bootstrap-web のファイルコピー
+（`docs/skills-install-manifest.md` が正本）**で行うため `gh skill` の認証は不要。
+web セッション内で `gh skill` を直接叩きたい場合のみ `GH_TOKEN` / `GITHUB_TOKEN` を登録する
+（最小構成では不要）。
+
 ## 関連
 
 - 設計判断: `docs/adr/0045-reproduce-web-session-environment-via-session-start-hook.md`
+- 1Password CLI 認証: `docs/adr/0044-use-op-cli-runner-for-1password-cli-auth.md`
+- field 方式 secret: `docs/adr/0046-support-field-based-secrets-in-opmaterialize.md`
 - skill 配備の正本: `docs/skills-install-manifest.md`
 - secret ファイル運用: `onepassword-secret-materialize` skill
 - アカウント切り替え: `scripts/gws-as`
