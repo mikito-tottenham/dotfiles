@@ -140,6 +140,11 @@ if ! command -v op >/dev/null 2>&1; then
   exit 127
 fi
 
+# Restrict permissions on every file/dir this script creates. op read --out-file
+# has no --file-mode, so without this a secret body or the manifest could exist
+# briefly as group/world-readable before the explicit chmod below.
+umask 077
+
 mkdir -p "$work_dir"
 
 expand_home() {
@@ -167,6 +172,16 @@ home_path() {
   esac
 }
 
+manifest_item_category() {
+  # Print the 1Password category of the manifest item (e.g. DOCUMENT or
+  # SECURE_NOTE), or nothing if it cannot be determined. Parsed without jq so
+  # the 'add' guard never fails open when jq is absent.
+  [ -n "$manifest_vault" ] || return 0
+  op item get "$manifest_item" --vault "$manifest_vault" --format json 2>/dev/null \
+    | sed -n 's/.*"category"[[:space:]]*:[[:space:]]*"\([A-Z_]*\)".*/\1/p' \
+    | head -n1
+}
+
 download_manifest() {
   destination="$1"
   if [ -n "$manifest_file" ]; then
@@ -179,12 +194,17 @@ download_manifest() {
   fi
 
   if [ -z "$manifest_vault" ]; then
-    printf '%s\n' "opmaterialize: a vault is required to read the manifest note (set OP_DOTFILES_MATERIALIZE_VAULT or pass --manifest-vault)" >&2
+    printf '%s\n' "opmaterialize: a vault is required to read the manifest (set OP_DOTFILES_MATERIALIZE_VAULT or pass --manifest-vault)" >&2
     exit 64
   fi
-  # The manifest is stored as the notesPlain field of a Secure Note item.
-  op read "op://$manifest_vault/$manifest_item/notesPlain" --out-file "$destination" --no-newline --force >/dev/null
-  chmod 0600 "$destination"
+  if [ "$(manifest_item_category)" = "DOCUMENT" ]; then
+    # Backward-compatible Document manifest.
+    op document get "$manifest_item" --vault "$manifest_vault" --out-file "$destination" --file-mode 0600 --force >/dev/null
+  else
+    # Default: the manifest is the notesPlain field of a Secure Note item.
+    op read "op://$manifest_vault/$manifest_item/notesPlain" --out-file "$destination" --no-newline --force >/dev/null
+    chmod 0600 "$destination"
+  fi
 }
 
 process_manifest() {
@@ -359,11 +379,13 @@ add_file() {
     printf '%s\n' "opmaterialize: file not readable: $source_file" >&2
     exit 66
   fi
-  # 'add' is document-based. If the manifest item is a field-based Secure Note,
-  # refuse before creating anything so we neither orphan a Document nor leave
-  # the manifest half-updated. Field-mode 'add' is a documented follow-up.
-  if command -v jq >/dev/null 2>&1 && [ -n "$manifest_vault" ]; then
-    manifest_category="$(op item get "$manifest_item" --vault "$manifest_vault" --format json 2>/dev/null | jq -r '.category // empty' 2>/dev/null || true)"
+  # 'add' is document-based. Refuse before creating anything when the manifest
+  # item exists and is NOT a Document (field-based Secure Note), so we neither
+  # orphan a Document nor half-update the manifest. The category probe does not
+  # need jq, so this guard never fails open. A missing manifest (first-time add)
+  # yields an empty category and is allowed. Field-mode 'add' is a follow-up.
+  if [ -n "$manifest_vault" ]; then
+    manifest_category="$(manifest_item_category)"
     if [ -n "$manifest_category" ] && [ "$manifest_category" != "DOCUMENT" ]; then
       printf '%s\n' "opmaterialize: 'add' is document-based but manifest '$manifest_item' is '$manifest_category' (field-based vault)." >&2
       printf '%s\n' "opmaterialize: register the secret as a Secure Note '$field_label' field plus a 'field' manifest row manually, or extend 'add' for field mode." >&2
