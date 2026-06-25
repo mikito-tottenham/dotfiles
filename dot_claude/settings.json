@@ -39,6 +39,16 @@
   "skipAutoPermissionPrompt": true,
   "skipDangerousModePermissionPrompt": true,
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"${CLAUDE_CODE_REMOTE:-}\" = \"true\" ] && command -v opmaterialize >/dev/null 2>&1 && opmaterialize restore >/dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
