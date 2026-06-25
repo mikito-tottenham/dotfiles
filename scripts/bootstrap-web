@@ -306,11 +306,27 @@ ensure_runner_clis() {
   else
     record_cli_skipped "gws" "GitHub release 取得失敗"
   fi
+  # gws-as: マルチアカウント切り替えラッパーを PATH に出す。
+  # bootstrap-web 経由 (SessionStart hook 含む) では Setup script の ln -sf が走らないため
+  # ここで symlink を作成する。
+  local gwsas_src="$REPO_DIR/scripts/gws-as"
+  if [ -f "$gwsas_src" ]; then
+    if ln -sf "$gwsas_src" /usr/local/bin/gws-as 2>/dev/null; then
+      runner_cli_installed+=("gws-as")
+      info "  gws-as を /usr/local/bin/gws-as にリンク"
+    else
+      record_cli_skipped "gws-as" "symlink 作成失敗"
+      warn "  gws-as の symlink 作成に失敗 ($gwsas_src)"
+    fi
+  else
+    record_cli_skipped "gws-as" "$gwsas_src が見つからない"
+  fi
+
   # 注意: この検出は ensure_onepassword (opmaterialize restore) より前に走る。restore で
   # accounts/*.json が後から配置される正常ケースもあるため、未検出は失敗ではなく現時点の情報として出す。
   if command -v gws >/dev/null 2>&1; then
     if [ -n "${GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE:-}" ] || compgen -G "$HOME/.config/gws/accounts/*.json" >/dev/null 2>&1; then
-      info "  gws 認証材料を検出 (env か ~/.config/gws/accounts/*.json)。scripts/gws-as <name> で切り替え可"
+      info "  gws 認証材料を検出 (env か ~/.config/gws/accounts/*.json)。gws-as <name> で切り替え可"
     else
       info "  gws 認証材料は現時点で未検出。この後の opmaterialize restore で ~/.config/gws/accounts/*.json が配置される想定 (未配置なら手動 restore)"
     fi
