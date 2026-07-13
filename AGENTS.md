@@ -66,6 +66,7 @@
 - ただし Claude Code on the web の ephemeral 環境に限り、`scripts/bootstrap-web` と SessionStart hook（`.claude/hooks/session-start.sh`）で `chezmoi apply` とスキル再インストールを自動化してよい（ADR-0045）。これはセッション起動時の再現専用で、ローカル / macOS の標準配備は引き続き `gh skill install` と docs-only manifest を正本とすること
 - `scripts/bootstrap-web` では first-party skill を必須（欠落で `exit 1`）、公開 third-party skill を best-effort（取得失敗は skip）として扱い、結果を `$BOOTSTRAP_WEB_STATUS` に機械可読で残すこと。`chezmoi apply --force` がハーネス書き込みの `~/.gitconfig` も上書きし、web セッションのコミットが dotfiles の git identity になる点は意識的受容事項として ADR-0045 に記録すること
 - external skill はこの repo に vendoring せず、`gh skill` による install / update / remove を標準運用とすること
+- ただし fork 元 `rmanzoku/dotfiles` の publisher layout skill は external ではなく repo オリジナル skill と同格に扱い、同一 path `skills/<name>` へ verbatim copy で取り込み、first-party として `docs/skills-install-manifest.md` と `scripts/bootstrap-web` を同期すること（fork sync との整合が目的）
 - third-party external skill が upstream publisher layout を持たない場合は、`docs/skills-install-manifest.md` に `fetch + gh skill install --from-local` 手順を残して管理すること
 - Codex `.system/skill-installer` は Codex-only の補助入口として認識し、恒久的な外部 skill 管理は `gh skill` と `docs/skills-install-manifest.md` を正本にすること
 - 各 AI ツール間のスキル同期は skill-manager スキルの責務であり、本リポジトリでは扱わない
