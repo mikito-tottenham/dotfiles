@@ -2,7 +2,7 @@
 title: "Restore Private Agent Definitions From 1Password"
 date: 2026-06-01
 agent_model: "GPT-5 Codex"
-updated_at: 2026-06-03
+updated_at: 2026-07-14
 updated_by_agent_model: "GPT-5 Codex"
 ---
 
@@ -20,7 +20,8 @@ In this repository, those targets correspond to source paths under `dot_claude/a
 
 Private agent definitions under `dot_claude/agents/` and `dot_codex/agents/` are git-ignored source files. Files that may contain private content should use chezmoi's `private_` source attribute so their deployed targets are not group/world-readable.
 
-Private secretary facts are stored as an AI-optimized JSONL file under `dot_config/private_private-secretary/private_facts.jsonl`, deployed to `~/.config/private-secretary/facts.jsonl`. This file is also git-ignored and 1Password-backed.
+Private secretary facts are stored as an AI-optimized JSONL file under `dot_config/private_private-secretary/private_empty_facts.jsonl`, deployed to `~/.config/private-secretary/facts.jsonl`. This file is also git-ignored and 1Password-backed.
+While the facts file is empty, the `empty_` attribute is required because chezmoi interprets a 0-byte source without it as a request to remove the target.
 
 The files are restored through the existing 1Password-backed `opmaterialize` workflow:
 
@@ -41,7 +42,7 @@ Primary source and target pairs:
 |---|---|---|
 | Claude Code private agents | `dot_claude/agents/private_<agent>.md` | `~/.claude/agents/<agent>.md` |
 | Codex private agents | `dot_codex/agents/private_<agent>.toml` | `~/.codex/agents/<agent>.toml` |
-| Private secretary facts | `dot_config/private_private-secretary/private_facts.jsonl` | `~/.config/private-secretary/facts.jsonl` |
+| Private secretary facts | `dot_config/private_private-secretary/private_empty_facts.jsonl` | `~/.config/private-secretary/facts.jsonl` |
 | Private secretary bank facts | `dot_config/private_private-secretary/private_bank-accounts.jsonl` | `~/.config/private-secretary/bank-accounts.jsonl` |
 | Private secretary assets | `dot_config/private_private-secretary/private_assets/private_<name>` | `~/.config/private-secretary/assets/<name>` |
 
