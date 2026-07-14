@@ -1,0 +1,21 @@
+model = "gpt-5.6-sol"
+model_reasoning_effort = "medium"
+personality = "pragmatic"
+service_tier = "default"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+notify = ["{{ .chezmoi.homeDir }}/.codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient", "turn-ended"]
+
+[features]
+codex_hooks = true
+collaboration_modes = true
+multi_agent = true
+goals = true
+
+[mcp_servers.pencil]
+command = "/Applications/Pencil.app/Contents/Resources/app.asar.unpacked/out/mcp-server-darwin-arm64"
+args = [ "--app", "desktop" ]
+
+[mcp_servers.mfc_ca]
+url = "https://beta.mcp.developers.biz.moneyforward.com/mcp/ca/v3"
