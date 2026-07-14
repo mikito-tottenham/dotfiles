@@ -119,6 +119,8 @@ Classify failures from `summary.json.failure_kind`:
 
 For recurring `prompt_error`, `auth_timeout`, or silent waits, do not add another fallback inside this skill. Report the failure and update the environment, 1Password app integration, or caller workflow so the direct command can succeed or fail deterministically.
 
+If `op` starts failing immediately with `no active session` or `not currently signed in` right after the 1Password CLI binary was upgraded (for example by `brew upgrade` or `brew bundle`), treat it as a broken app-integration handshake, not an account problem. Recovery is environment-side: fully quit and reopen the 1Password desktop app, confirm Settings → Developer → "Integrate with 1Password CLI" is enabled, then verify with `op whoami --account <account>`. Do not loop `op signin` retries from a non-interactive session for this case.
+
 ## Validation
 
 After changing this skill, run:
