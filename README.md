@@ -23,7 +23,7 @@ else
 fi && \
 brew install git chezmoi && \
 mkdir -p "$HOME/.local/share" && \
-git clone https://github.com/rmanzoku/dotfiles.git "$HOME/.local/share/chezmoi" && \
+git clone https://github.com/mikito-tottenham/dotfiles.git "$HOME/.local/share/chezmoi" && \
 chezmoi apply && \
 brew bundle --file="$HOME/.local/share/chezmoi/Brewfile" && \
 "$HOME/.local/share/chezmoi/scripts/bootstrap-workspace"
@@ -37,7 +37,7 @@ brew install git chezmoi
 
 # dotfiles repo を chezmoi の標準 source path に clone
 mkdir -p "$HOME/.local/share"
-git clone https://github.com/rmanzoku/dotfiles.git "$HOME/.local/share/chezmoi"
+git clone https://github.com/mikito-tottenham/dotfiles.git "$HOME/.local/share/chezmoi"
 
 # dotfiles を適用
 chezmoi apply
@@ -91,8 +91,8 @@ test -r ~/.config/private-secretary/facts.jsonl
 更新手順と source / target 対応は [docs/adr/0039-restore-private-agent-definitions-from-1password.md](docs/adr/0039-restore-private-agent-definitions-from-1password.md) を参照してください。
 
 `scripts/bootstrap-workspace` は `ghq` が利用できる場合は `ghq root` 配下に
-`rmanzoku/workspace` を clone / fast-forward pull します。
-`ghq` がない場合は `~/workspace/github.com/rmanzoku/workspace` を fallback とします。
+`mikito-tottenham/workspace` を clone / fast-forward pull します。
+`ghq` がない場合は `~/workspace/github.com/mikito-tottenham/workspace` を fallback とします。
 古い Conductor 配下の clone は移行期間の互換として残し、新規 bootstrap の標準にはしません。
 
 ## 日常の操作
