@@ -27,7 +27,7 @@ The manifest is a TSV with columns `type  item  out_path  mode  vault`, stored i
 - `field`: the file body is a Secure Note field (default label `content`, override with `OP_DOTFILES_MATERIALIZE_FIELD_LABEL`). This is the default layout for `Dotfiles Secrets`.
 - `document`: the file body is a 1Password Document.
 
-`restore` and `diff` support both types. `add` is document-based only and refuses against a field-based (Secure Note) manifest; register field-based secrets manually in 1Password (a Secure Note with a `content` field plus a `field` manifest row).
+`restore`, `diff`, and `add` support both types. `add` follows the manifest layout: against a field-based (Secure Note) manifest it saves the file body as a Secure Note `content` field plus a `field` manifest row (requires `jq`); against a Document manifest, or when no manifest exists yet (first-time add), it keeps the document-based layout.
 
 ## Stable Invocation
 
@@ -48,8 +48,6 @@ Run `opmaterialize add` for one file at a time. Do not pass multiple secret-back
 ### Save Or Register A Local Secret-Backed File
 
 Use this when the user says a file is ready and should be saved for other PCs.
-
-> Note: `add` is document-based and refuses against the field-based default vault (see Manifest Layout). Register field-based secrets manually for now.
 
 1. Confirm the file exists without printing its contents:
 
