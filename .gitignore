@@ -6,3 +6,4 @@ dot_codex/automations/*
 dot_claude/agents/
 dot_codex/agents/
 dot_config/private_private-secretary/
+__pycache__/
