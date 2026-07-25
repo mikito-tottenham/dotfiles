@@ -59,9 +59,13 @@ GitHub リポジトリの checkout が分散しており、リモートとの追
 - clean なリポジトリはリモート更新後 1 時間以内に自動追従する。
   断続接続のマシンでもネット接続時（DNS/インターフェース構成変化時）に
   即座に同期される
-- 別マシンへの展開は `chezmoi update` + `launchctl bootstrap
-  gui/$UID ~/Library/LaunchAgents/com.mikito.repo-sync.plist`
-  （前提: `gh auth login` 済みで git 認証が通っていること）
+- 別マシンへの展開は `chezmoi update`（または `chezmoi apply`）だけで完結する。
+  `run_onchange_after_bootstrap-repo-sync.sh.tmpl` が plist の内容ハッシュを
+  埋め込んでおり、初回 apply および plist 変更時に launchd への
+  bootout + bootstrap を自動実行する
+  - 前提: `brew bundle`（gh / ghq は Brewfile 登録済み）と `gh auth login` が
+    済んでいること。gh 未認証でもサービスは起動し、権限確認不可の SKIP として
+    ログに現れるだけで壊れはしない
 - 自動 pull 直後に作業セッションが古い前提で動くリスクは、clean + ff-only 限定で低減
 - 停止する場合: `launchctl bootout gui/$UID/com.mikito.repo-sync`
 - 再登録する場合: `launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.mikito.repo-sync.plist`

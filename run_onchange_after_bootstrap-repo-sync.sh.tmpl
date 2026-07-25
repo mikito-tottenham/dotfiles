@@ -1,0 +1,26 @@
+{{ if eq .chezmoi.os "darwin" -}}
+#!/bin/bash
+# repo-sync LaunchAgent の登録を chezmoi apply に統合する。
+# 下の plist hash が変わる(= plist テンプレートが変更される)たびに再実行され、
+# 新しいマシンでも `chezmoi apply` だけで launchd 登録まで完了する。
+# plist hash: {{ include "private_Library/LaunchAgents/com.mikito.repo-sync.plist.tmpl" | sha256sum }}
+set -eu
+
+label="com.mikito.repo-sync"
+plist="$HOME/Library/LaunchAgents/${label}.plist"
+uid="$(id -u)"
+
+echo "[repo-sync-bootstrap] ${label} を launchd へ登録します"
+
+if [ ! -f "$plist" ]; then
+    echo "[repo-sync-bootstrap] ERROR: $plist がありません(apply 順序異常)" >&2
+    exit 1
+fi
+
+# 既登録なら一度外してから登録し直す(未登録時の bootout 失敗は正常系)
+launchctl bootout "gui/${uid}/${label}" 2>/dev/null || true
+launchctl bootstrap "gui/${uid}" "$plist"
+
+state="$(launchctl print "gui/${uid}/${label}" 2>/dev/null | grep -m1 'state =' | sed 's/^[[:space:]]*//')"
+echo "[repo-sync-bootstrap] 登録完了 (${state:-state unknown})"
+{{ end -}}
