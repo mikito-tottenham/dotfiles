@@ -37,10 +37,22 @@ runner skill 群(codex / gemini / copilot / grok / claude-cli-runner)と
     Self-Elision)/ `cli_runner`(runner skill 経由の外部 CLI)の 3 種とする
   - subprocess 機構(prompt file / stream log / timeout / summary / failure)は
     引き続き各 runner skill が所有し、registry は選択のみを所有する
-- 初期 role: orchestrator(self)、worker(codex 最高モデル・high、Web 調査・
-  GitHub 連携を含む実行系全般)、worker_light(同モデル・low、実行専用)、
-  reviewer_tech / reviewer_biz / secretary(claude subagent)、
-  committer(claude opus、実行系委譲のユーザー指示を registry へ昇格)
+- worker は固定 role→モデルではなく **worker tier ladder** とする(同日修正)。
+  Claude と GPT を同一の賢さ軸に並べた S/A/B/C の 4 tier を registry に定義し、
+  各 tier に codex 列(gpt-5.6-sol + effort ダイヤル、最軽量 tier のみ luna)と
+  claude 列(fable / opus / sonnet / haiku)を併記する。親オーケストレータが
+  タスク内容から tier を毎回推論する(基準は registry に明文化、判断は動的)
+  - ladder は機械的な規則ではなく**統一軸(目安)**とする(同日修正)。親は
+    skill 同梱の `references/model-profiles.md`(モデル特性の living document、
+    実測メモ含む)をいつでも判断材料に参照し、柔軟に tier / provider 列を選ぶ。
+    目安からの逸脱は理由を記録する
+  - 目安: 迷ったら 1 段下から / blocked・品質不足で 1 段昇格して再委譲 /
+    同 tier 内は codex 寄せ(クレジット余剰)、Claude Code ハーネス・日本語
+    ニュアンス・クロスモデルレビュー等は claude 列 / 会話応答・軽微な単発編集は
+    委譲しない(固定費が上回る)
+- その他 role: orchestrator(self)、reviewer_tech / reviewer_biz(claude subagent、
+  tier A、高リスク時 S へ昇格可)、secretary(claude subagent、tier B)、
+  committer(claude 列 tier A = opus に pin。実行系委譲のユーザー指示を registry へ昇格)
 - Gemini / Grok / Copilot へは route しない。対応 role が無い依頼
   (例: X(Twitter) 固有調査)は暗黙 fallback せず route 不在として blocked 報告する。
   各 runner skill(gemini / copilot / grok-cli-runner)は他用途のため残置する

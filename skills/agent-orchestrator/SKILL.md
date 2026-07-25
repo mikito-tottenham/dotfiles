@@ -27,9 +27,19 @@ resolver の解決結果に従って runner skill または subagent へ委譲�
 
 1. **分類 (self)**: 依頼をワークパッケージに分解し、各パッケージへ registry の role を
    1 つ割り当てる。迷ったら `use_for` の記述で選ぶ。どの role にも該当しない
-   会話応答・軽微な単発編集は orchestration の一部として親が扱ってよい。
+   会話応答・軽微な単発編集は orchestration の一部として親が扱ってよい
+   (委譲の固定費が実行コストを上回るため)。
 2. **解決 (self)**: `rules/model_registry.yaml` を読み、role の
-   provider / mode / model / effort を確定する。
+   provider / mode / model / effort を確定する。`tier: dynamic` の role は、
+   registry の `tiers` を**統一軸(目安)**としてタスク内容から柔軟に推論する:
+   - 判断に迷う、またはモデル特性の差が効きそうな場合は
+     `references/model-profiles.md` を読んで判断材料にする(いつ読んでもよい)
+   - 目安: 迷ったら 1 段下の tier から。同 tier 内は registry の既定に寄せ、
+     Claude Code のハーネスが必要な実行やモデル特性が合う場合は claude 列
+   - 選んだ tier・列と理由を一言で artifact または報告に残す。目安から
+     逸脱した場合は逸脱理由も残す(監査可能性のため)
+   - 委譲の実測で得た知見(得意・不得意・失敗パターン)は
+     model-profiles.md の実測メモへ追記し、恒久的な傾向は registry へ昇格する
 3. **委譲**:
    - `mode: cli_runner` → provider 対応の runner skill を **必ず読み込み**、その契約に
      従って実行する。runner が prompt file / stream log / timeout / expected artifact /
@@ -68,8 +78,11 @@ resolver の解決結果に従って runner skill または subagent へ委譲�
 
 - runner 失敗時はまず `summary.json` の `failure_reasons` と `failure.md` を読み、
   原因を分類してから対処する(timeout / auth / モデル指定ミス / artifact 未生成 など)。
+- 委譲先が blocked を報告した、または成果物が品質不足のときは、**tier を 1 段昇格して
+  再委譲**する(能力不足が原因の場合)。原因が prompt の情報不足なら同 tier で
+  prompt を直して再委譲する。昇格したことと理由を報告に残す。
 - 委譲失敗を理由に**親が黙って worker role を代行しない**。fallback は
-  「別 role へ再委譲」「ユーザーへ blocked 報告」のように明示的に選び、報告に残す。
+  「tier 昇格して再委譲」「ユーザーへ blocked 報告」のように明示的に選び、報告に残す。
 - エラーを迂回して進めた場合、再発・検証省略・環境不備の可能性があるなら
   bypass remediation review(原因 / 一時迂回 / 恒久対策候補 / 反映先 / 検証)を行う。
 
