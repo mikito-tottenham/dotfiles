@@ -1,6 +1,6 @@
 ---
 title: "Skill Install Manifest"
-updated_at: 2026-07-23
+updated_at: 2026-07-25
 ---
 
 # Skill Install Manifest
@@ -40,6 +40,7 @@ gh skill install . handoff --from-local --agent claude-code --scope user
 gh skill install . git-branch-review --from-local --agent claude-code --scope user
 gh skill install . dads-design --from-local --agent claude-code --scope user
 gh skill install . gws-cli-runner --from-local --agent claude-code --scope user
+gh skill install . agent-orchestrator --from-local --agent claude-code --scope user
 ```
 
 ### Codex
