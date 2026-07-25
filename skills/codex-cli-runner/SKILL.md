@@ -61,7 +61,7 @@ The wrapper writes:
 - `run.events.jsonl`: Codex JSONL stdout events
 - `run.err`: stderr
 - `last-message.md`: final Codex message from `--output-last-message`
-- `summary.json`: command, resolved `cwd`, exit code, elapsed time, byte counts, parsed errors, prompt profile, `failure_reasons`, `recommended_next_action`, and `expected_artifacts`
+- `summary.json`: command, resolved `cwd`, exit code, elapsed time, byte counts, parsed errors, prompt profile, `failure_reasons`, `warnings`, `recommended_next_action`, and `expected_artifacts`
 - `failure.md`: only when the wrapper run fails
 
 ## Prompt Profiles
@@ -88,6 +88,8 @@ Require all applicable checks:
 - JSONL events do not contain obvious error records.
 - `summary.json.success` is `true`, `summary.json.failure_reasons` is empty, and every item in `summary.json.expected_artifacts` has `exists=true` and `non_empty=true`.
 
+A stderr error-pattern match alone does not fail an otherwise successful run. When the exit code is `0`, the JSONL events include `turn.completed`, `last-message.md` and every expected artifact are non-empty, and no error events exist, the wrapper records the match as `stderr_error_pattern=true` plus `warnings=["stderr_error_pattern_downgraded"]` and keeps `success=true`. Treat such matches as MCP-server stderr noise (for example rmcp transport auth errors) unless another failure signal appears.
+
 These checks prove runner execution and non-empty artifact materialization only. The caller must still evaluate task-specific artifact quality against the source prompt.
 
 ## Failure Criteria
@@ -96,7 +98,7 @@ Treat any of these as failure:
 
 - Timeout exit, normally exit code `124`.
 - Non-zero process exit.
-- stderr contains authentication, model, permission, quota, or rate-limit errors.
+- stderr contains authentication, model, permission, quota, or rate-limit error patterns, and the run lacks an independent success signal (exit `0`, a `turn.completed` event, non-empty `last-message.md`, no error events, and every expected artifact present).
 - JSONL events contain obvious error records.
 - `last-message.md` is missing or empty.
 - Expected artifacts are missing or empty.

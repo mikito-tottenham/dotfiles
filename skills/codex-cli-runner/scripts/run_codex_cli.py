@@ -278,8 +278,11 @@ def main() -> int:
     error_events = [record for record in records if record_is_error(record)]
     last_event = records[-1] if records else None
     last_error_event = error_events[-1] if error_events else None
+    turn_completed = any(
+        str(record.get("type", "")).lower() == "turn.completed" for record in records
+    )
     stderr_text = stderr_path.read_text(encoding="utf-8", errors="replace") if stderr_path.exists() else ""
-    stderr_error = bool(ERROR_RE.search(stderr_text))
+    stderr_error_pattern = bool(ERROR_RE.search(stderr_text))
 
     expected = []
     for raw in args.expected_artifact:
@@ -299,12 +302,11 @@ def main() -> int:
     last_message_non_empty = last_message_exists and last_message_path.stat().st_size > 0
 
     failure_reasons: list[str] = []
+    warnings: list[str] = []
     if proc.returncode == 124:
         failure_reasons.append("timeout")
     elif proc.returncode != 0:
         failure_reasons.append("nonzero_exit")
-    if stderr_error:
-        failure_reasons.append("stderr_cli_error")
     if error_events:
         failure_reasons.append("event_error")
     if not events_path.exists() or events_path.stat().st_size == 0:
@@ -313,6 +315,16 @@ def main() -> int:
         failure_reasons.append("missing_last_message")
     if any(not item["exists"] or not item["non_empty"] for item in expected):
         failure_reasons.append("missing_expected_artifact")
+
+    # MCP-server stderr noise (e.g. rmcp transport auth errors) can match ERROR_RE
+    # on otherwise-successful runs; only treat the pattern as a CLI failure when
+    # the run lacks an independent success signal.
+    run_otherwise_successful = not failure_reasons and turn_completed
+    stderr_cli_error = stderr_error_pattern and not run_otherwise_successful
+    if stderr_cli_error:
+        failure_reasons.append("stderr_cli_error")
+    elif stderr_error_pattern:
+        warnings.append("stderr_error_pattern_downgraded")
 
     if "timeout" in failure_reasons:
         recommended = "Inspect run.events.jsonl for partial progress, then rerun with a tighter prompt or larger timeout."
@@ -342,10 +354,13 @@ def main() -> int:
         "record_count": len(records),
         "last_event": last_event,
         "last_error_event": last_error_event,
-        "stderr_cli_error": stderr_error,
+        "turn_completed": turn_completed,
+        "stderr_error_pattern": stderr_error_pattern,
+        "stderr_cli_error": stderr_cli_error,
         "expected_artifacts": expected,
         "success": not failure_reasons,
         "failure_reasons": failure_reasons,
+        "warnings": warnings,
         "recommended_next_action": recommended,
     }
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
