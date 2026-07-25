@@ -1,0 +1,121 @@
+# model_registry.yaml — role / tier → provider/model/config/実行モードの正本 (resolver)
+#
+# 正本: dotfiles repo `skills/agent-orchestrator/rules/model_registry.yaml`
+# 配備先 (~/.claude/skills/agent-orchestrator/rules/model_registry.yaml) は
+# `gh skill install` の生成物。編集は必ず正本側で行い、再 install で反映する。
+#
+# 契約:
+# - モデル名・effort・provider の正本はこのファイルだけが持つ。
+#   SKILL.md や他 skill にモデル名をハードコードしない。
+# - subprocess 機構 (prompt file / stream log / timeout / summary / failure) は
+#   各 runner skill が所有する。このファイルは選択のみを所有する。
+# - 判断基準はこのファイルに書き、tier / provider の選択は親オーケストレータが
+#   タスク内容から毎回推論する(基準は文書、判断は動的)。
+#
+# 2026-07-25 ユーザー判断: Gemini / Grok / Copilot は route に使わない
+# (runner skill 自体は他用途のため残置)。対応 tier / role が存在しない依頼は、
+# 暗黙 fallback せず route 不在としてユーザーへ blocked 報告すること。
+
+version: 2
+updated_at: "2026-07-25"
+
+execution_modes:
+  self: >-
+    親オーケストレータの直接実行。意図明確化・計画・委譲・artifact 検査・
+    統合・裁定・最終報告のオーケストレーション作業専用。
+    具体タスク実行には使わない。
+  agent_tool: >-
+    Claude Code の Agent tool で同 provider の subagent へ委譲する
+    (Self-Elision: 外部 CLI subprocess を起動しない、が親も直接実行しない)。
+  cli_runner: >-
+    provider 対応の runner skill で外部 CLI subprocess として実行する。
+
+providers:
+  codex:
+    runner: codex-cli-runner
+    mode: cli_runner
+  claude_code:
+    runner: claude-cli-runner
+    mode: agent_tool
+    self_elision: >-
+      親が Claude Code のときは cli_runner を使わず agent_tool へ委譲する。
+      親が Codex 等のときのみ claude-cli-runner を使う。
+
+# worker tier ladder — Claude と GPT を同一の賢さ軸に並べた実行層。
+#
+# この ladder は**統一軸(目安)**であり、機械的な規則ではない。
+# 親オーケストレータはタスク内容と各モデルの特性
+# (`references/model-profiles.md` を判断材料としていつでも参照してよい)から
+# tier と provider 列を柔軟に推論する。目安から逸脱する選択をした場合は
+# 理由を一言、artifact または報告に残す(監査可能性のため)。
+#
+# 目安(既定の倒し方):
+# - `intent` に照らして選び、迷ったら 1 段下の tier(安い方)から始める。
+# - blocked または品質不足のときは 1 段昇格して再委譲する(黙って親が代行しない)。
+# - 同 tier 内の provider は codex に寄せる(クレジット余剰のため)。
+#   Claude Code のハーネス(MCP・ブラウザ・セッション内ツール・親と同じ
+#   ローカル権限)が必要な実行、日本語ニュアンス重視の執筆、クロスモデル
+#   レビューなどは claude_code 列(詳細は model-profiles.md)。
+# - 会話応答・軽微な単発編集は委譲しない(委譲の固定費 > 実行コストのため)。
+tiers:
+  S:
+    intent: >-
+      最難関。novel な設計判断、要件が曖昧で高リスク、失敗コストが大きい、
+      複数の相反する制約の裁定が必要。
+    codex: { model: gpt-5.6-sol, effort: xhigh }
+    claude_code: { model: fable }  # 親と同モデル。トークン最高価のため使用は最小限に
+  A:
+    intent: >-
+      実装主力。設計判断を含む実装、複数ファイルにまたがる変更、
+      本格的な調査・執筆、Web 調査、GitHub 連携作業。
+    codex: { model: gpt-5.6-sol, effort: high }
+    claude_code: { model: opus }
+  B:
+    intent: >-
+      定型実装。仕様が明確で範囲が限定された実装・修正・調査・執筆。
+      手順は自明だが多少の判断を伴う作業。
+    codex: { model: gpt-5.6-sol, effort: low }
+    claude_code: { model: sonnet }
+  C:
+    intent: >-
+      機械的軽作業。整形・変換・抽出・テンプレ適用・一括置換の実行。
+      判断要素がほぼない作業。
+    codex: { model: gpt-5.6-luna }  # effort 省略 = モデル既定
+    claude_code: { model: haiku }
+
+roles:
+  orchestrator:
+    mode: self
+    use_for: タスク分解、tier/role 判断、委譲、artifact 検査、統合、裁定、最終報告
+  worker:
+    tier: dynamic  # 親が tiers の選択規則に従いタスクごとに推論する
+    use_for: 実装、コード生成、ファイル作業、調査・執筆など実行系全般
+  reviewer_tech:
+    provider: claude_code
+    mode: agent_tool
+    subagent: tech
+    tier: A  # claude 列。 不可逆・高リスク案件は S へ昇格可
+    use_for: 設計・実装方針・コード・アーキテクチャ・不可逆リスク・長期保守性のレビュー
+  reviewer_biz:
+    provider: claude_code
+    mode: agent_tool
+    subagent: biz
+    tier: A  # claude 列。重要な事業判断は S へ昇格可
+    use_for: 事業前提、顧客価値、収益性、運用設計、意思決定のトレードオフ整理
+  secretary:
+    provider: claude_code
+    mode: agent_tool
+    subagent: personal
+    tier: B  # claude 列
+    use_for: >-
+      予定調整、タスク整理、連絡文案、実務段取り。
+      secret・認証情報・raw の予定本文/連絡先を渡さない (AGENTS.md の personal 制約に準拠)。
+  committer:
+    provider: claude_code
+    mode: agent_tool
+    tier: A  # claude 列 = opus に pin。ユーザー明示指示 (2026-07-25) による固定
+    use_for: git commit などの定型実行作業
+
+# skill 固有の override。参照形式: skills.<skill>.roles.<role>
+# ここに定義がない skill は上の roles / tiers を既定として使う。
+skills: {}

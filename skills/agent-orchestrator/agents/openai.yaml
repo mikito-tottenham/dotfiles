@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Orchestrator"
+  short_description: "Route work to roles via the model registry"
+  default_prompt: "Use $agent-orchestrator to classify the task into roles, resolve provider/model via rules/model_registry.yaml, and delegate through runner skills or subagents while staying orchestration-only."

@@ -90,13 +90,13 @@ claude_skills=(
   opus-4-7-tuning opus-4-8-tuning gpt-5-5-tuning codex-cli-runner gemini-cli-runner
   copilot-cli-runner agent-orchestration-evaluator ai-usage-coach soundcore-minutes
   ghq-repo-placement op-cli-runner onepassword-secret-materialize handoff git-branch-review
-  dads-design
+  dads-design gws-cli-runner agent-orchestrator
 )
 codex_skills=(
   skill-manager docs-entrypoint-check docs-evaluator grok-cli-runner code-evaluator
   opus-4-7-tuning opus-4-8-tuning gpt-5-5-tuning claude-cli-runner gemini-cli-runner
   copilot-cli-runner ai-usage-coach soundcore-minutes ghq-repo-placement op-cli-runner
-  onepassword-secret-materialize handoff git-branch-review dads-design
+  onepassword-secret-materialize handoff git-branch-review dads-design gws-cli-runner
 )
 
 # 単純な文字列を JSON 文字列にする (\ と " をエスケープ)。制御文字は対象外。
@@ -241,7 +241,8 @@ install_third_party() {
 
 # runner スキルが叩く CLI を best-effort で用意する。いずれも headless 認証経路があるもの:
 #   codex (CODEX_AUTH_JSON), gemini (GEMINI_API_KEY), ghq (認証不要),
-#   gh (GH_TOKEN/GITHUB_TOKEN), gws (GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE), copilot (COPILOT_GITHUB_TOKEN)。
+#   gh (GH_TOKEN/GITHUB_TOKEN), gws (プロファイル dir ~/.config/gws/accounts/<profile>/ を gws-account で選択),
+#   copilot (COPILOT_GITHUB_TOKEN)。
 # トークン/クレデンシャル未設定時は導入だけ行い、実行時認証が要る旨を warn する。
 # grok (xAI OAuth)・soundcore (対話ブラウザ必須) は headless 経路が無いため対象外。
 ensure_runner_clis() {
@@ -298,8 +299,9 @@ ensure_runner_clis() {
     warn "  GH_TOKEN/GITHUB_TOKEN 未設定: gh skill の remote 操作は実行時に認証が要る"
   fi
 
-  # gws: Google Workspace CLI。認証は GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE (OAuth credential JSON, 非対話)。
-  # opmaterialize restore で ~/.config/gws/accounts/<name>.json が配置された後に有効。
+  # gws: Google Workspace CLI。認証はプロファイル dir 方式 (ADR-0048):
+  # opmaterialize restore で ~/.config/gws/accounts/<profile>/{client_secret,credentials}.json が
+  # 配置された後、gws-account <profile> で選択して非対話実行できる。
   if command -v gws >/dev/null 2>&1; then
     runner_cli_installed+=("gws (既存)")
   elif install_gws && command -v gws >/dev/null 2>&1; then
@@ -307,29 +309,29 @@ ensure_runner_clis() {
   else
     record_cli_skipped "gws" "GitHub release 取得失敗"
   fi
-  # gws-as: マルチアカウント切り替えラッパーを PATH に出す。
+  # gws-account: アカウント選択ラッパー (config dir 分離・ambient env 拒否) を PATH に出す。
   # bootstrap-web 経由 (SessionStart hook 含む) では Setup script の ln -sf が走らないため
   # ここで symlink を作成する。
-  local gwsas_src="$REPO_DIR/scripts/gws-as"
-  if [ -f "$gwsas_src" ]; then
-    if ln -sf "$gwsas_src" /usr/local/bin/gws-as 2>/dev/null; then
-      runner_cli_installed+=("gws-as")
-      info "  gws-as を /usr/local/bin/gws-as にリンク"
+  local gwsacct_src="$REPO_DIR/dot_local/bin/executable_gws-account"
+  if [ -f "$gwsacct_src" ]; then
+    if ln -sf "$gwsacct_src" /usr/local/bin/gws-account 2>/dev/null; then
+      runner_cli_installed+=("gws-account")
+      info "  gws-account を /usr/local/bin/gws-account にリンク"
     else
-      record_cli_skipped "gws-as" "symlink 作成失敗"
-      warn "  gws-as の symlink 作成に失敗 ($gwsas_src)"
+      record_cli_skipped "gws-account" "symlink 作成失敗"
+      warn "  gws-account の symlink 作成に失敗 ($gwsacct_src)"
     fi
   else
-    record_cli_skipped "gws-as" "$gwsas_src が見つからない"
+    record_cli_skipped "gws-account" "$gwsacct_src が見つからない"
   fi
 
   # 注意: この検出は ensure_onepassword (opmaterialize restore) より前に走る。restore で
-  # accounts/*.json が後から配置される正常ケースもあるため、未検出は失敗ではなく現時点の情報として出す。
+  # accounts/<profile>/ が後から配置される正常ケースもあるため、未検出は失敗ではなく現時点の情報として出す。
   if command -v gws >/dev/null 2>&1; then
-    if [ -n "${GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE:-}" ] || compgen -G "$HOME/.config/gws/accounts/*.json" >/dev/null 2>&1; then
-      info "  gws 認証材料を検出 (env か ~/.config/gws/accounts/*.json)。gws-as <name> で切り替え可"
+    if compgen -G "$HOME/.config/gws/accounts/*/credentials.json" >/dev/null 2>&1; then
+      info "  gws 認証材料を検出 (~/.config/gws/accounts/<profile>/credentials.json)。gws-account <profile> で選択可"
     else
-      info "  gws 認証材料は現時点で未検出。この後の opmaterialize restore で ~/.config/gws/accounts/*.json が配置される想定 (未配置なら手動 restore)"
+      info "  gws 認証材料は現時点で未検出。この後の opmaterialize restore で ~/.config/gws/accounts/<profile>/ が配置される想定 (未配置なら手動 restore)"
     fi
   fi
 

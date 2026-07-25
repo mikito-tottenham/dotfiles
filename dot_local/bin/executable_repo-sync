@@ -1,0 +1,211 @@
+#!/usr/bin/env bash
+# repo-sync: push 権限のある GitHub リポジトリのローカル checkout を最新へ追従させる
+#
+# ポリシー:
+# - clean（tracked 変更なし）かつ fast-forward 可能な場合のみ自動 pull（--ff-only）
+# - ahead / diverged / dirty / upstream なしは自動操作せず ATTENTION として報告
+# - ローカルに存在しない GITHUB_USER 名義のリポジトリ（archived 除く）は ghq get で clone
+# - ATTENTION / clone / エラー発生時のみ macOS 通知を出す
+# - GitHub へ到達できない場合は OFFLINE として静かに終了（エラー扱いしない）
+#
+# 引数:
+#   --debounce  前回成功から DEBOUNCE_SECONDS 以内なら SKIP して終了。
+#               launchd（毎時 + ネットワーク変化 WatchPaths）からの起動にのみ付与し、
+#               バースト的なネットワークイベントでの連続実行を抑止する。
+#               手動実行はフラグなしで、常にフル実行される。
+set -u -o pipefail
+
+GITHUB_USER="mikito-tottenham"
+SCAN_ROOTS=("$HOME/ghq/github.com" "$HOME/Claude" "$HOME/.local/share/chezmoi")
+STATE_DIR="$HOME/.local/state/repo-sync"
+LOCK_DIR="$STATE_DIR/lock"
+LAST_SUCCESS_FILE="$STATE_DIR/last-success"
+LOCK_STALE_MINUTES=120
+DEBOUNCE_SECONDS=300
+REACHABILITY_HOST="github.com"
+REACHABILITY_PORT=443
+
+mkdir -p "$STATE_DIR"
+
+log() {
+    printf '%s %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$*"
+}
+
+notify() {
+    /usr/bin/osascript -e "display notification \"$1\" with title \"repo-sync\"" >/dev/null 2>&1 || true
+}
+
+debounce=0
+for arg in "$@"; do
+    case "$arg" in
+        --debounce) debounce=1 ;;
+        *) log "ERROR 不明な引数: $arg"; exit 1 ;;
+    esac
+done
+
+if [ "$debounce" = "1" ] && [ -f "$LAST_SUCCESS_FILE" ]; then
+    last_success=$(cat "$LAST_SUCCESS_FILE" 2>/dev/null || echo 0)
+    age=$(( $(date +%s) - last_success ))
+    if [ "$age" -lt "$DEBOUNCE_SECONDS" ]; then
+        log "SKIP 前回成功から ${age}s (< ${DEBOUNCE_SECONDS}s) のためデバウンスします"
+        exit 0
+    fi
+fi
+
+if ! nc -z -w 3 "$REACHABILITY_HOST" "$REACHABILITY_PORT" >/dev/null 2>&1; then
+    log "OFFLINE ${REACHABILITY_HOST}:${REACHABILITY_PORT} に到達できないため終了します"
+    exit 0
+fi
+
+# 多重起動防止（launchd の再実行や手動実行との競合を避ける）
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    if [ -n "$(find "$LOCK_DIR" -maxdepth 0 -mmin +"$LOCK_STALE_MINUTES" 2>/dev/null)" ]; then
+        log "WARN stale lock (> ${LOCK_STALE_MINUTES}min) を破棄して続行します"
+        rmdir "$LOCK_DIR" 2>/dev/null || true
+        mkdir "$LOCK_DIR" 2>/dev/null || { log "ERROR lock 再取得に失敗"; exit 1; }
+    else
+        log "SKIP 別の repo-sync が実行中のため終了します"
+        exit 0
+    fi
+fi
+trap 'rmdir "$LOCK_DIR" 2>/dev/null' EXIT
+
+start_epoch=$(date +%s)
+tmp_slugs=$(mktemp "${TMPDIR:-/tmp}/repo-sync-slugs.XXXXXX")
+trap 'rmdir "$LOCK_DIR" 2>/dev/null; rm -f "$tmp_slugs"' EXIT
+
+count_total=0
+count_ok=0
+count_updated=0
+count_cloned=0
+count_attention=0
+count_error=0
+attention_repos=""
+
+if ! command -v gh >/dev/null 2>&1; then
+    log "ERROR gh が見つかりません（PATH=$PATH）"
+    exit 1
+fi
+
+# --- ローカル checkout の走査と同期 -----------------------------------------
+repo_dirs=""
+for root in "${SCAN_ROOTS[@]}"; do
+    [ -d "$root" ] || continue
+    while IFS= read -r gitdir; do
+        repo_dirs="${repo_dirs}$(dirname "$gitdir")
+"
+    done < <(find "$root" -maxdepth 4 -type d -name .git 2>/dev/null)
+done
+
+total_planned=$(printf '%s' "$repo_dirs" | grep -c . || true)
+log "START ローカル走査 ${total_planned} リポジトリを確認します"
+
+idx=0
+while IFS= read -r repo; do
+    [ -n "$repo" ] || continue
+    idx=$((idx + 1))
+    url=$(git -C "$repo" remote get-url origin 2>/dev/null) || {
+        log "SKIP [$idx/$total_planned] $repo origin なし"
+        continue
+    }
+    case "$url" in
+        git@github.com:*|https://github.com/*|ssh://git@github.com/*) ;;
+        *) log "SKIP [$idx/$total_planned] $repo GitHub 以外 ($url)"; continue ;;
+    esac
+    slug=$(printf '%s' "$url" | sed -E 's#^(ssh://)?git@github\.com[:/]##; s#^https://github\.com/##; s#\.git$##; s#/$##')
+    printf '%s\n' "$slug" >>"$tmp_slugs"
+    count_total=$((count_total + 1))
+
+    push=$(gh api "repos/$slug" --jq '.permissions.push' 2>/dev/null || echo "unknown")
+    if [ "$push" != "true" ]; then
+        log "SKIP [$idx/$total_planned] $slug push 権限なし/確認不可 (push=$push)"
+        continue
+    fi
+
+    if ! git -C "$repo" fetch origin --quiet 2>/dev/null; then
+        log "ERROR [$idx/$total_planned] $slug fetch 失敗"
+        count_error=$((count_error + 1))
+        continue
+    fi
+
+    if ! upstream=$(git -C "$repo" rev-parse --abbrev-ref '@{upstream}' 2>/dev/null); then
+        log "ATTENTION [$idx/$total_planned] $slug 現在ブランチに upstream がありません"
+        count_attention=$((count_attention + 1))
+        attention_repos="$attention_repos $slug"
+        continue
+    fi
+
+    counts=$(git -C "$repo" rev-list --left-right --count 'HEAD...@{upstream}' 2>/dev/null) || counts="? ?"
+    ahead=$(printf '%s' "$counts" | awk '{print $1}')
+    behind=$(printf '%s' "$counts" | awk '{print $2}')
+    dirty=$(git -C "$repo" status --porcelain --untracked-files=no | wc -l | tr -d ' ')
+
+    if [ "$behind" = "0" ]; then
+        log "OK [$idx/$total_planned] $slug 最新 (ahead=$ahead dirty=$dirty)"
+        count_ok=$((count_ok + 1))
+        if [ "$ahead" != "0" ]; then
+            log "ATTENTION [$idx/$total_planned] $slug 未 push コミットが ${ahead} 件あります"
+            count_attention=$((count_attention + 1))
+            attention_repos="$attention_repos $slug"
+        fi
+        continue
+    fi
+
+    if [ "$ahead" = "0" ] && [ "$dirty" = "0" ]; then
+        if git -C "$repo" merge --ff-only "$upstream" --quiet 2>/dev/null; then
+            log "UPDATED [$idx/$total_planned] $slug ${behind} コミットを fast-forward しました"
+            count_updated=$((count_updated + 1))
+        else
+            log "ERROR [$idx/$total_planned] $slug ff-only merge 失敗"
+            count_error=$((count_error + 1))
+        fi
+    else
+        log "ATTENTION [$idx/$total_planned] $slug 自動更新不可 (ahead=$ahead behind=$behind dirty=$dirty)"
+        count_attention=$((count_attention + 1))
+        attention_repos="$attention_repos $slug"
+    fi
+done <<EOF
+$repo_dirs
+EOF
+
+# --- リモート側の新規リポジトリ検出と clone ---------------------------------
+log "START リモート走査 ${GITHUB_USER} 名義の新規リポジトリを確認します"
+remote_names=$(gh repo list "$GITHUB_USER" --limit 200 --json name,isArchived \
+    --jq '.[] | select(.isArchived | not) | .name' 2>/dev/null) || {
+    log "ERROR gh repo list に失敗しました"
+    count_error=$((count_error + 1))
+    remote_names=""
+}
+
+while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if grep -qxF "$GITHUB_USER/$name" "$tmp_slugs"; then
+        continue
+    fi
+    log "CLONE $GITHUB_USER/$name をローカルで検出できないため ghq get します"
+    if ghq get "$GITHUB_USER/$name" >/dev/null 2>&1; then
+        log "CLONED $GITHUB_USER/$name -> $(ghq root)/github.com/$GITHUB_USER/$name"
+        count_cloned=$((count_cloned + 1))
+    else
+        log "ERROR $GITHUB_USER/$name の clone に失敗しました"
+        count_error=$((count_error + 1))
+    fi
+done <<EOF
+$remote_names
+EOF
+
+# --- サマリと通知 -------------------------------------------------------------
+elapsed=$(( $(date +%s) - start_epoch ))
+log "DONE total=$count_total ok=$count_ok updated=$count_updated cloned=$count_cloned attention=$count_attention error=$count_error elapsed=${elapsed}s"
+
+if [ "$count_error" -eq 0 ]; then
+    date +%s >"$LAST_SUCCESS_FILE"
+fi
+
+if [ "$count_attention" -gt 0 ] || [ "$count_cloned" -gt 0 ] || [ "$count_error" -gt 0 ]; then
+    msg="updated=$count_updated cloned=$count_cloned attention=$count_attention error=$count_error"
+    [ -n "$attention_repos" ] && msg="$msg /$attention_repos"
+    notify "$msg"
+fi
+
+exit 0
