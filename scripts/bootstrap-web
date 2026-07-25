@@ -90,7 +90,7 @@ claude_skills=(
   opus-4-7-tuning opus-4-8-tuning gpt-5-5-tuning codex-cli-runner gemini-cli-runner
   copilot-cli-runner agent-orchestration-evaluator ai-usage-coach soundcore-minutes
   ghq-repo-placement op-cli-runner onepassword-secret-materialize handoff git-branch-review
-  dads-design gws-cli-runner
+  dads-design gws-cli-runner agent-orchestrator
 )
 codex_skills=(
   skill-manager docs-entrypoint-check docs-evaluator grok-cli-runner code-evaluator

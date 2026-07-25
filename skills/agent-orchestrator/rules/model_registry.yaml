@@ -1,0 +1,88 @@
+# model_registry.yaml — role → provider/model/config/実行モードの正本 (resolver)
+#
+# 正本: dotfiles repo `skills/agent-orchestrator/rules/model_registry.yaml`
+# 配備先 (~/.claude/skills/agent-orchestrator/rules/model_registry.yaml) は
+# `gh skill install` の生成物。編集は必ず正本側で行い、再 install で反映する。
+#
+# 契約:
+# - モデル名・effort・provider の正本はこのファイルだけが持つ。
+#   SKILL.md や他 skill にモデル名をハードコードしない。
+# - subprocess 機構 (prompt file / stream log / timeout / summary / failure) は
+#   各 runner skill が所有する。このファイルは選択のみを所有する。
+# - `model: null` は「CLI / runner の既定設定を尊重して省略する」を意味する。
+
+version: 1
+updated_at: "2026-07-25"
+
+execution_modes:
+  self: >-
+    親オーケストレータの直接実行。意図明確化・計画・委譲・artifact 検査・
+    統合・裁定・最終報告のオーケストレーション作業専用。
+    具体タスク実行には使わない。
+  agent_tool: >-
+    Claude Code の Agent tool で同 provider の subagent へ委譲する
+    (Self-Elision: 外部 CLI subprocess を起動しない、が親も直接実行しない)。
+  cli_runner: >-
+    provider 対応の runner skill で外部 CLI subprocess として実行する。
+
+# 2026-07-25 ユーザー判断: Gemini / Grok / Copilot はオーケストレーションの
+# route に使わない(runner skill 自体は他用途のため残置)。X(Twitter) 固有調査など
+# 対応 role が存在しない依頼は、暗黙 fallback せず route 不在としてユーザーへ
+# blocked 報告すること。
+providers:
+  codex:
+    runner: codex-cli-runner
+  claude_code:
+    runner: claude-cli-runner
+    self_elision: >-
+      親が Claude Code のときは cli_runner を使わず agent_tool へ委譲する。
+      親が Codex 等のときのみ claude-cli-runner を使う。
+
+roles:
+  orchestrator:
+    mode: self
+    use_for: タスク分解、role 分類、委譲、artifact 検査、統合、裁定、最終報告
+  worker:
+    provider: codex
+    mode: cli_runner
+    model: gpt-5.6-sol
+    effort: high
+    use_for: >-
+      実装、コード生成、リファクタ、ファイル作業、Web 調査、
+      大規模コンテキスト読解、GitHub 連携作業、汎用調査・執筆のメイン実行役
+  worker_light:
+    provider: codex
+    mode: cli_runner
+    model: gpt-5.6-sol
+    effort: low
+    use_for: >-
+      整形、変換、テンプレ適用、既定計画の機械的実行など実行専用の軽作業。
+      実行専用 role は eval 根拠なしに effort を上げない。
+  reviewer_tech:
+    provider: claude_code
+    mode: agent_tool
+    subagent: tech
+    use_for: 設計・実装方針・コード・アーキテクチャ・不可逆リスク・長期保守性のレビュー
+  reviewer_biz:
+    provider: claude_code
+    mode: agent_tool
+    subagent: biz
+    use_for: 事業前提、顧客価値、収益性、運用設計、意思決定のトレードオフ整理
+  secretary:
+    provider: claude_code
+    mode: agent_tool
+    subagent: personal
+    use_for: >-
+      予定調整、タスク整理、連絡文案、実務段取り。
+      secret・認証情報・raw の予定本文/連絡先を渡さない (AGENTS.md の personal 制約に準拠)。
+  committer:
+    provider: claude_code
+    mode: agent_tool
+    model: opus
+    use_for: >-
+      git commit などの定型実行作業 (ユーザー指示 2026-07-25:
+      実行系は Opus サブエージェントへ委譲)。
+
+# skill 固有の override。参照形式: skills.<skill>.roles.<role>
+# ここに定義がない skill は上の roles を既定として使う。
+skills: {}
