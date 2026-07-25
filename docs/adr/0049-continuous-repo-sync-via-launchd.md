@@ -14,13 +14,26 @@ GitHub リポジトリの checkout が分散しており、リモートとの追
 ユーザー要求は「push 権限があり自分がコミット/push するリポジトリは、
 当面継続的に最新版へ追従させ続けること」。
 
+また複数 PC で運用しており、接続が断続的なサブ PC では毎時実行が
+オフライン時間帯に空振りするため、「インターネットに接続された時点で
+同期する」トリガーが必要になった。運用方針は「自動実行を土台に、
+作業直前だけ手動 `repo-sync` を併用する」で合意している。
+
 ## Decision
 
 - 同期スクリプト `repo-sync`（`dot_local/bin/executable_repo-sync`）を chezmoi 管理で
   `~/.local/bin/repo-sync` に配備する
 - launchd LaunchAgent `com.mikito.repo-sync`
   （`Library/LaunchAgents/com.mikito.repo-sync.plist.tmpl`）で
-  1 時間ごと + ロード時に実行する
+  1 時間ごと + ロード時 + ネットワーク構成変化時に実行する
+  - ネットワーク変化は `WatchPaths`（`/etc/resolv.conf`、
+    `/Library/Preferences/SystemConfiguration/NetworkInterfaces.plist`）で検知する。
+    deprecated で不安定な `NetworkState` キーは使わない
+  - スクリプトは実行冒頭で `nc -z -w 3 github.com 443` の到達性ゲートを通し、
+    オフライン時は OFFLINE とログして正常終了する（エラー・通知にしない）
+  - launchd からの起動には `--debounce` を付与し、前回成功から 300 秒以内は
+    SKIP する（ネットワークイベントのバースト対策）。手動実行はデバウンスなしで
+    常にフル実行され、「作業直前に確実に最新化する」安全弁として機能する
 - 同期ポリシー:
   - 対象は origin が github.com で、`gh api repos/<slug>` の `.permissions.push` が
     true のリポジトリ（自分名義に限らず、権限付与された他組織リポジトリも含む）
@@ -43,7 +56,12 @@ GitHub リポジトリの checkout が分散しており、リモートとの追
 
 ## Consequences
 
-- clean なリポジトリはリモート更新後 1 時間以内に自動追従する
+- clean なリポジトリはリモート更新後 1 時間以内に自動追従する。
+  断続接続のマシンでもネット接続時（DNS/インターフェース構成変化時）に
+  即座に同期される
+- 別マシンへの展開は `chezmoi update` + `launchctl bootstrap
+  gui/$UID ~/Library/LaunchAgents/com.mikito.repo-sync.plist`
+  （前提: `gh auth login` 済みで git 認証が通っていること）
 - 自動 pull 直後に作業セッションが古い前提で動くリスクは、clean + ff-only 限定で低減
 - 停止する場合: `launchctl bootout gui/$UID/com.mikito.repo-sync`
 - 再登録する場合: `launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.mikito.repo-sync.plist`

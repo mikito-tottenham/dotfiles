@@ -7,6 +7,12 @@
     <key>ProgramArguments</key>
     <array>
         <string>{{ .chezmoi.homeDir }}/.local/bin/repo-sync</string>
+        <string>--debounce</string>
+    </array>
+    <key>WatchPaths</key>
+    <array>
+        <string>/etc/resolv.conf</string>
+        <string>/Library/Preferences/SystemConfiguration/NetworkInterfaces.plist</string>
     </array>
     <key>EnvironmentVariables</key>
     <dict>

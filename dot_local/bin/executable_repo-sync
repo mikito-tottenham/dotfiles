@@ -6,13 +6,24 @@
 # - ahead / diverged / dirty / upstream なしは自動操作せず ATTENTION として報告
 # - ローカルに存在しない GITHUB_USER 名義のリポジトリ（archived 除く）は ghq get で clone
 # - ATTENTION / clone / エラー発生時のみ macOS 通知を出す
+# - GitHub へ到達できない場合は OFFLINE として静かに終了（エラー扱いしない）
+#
+# 引数:
+#   --debounce  前回成功から DEBOUNCE_SECONDS 以内なら SKIP して終了。
+#               launchd（毎時 + ネットワーク変化 WatchPaths）からの起動にのみ付与し、
+#               バースト的なネットワークイベントでの連続実行を抑止する。
+#               手動実行はフラグなしで、常にフル実行される。
 set -u -o pipefail
 
 GITHUB_USER="mikito-tottenham"
 SCAN_ROOTS=("$HOME/ghq/github.com" "$HOME/Claude" "$HOME/.local/share/chezmoi")
 STATE_DIR="$HOME/.local/state/repo-sync"
 LOCK_DIR="$STATE_DIR/lock"
+LAST_SUCCESS_FILE="$STATE_DIR/last-success"
 LOCK_STALE_MINUTES=120
+DEBOUNCE_SECONDS=300
+REACHABILITY_HOST="github.com"
+REACHABILITY_PORT=443
 
 mkdir -p "$STATE_DIR"
 
@@ -23,6 +34,28 @@ log() {
 notify() {
     /usr/bin/osascript -e "display notification \"$1\" with title \"repo-sync\"" >/dev/null 2>&1 || true
 }
+
+debounce=0
+for arg in "$@"; do
+    case "$arg" in
+        --debounce) debounce=1 ;;
+        *) log "ERROR 不明な引数: $arg"; exit 1 ;;
+    esac
+done
+
+if [ "$debounce" = "1" ] && [ -f "$LAST_SUCCESS_FILE" ]; then
+    last_success=$(cat "$LAST_SUCCESS_FILE" 2>/dev/null || echo 0)
+    age=$(( $(date +%s) - last_success ))
+    if [ "$age" -lt "$DEBOUNCE_SECONDS" ]; then
+        log "SKIP 前回成功から ${age}s (< ${DEBOUNCE_SECONDS}s) のためデバウンスします"
+        exit 0
+    fi
+fi
+
+if ! nc -z -w 3 "$REACHABILITY_HOST" "$REACHABILITY_PORT" >/dev/null 2>&1; then
+    log "OFFLINE ${REACHABILITY_HOST}:${REACHABILITY_PORT} に到達できないため終了します"
+    exit 0
+fi
 
 # 多重起動防止（launchd の再実行や手動実行との競合を避ける）
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -164,6 +197,10 @@ EOF
 # --- サマリと通知 -------------------------------------------------------------
 elapsed=$(( $(date +%s) - start_epoch ))
 log "DONE total=$count_total ok=$count_ok updated=$count_updated cloned=$count_cloned attention=$count_attention error=$count_error elapsed=${elapsed}s"
+
+if [ "$count_error" -eq 0 ]; then
+    date +%s >"$LAST_SUCCESS_FILE"
+fi
 
 if [ "$count_attention" -gt 0 ] || [ "$count_cloned" -gt 0 ] || [ "$count_error" -gt 0 ]; then
     msg="updated=$count_updated cloned=$count_cloned attention=$count_attention error=$count_error"
