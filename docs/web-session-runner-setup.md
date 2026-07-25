@@ -107,21 +107,28 @@ dotfiles リポジトリのセッションは SessionStart hook が自動でフ�
      - 個人 Gmail → **External**（テストユーザーに自分を追加。本番化しないと refresh token が7日失効）
    - 使うスコープ（Drive / Calendar / Gmail 等）を登録
 4. **認証情報** →「OAuth クライアント ID」→ 種類 **デスクトップ アプリ** → 作成 → **JSON をダウンロード**
-5. ダウンロードした JSON を gws の設定位置に**そのまま上書き**（手編集しない）:
+5. ダウンロードした JSON をアカウント専用 config dir に**そのまま**置く（手編集しない）:
    ```bash
-   cp ~/Downloads/client_secret_*.json ~/.config/gws/client_secret.json
-   chmod 600 ~/.config/gws/client_secret.json
+   mkdir -p ~/.config/gws/accounts/<name>.d
+   cp ~/Downloads/client_secret_*.json ~/.config/gws/accounts/<name>.d/client_secret.json
+   chmod 600 ~/.config/gws/accounts/<name>.d/client_secret.json
    ```
+   > 既定位置 `~/.config/gws/client_secret.json` への上書きは他アカウントのクライアントを
+   > 壊すのでしない。gws は config dir の `client_secret.json` 内 `project_id` を
+   > quota project（`x-goog-user-project`）として API に送るため、プロジェクトが違う
+   > アカウントは config dir ごと分けないと 403（他プロジェクトへの権限なし）になる。
 6. 認証（**そのアカウントで**ブラウザ同意。使うサービスを指定）:
    ```bash
-   gws auth login --services drive,calendar,gmail
+   GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.config/gws/accounts/<name>.d \
+     gws auth login --services drive,calendar,gmail
    ```
-7. 認証情報を自己完結 JSON にエクスポートして 1Password 管理にする:
+7. 認証情報を自己完結 JSON にエクスポートして、`client_secret.json` ともども 1Password 管理にする:
    ```bash
-   mkdir -p ~/.config/gws/accounts
-   gws auth export --unmasked > ~/.config/gws/accounts/<name>.json
+   GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.config/gws/accounts/<name>.d \
+     gws auth export --unmasked > ~/.config/gws/accounts/<name>.json
    chmod 600 ~/.config/gws/accounts/<name>.json
    opmaterialize add ~/.config/gws/accounts/<name>.json
+   opmaterialize add ~/.config/gws/accounts/<name>.d/client_secret.json
    ```
    > 注: 現在の `Dotfiles Secrets` は field 方式で運用しており、`opmaterialize add`（Document 方式）は拒否される。その場合は 1Password 上で手動登録する（`content` フィールドを持つ Secure Note を作成し、マニフェストに `field` 行を追加）。詳細は ADR 0046 と onepassword-secret-materialize skill を参照。
 8. 切り替えて使う:
@@ -130,6 +137,18 @@ dotfiles リポジトリのセッションは SessionStart hook が自動でフ�
    ```
 
 `<name>` はアカウントの呼び名（半角英数字・ハイフン、例 `work` / `personal`）。重複させない。
+
+### この環境の登録済みプロファイル
+
+| プロファイル | アカウント | GCP プロジェクト | 用途 |
+|---|---|---|---|
+| `gws-as taskell` | `mikito.ebishima@taskell.ai` | `gws-taskell-claude` | taskell.ai 作業（Taskell Management 共有ドライブ含む） |
+| 素の `gws` / `gws-as ges-claude` | `mikito.ebishima@yoake-entertainment.jp` | `gws-claude-499910` | yoake 系 |
+
+各クライアントは所属組織の Internal 設定のため、`gws auth login` のアカウント選択で
+別組織のアカウントを選ぶと `403 org_internal` になる（2026-07-17: リポジトリ文書記載の
+他環境アカウント `manzoku@oasys-wallet.com` を再ログイン先として誤案内した事例）。
+再認証を依頼するときは、対象プロファイルと選ぶべきメールアドレスを明示する。
 
 ### gws のよくある失敗
 
@@ -142,8 +161,13 @@ dotfiles リポジトリのセッションは SessionStart hook が自動でフ�
   4. 作成直後の反映待ち（数分待つ）
 - **「アクセスをブロック: 認証エラー / 確認されていません」**: 同意画面が「テスト」で test user
   未登録、または未本番化。Internal にするか、External なら test user 追加 + 本番化。
-- **env はファイルより優先**。切り替えは `gws-as`（`GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE` を
-  セット）で行い、素の `gws` を使うときは古い env を `unset` する。
+- **`403: Caller does not have required permission to use project <別アカウントの project>`**:
+  quota project が既定 config dir の `client_secret.json` から拾われている。手順 5 の通り
+  `accounts/<name>.d/` に config dir を分ける（`gws-as` は `<name>.d/` があれば
+  `GOOGLE_WORKSPACE_CLI_CONFIG_DIR` もそこへ向ける）。
+- **env はファイルより優先**。切り替えは `gws-as`（`GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE` と、
+  `<name>.d/` があれば `GOOGLE_WORKSPACE_CLI_CONFIG_DIR` をセット）で行い、素の `gws` を
+  使うときは古い env を `unset` する。
 
 ## runner 認証リファレンス
 
@@ -152,7 +176,7 @@ dotfiles リポジトリのセッションは SessionStart hook が自動でフ�
 | ghq | bootstrap-web | 不要 | なし |
 | op | bootstrap-web（token 非依存） | `OP_SERVICE_ACCOUNT_TOKEN`（env） | env 登録済み |
 | codex | bootstrap-web | `CODEX_AUTH_JSON`（env）→ `~/.codex/auth.json` | env 登録済み |
-| gws | bootstrap-web | `~/.config/gws/accounts/<name>.json`（1Password） | 上記 gws 手順 |
+| gws | bootstrap-web | `~/.config/gws/accounts/<name>.json` + `<name>.d/client_secret.json`（1Password） | 上記 gws 手順 |
 | gemini | bootstrap-web | `GEMINI_API_KEY` | 1Password → dotfiles.env 参照 → `oprun gemini` |
 | gh | bootstrap-web | `GH_TOKEN` | web では基本不要（git=proxy / PR 等=MCP）。`gh` 固有コマンドを使う時のみ env 登録 |
 | copilot | bootstrap-web | `COPILOT_GITHUB_TOKEN`（+ Copilot 契約） | 1Password → env |
@@ -211,7 +235,7 @@ ls ~/.config/gws/accounts/*.json 2>/dev/null | wc -l    # gws アカウント数
 | codex-cli-runner | codex | `CODEX_AUTH_JSON` → `~/.codex/auth.json`（+ openai-codex companion runtime） | スコープ内・認証済。素のコンテナ egress では openai 不達だが、openai-codex プラグイン proxy 経由なら実行可（ADR-0045） |
 | op-cli-runner | op | `OP_SERVICE_ACCOUNT_TOKEN` | スコープ内・認証済 |
 | onepassword-secret-materialize | opmaterialize + op + jq | 上記 op に依存（field 方式は `jq` 必須） | スコープ内・認証済 |
-| gws-drive / -upload / -shared | gws (+ gws-as) | `~/.config/gws/accounts/<name>.json`（restore 後） | スコープ内・restore 後に有効 |
+| gws-drive / -upload / -shared | gws (+ gws-as) | `~/.config/gws/accounts/<name>.json` + `<name>.d/client_secret.json`（restore 後） | スコープ内・restore 後に有効 |
 | ghq-repo-placement | ghq | 不要 | スコープ内・常時可 |
 | skill-manager | gh（`gh skill`） | `GH_TOKEN` / `GITHUB_TOKEN`（web では未設定） | 下記参照 |
 | gemini-cli-runner | gemini | `GEMINI_API_KEY` | 任意（導入のみ・使う時に認証） |

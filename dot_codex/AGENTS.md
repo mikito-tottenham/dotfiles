@@ -45,6 +45,13 @@
 - ADR には、少なくとも作業日時と作業した Agent のモデル名を記載すること
 - Codex / Claude Desktop などの自動実行定義は、再現可能な宣言的設定だけを chezmoi 配下で管理し、lock、jitter salt、highwatermark、実行ログ、セッション履歴、UUID ごとの task 実行状態は machine-local state として管理対象外にすること
 
+# Google Workspace (gws) アカウント運用
+
+- この環境の gws プロファイル対応は、`gws-as taskell` = `mikito.ebishima@taskell.ai`（taskell.ai 作業、Taskell Management 共有ドライブ含む）、素の `gws` / `gws-as ges-claude` = `mikito.ebishima@yoake-entertainment.jp`（yoake 系）とすること
+- 各プロファイルの OAuth クライアントは所属組織の internal 設定のため、別組織のアカウントを選ぶと `403 org_internal` になる。`manzoku@oasys-wallet.com` は他環境（Manzoku）の作業アカウントであり、この環境のブラウザでは選択できない。リポジトリ文書に記載された作業アカウント名を、この環境の再ログイン先としてそのまま案内しないこと
+- gws の再認証をユーザーへ依頼する前に、`gws-as <name>`（引数なし）で有効な名前付きプロファイル（token_valid）による代替可否を確認すること。素の `gws` の失効は全プロファイルの失効ではない
+- 再認証を依頼するときは、対象プロファイル（素の `gws` か `gws-as <name>` か、後者は env 切替コマンドまで）と、ブラウザのアカウント選択画面で選ぶべきメールアドレスを明示すること
+
 # Plan 共通ルール
 
 - Phase を含む Plan では、各 Phase ごとに使用する Skill を明示し、使用しない Phase は `なし` と明記すること

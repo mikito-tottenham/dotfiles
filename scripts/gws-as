@@ -9,6 +9,12 @@ set -euo pipefail
 # クレデンシャル JSON は秘密 (refresh token 入り) なので 1Password (opmaterialize)
 # 管理にし、git には入れないこと。
 #
+# アカウントが既定と別の GCP プロジェクトを使う場合は、そのアカウント用
+# config dir を $GWS_ACCOUNTS_DIR/<name>.d/ に置く (client_secret.json 必須)。
+# gws は config dir の client_secret.json 内 project_id を quota project
+# (x-goog-user-project) として送るため、これが無いと API 利用が既定プロジェクト
+# に帰属して 403 になる。<name>.d/client_secret.json も opmaterialize 管理にすること。
+#
 # 使い方:
 #   gws-as <name> <gws-args...>   指定アカウントで gws を実行
 #   gws-as <name>                 そのアカウントの認証状態を表示 (gws auth status)
@@ -25,7 +31,12 @@ set -euo pipefail
 #   3. mkdir -p ~/.config/gws/accounts
 #      gws auth export --unmasked > ~/.config/gws/accounts/<name>.json
 #      chmod 600 ~/.config/gws/accounts/<name>.json
-#   4. opmaterialize add ~/.config/gws/accounts/<name>.json
+#   4. 1Password へ登録・更新する。Secrets Manifest は field-based (Secure Note)
+#      なので `opmaterialize add` は使えない (Document を重複作成して失敗する)。
+#      新規: Dotfiles Secrets に Secure Note を作り content field へ本文を入れ、
+#            Secrets Manifest に `field` 行を手で追加する
+#      更新: `op item get <id> --format json --reveal | (content field を差し替え)
+#            | op item edit <id>` で Secure Note を上書きする
 
 ACCOUNTS_DIR="${GWS_ACCOUNTS_DIR:-${GOOGLE_WORKSPACE_CLI_CONFIG_DIR:-$HOME/.config/gws}/accounts}"
 [ -n "${GWS_ACCOUNTS_DIR:-}" ] || ACCOUNTS_DIR="$HOME/.config/gws/accounts"
@@ -75,6 +86,12 @@ main() {
   fi
 
   export GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE="$cred"
+
+  # アカウント専用 config dir があれば quota project ごと切り替える。
+  local confdir="$ACCOUNTS_DIR/$name.d"
+  if [ -d "$confdir" ]; then
+    export GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$confdir"
+  fi
 
   if [ "$#" -eq 0 ]; then
     # 引数省略時はそのアカウントの認証状態を表示する。
