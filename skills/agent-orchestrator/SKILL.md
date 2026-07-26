@@ -29,6 +29,11 @@ resolver の解決結果に従って runner skill または subagent へ委譲�
    1 つ割り当てる。迷ったら `use_for` の記述で選ぶ。どの role にも該当しない
    会話応答・軽微な単発編集は orchestration の一部として親が扱ってよい
    (委譲の固定費が実行コストを上回るため)。
+
+   逆に、実行ループの兆候(同種ツール呼び出しの連続。閾値・例外は AGENTS.md の
+   反復スクリプト化ルールに従う)を検出したパッケージは、親でターン実行を続けず、
+   スクリプト化(スクリプト生成は worker へ委譲可)または worker role への委譲へ
+   切り替える。
 2. **解決 (self)**: `rules/model_registry.yaml` を読み、role の
    provider / mode / model / effort を確定する。`tier: dynamic` の role は、
    registry の `tiers` を**統一軸(目安)**としてタスク内容から柔軟に推論する:
