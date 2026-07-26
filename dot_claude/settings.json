@@ -38,6 +38,8 @@
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
   "skipDangerousModePermissionPrompt": true,
+  "effortLevel": "high",
+  "fallbackModel": null,
   "hooks": {
     "SessionStart": [
       {
