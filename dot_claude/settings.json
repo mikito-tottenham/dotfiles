@@ -36,6 +36,7 @@
     }
   },
   "agentPushNotifEnabled": true,
+  "remoteControlAtStartup": true,
   "skipAutoPermissionPrompt": true,
   "skipDangerousModePermissionPrompt": true,
   "effortLevel": "high",
