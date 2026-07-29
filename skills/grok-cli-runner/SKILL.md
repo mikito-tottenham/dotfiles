@@ -1,6 +1,6 @@
 ---
 name: grok-cli-runner
-description: Run Grok handoffs through a CLI-runner style artifact wrapper with observable request and response files, timeouts, model defaults, dry-run support, and artifact-based failure handling. Use when Claude Code or Codex needs to call Grok, GrokをCLIで呼ぶ, use Grok through Hermes/SuperGrok OAuth, inspect or summarize x.com, twitter.com, X/Twitter, tweet, post, thread, quote post, reply, or reaction URLs, invoke a future `grok` CLI, or delegate research, review, generation, or schema-constrained output to Grok while preserving reproducible context task artifacts. Default backend is Hermes Agent xAI OAuth; direct xAI Responses API is available only when explicitly requested.
+description: Run Grok handoffs through a CLI-runner style artifact wrapper with observable request/response files, timeouts, dry-run support, and artifact-based failure handling. Use when Claude Code or Codex needs to call Grok, GrokをCLIで呼ぶ, use Hermes/SuperGrok OAuth, inspect or summarize x.com / twitter.com / tweet / post / thread URLs, or delegate research, review, generation, or schema-constrained output to Grok. Default backend is Hermes Agent xAI OAuth.
 ---
 
 # Grok CLI Runner

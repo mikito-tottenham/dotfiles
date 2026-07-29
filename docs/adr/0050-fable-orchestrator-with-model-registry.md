@@ -7,6 +7,8 @@ status: accepted
 
 # ADR 0050: Route Delegated Work Through agent-orchestrator and a Model Registry
 
+2026-07-28: Claude 限定の条項 (codex 配備の別途判断、CLAUDE.md への追記先、claude 固定の role 定義) は ADR-0052 で改訂された。
+
 ## Context
 
 runner skill 群(codex / gemini / copilot / grok / claude-cli-runner)と

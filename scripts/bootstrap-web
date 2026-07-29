@@ -87,16 +87,17 @@ record_cli_skipped() { runner_cli_skipped+=("$1: $2"); }
 # Claude Code には codex-cli-runner、Codex には claude-cli-runner を入れる差分に注意。
 claude_skills=(
   skill-manager docs-entrypoint-check docs-evaluator grok-cli-runner code-evaluator
-  opus-4-7-tuning opus-4-8-tuning gpt-5-5-tuning codex-cli-runner gemini-cli-runner
+  opus-4-8-tuning gpt-5-5-tuning codex-cli-runner gemini-cli-runner
   copilot-cli-runner agent-orchestration-evaluator ai-usage-coach soundcore-minutes
   ghq-repo-placement op-cli-runner onepassword-secret-materialize handoff git-branch-review
   dads-design gws-cli-runner agent-orchestrator
 )
 codex_skills=(
   skill-manager docs-entrypoint-check docs-evaluator grok-cli-runner code-evaluator
-  opus-4-7-tuning opus-4-8-tuning gpt-5-5-tuning claude-cli-runner gemini-cli-runner
-  copilot-cli-runner ai-usage-coach soundcore-minutes ghq-repo-placement op-cli-runner
-  onepassword-secret-materialize handoff git-branch-review dads-design gws-cli-runner
+  opus-4-8-tuning gpt-5-5-tuning claude-cli-runner gemini-cli-runner
+  copilot-cli-runner agent-orchestration-evaluator ai-usage-coach soundcore-minutes
+  ghq-repo-placement op-cli-runner onepassword-secret-materialize handoff git-branch-review
+  dads-design gws-cli-runner agent-orchestrator
 )
 
 # 単純な文字列を JSON 文字列にする (\ と " をエスケープ)。制御文字は対象外。

@@ -1,6 +1,6 @@
 ---
 name: docs-entrypoint-check
-description: "Check whether a repository has minimal AI-readable documentation entrypoints and bootstrap skeletons: README, docs index, architecture/service/design-system/operational entrypoints, and agent guidance. Use for lightweight docs navigation checks, onboarding entrypoint checks, or explicit bootstrap skeleton requests containing 初期化, bootstrap, scaffold, 雛形, テンプレート, starter, ひな形, or 叩き台を作る. Do not use for full documentation audits, link graph analysis, contradiction checks, stale document review, TODO/deferred work governance, or source-of-truth evaluation; use docs-evaluator for those."
+description: "Check whether a repository has minimal AI-readable documentation entrypoints and bootstrap skeletons: README, docs index, architecture/service/operational entrypoints, and agent guidance. Use for lightweight docs navigation or onboarding entrypoint checks, or bootstrap skeleton requests containing 初期化, bootstrap, scaffold, 雛形, テンプレート, starter, ひな形, or 叩き台を作る. For full docs audits, link graph analysis, or source-of-truth evaluation use docs-evaluator instead."
 ---
 
 # Docs Entrypoint Check

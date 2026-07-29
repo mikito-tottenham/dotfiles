@@ -1,12 +1,12 @@
 ---
 name: agent-orchestrator
-description: Orchestrate multi-model AI delegation from a parent Claude Code (Fable) session. Classify work into roles, resolve provider/model/effort through rules/model_registry.yaml, and dispatch to codex-cli-runner or same-provider subagents while the parent stays orchestration-only. Use when the user asks to 司令塔として進める, オーケストレーションする, マルチモデルで分担する, Codexに実装させる, Codexへ委譲する, モデルを使い分ける, ワークパッケージで並列実行する, delegate implementation to Codex, route tasks across AI models, or run any multi-step task where implementation, research, review, or GitHub work should be delegated instead of done by the parent agent.
+description: "Orchestrate multi-model AI delegation from a Claude Code or Codex parent session: classify work into roles, resolve provider/model/effort via rules/model_registry.yaml, and dispatch through subagents or codex-cli-runner / claude-cli-runner while the parent stays orchestration-only. Use when asked to 司令塔として進める, オーケストレーションする, マルチモデルで分担する, Codexへ委譲する, Claudeへ委譲する, or for any multi-step task where implementation, research, review, or GitHub work should be delegated instead of done by the parent agent."
 ---
 
 # Agent Orchestrator
 
-親エージェント(通常 Fable / Claude Code)を司令塔として、作業を role に分類し、
-resolver の解決結果に従って runner skill または subagent へ委譲する。
+Claude Code / Codex いずれかの親エージェントを司令塔として、作業を role に分類し、
+resolver の解決結果に従って runner skill または同 provider の subagent へ委譲する。
 
 親は orchestration 作業(意図明確化・計画・委譲・artifact 検査・統合・裁定・最終報告)
 だけを直接実行する。worker 的な具体タスクを親が兼任しない。これは品質のためでもある:
@@ -22,6 +22,14 @@ resolver の解決結果に従って runner skill または subagent へ委譲�
 - skill 固有の割り当てが必要な場合は `skills.<skill>.roles.<role>` を追加し、
   グローバル `roles` を既定として扱う。
 - registry の変更は dotfiles repo の正本を編集し、`gh skill install` で再配備する。
+
+### Parent-relative resolution
+
+- 解決は 2 段で行う: (1) `provider: parent` の role は親自身の provider キーへ
+  置換する(規則の正本: registry `provider_resolution`)。(2) 確定した provider と
+  親の異同で実行モードを決める(正本: `providers.*.self_elision`)。
+  親と同じ provider へは親 provider の subagent 機構、異なる provider へは
+  対応する cli_runner を使う。
 
 ## Workflow
 
@@ -51,8 +59,10 @@ resolver の解決結果に従って runner skill または subagent へ委譲�
      summary / failure report を所有する。runner のコマンド詳細をこの skill や
      委譲 prompt に複製しない。registry が model / effort を指定する role では、
      runner のモデル指定オプションでその値を渡す(`null` は省略)。
-   - `mode: agent_tool` → Agent tool で subagent を起動する。registry の `subagent` は
-     custom agent 名、`model` は Agent tool のモデル指定に使う。
+   - `mode: agent_tool` → 親 provider の subagent 機構(Claude Code: Agent tool、
+     Codex: custom agent)で起動する。registry の `subagent` は custom agent 名、
+     `model` / `effort` は各ハーネスが対応する指定へ使う(省略すると親・ハーネス既定へ
+     落ち tier 未適用になるため、registry が tier を持つ role では必ず明示する)。
    - `mode: self` → 親が直接行う(orchestration 作業のみ)。
 4. **検査 (self)**: 各委譲の期待 artifact が実体化しているか、runner の summary が
    success かを確認する。runner の成功は「実行と artifact 実体化」だけを保証する。
@@ -94,5 +104,6 @@ resolver の解決結果に従って runner skill または subagent へ委譲�
 ## 発動
 
 - この skill の明示呼び出し(またはオーケストレーション要求の検出)でフル稼働する。
-- 常時の委譲判断基準は `~/.claude/CLAUDE.md` 側のルールが担い、そこから本 skill と
-  registry を参照する。両者が矛盾した場合は registry を正とする。
+- 常時の委譲判断基準は親 AI の正規指示ファイル(Claude Code:
+  `~/.claude/CLAUDE.md`、Codex: `~/.codex/AGENTS.md`)側のルールが担い、そこから
+  本 skill と registry を参照する。両者が矛盾した場合は registry を正とする。

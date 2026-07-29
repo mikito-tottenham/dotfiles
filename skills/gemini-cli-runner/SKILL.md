@@ -1,6 +1,6 @@
 ---
 name: gemini-cli-runner
-description: Run Gemini CLI subprocesses with observable stream-json logs, timeouts, config-preserving model and approval controls, prompt profiles, and artifact-based failure handling. Use when Claude Code or Codex needs to invoke `gemini -p`, call Gemini from the CLI, GeminiをCLIで呼ぶ, Gemini CLIをサブプロセス実行する, or delegate long-running research, review, generation, or file work to Gemini while distinguishing real hangs from silent execution.
+description: Run Gemini CLI subprocesses with observable stream-json logs, timeouts, config-preserving model and approval controls, and artifact-based failure handling. Use when Claude Code or Codex needs to invoke `gemini -p`, GeminiをCLIで呼ぶ, Gemini CLIをサブプロセス実行する, or delegate long-running research, review, generation, or file work to Gemini while distinguishing real hangs from silent execution.
 ---
 
 # Gemini CLI Runner

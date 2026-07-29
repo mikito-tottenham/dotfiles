@@ -1,6 +1,6 @@
 ---
 name: gpt-5-5-tuning
-description: "Audit and rewrite repository docs, skills, prompts, and agent harness scaffolding so they fit GPT-5.5 behavior and API guidance: fresh prompt baselines, outcome-first task framing, medium reasoning effort by default, eval-gated high/xhigh effort, intentional text.verbosity, tool guidance in tool descriptions, phase preservation, explicit image_detail, structured outputs, and prompt-cache-friendly layout. Use when the user wants to migrate or readiness-check prompts, AGENTS.md / CLAUDE.md / skill files, agent rules, or eval harnesses for GPT-5.5. Do not use for broad OpenAI SDK migrations or application feature rewrites beyond prompt, model, and orchestration guidance."
+description: "Audit and rewrite repository docs, skills, prompts, and agent harness scaffolding to fit GPT-5.5 behavior: outcome-first task framing, medium reasoning effort default, eval-gated high/xhigh effort, intentional text.verbosity, structured outputs, and prompt-cache-friendly layout. Use to migrate or readiness-check AGENTS.md / CLAUDE.md / skill files, agent rules, or eval harnesses for GPT-5.5. Not for broad OpenAI SDK migrations or application feature rewrites."
 ---
 
 # GPT-5.5 Tuning

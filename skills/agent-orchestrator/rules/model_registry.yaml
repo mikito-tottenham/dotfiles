@@ -1,7 +1,7 @@
 # model_registry.yaml — role / tier → provider/model/config/実行モードの正本 (resolver)
 #
 # 正本: dotfiles repo `skills/agent-orchestrator/rules/model_registry.yaml`
-# 配備先 (~/.claude/skills/agent-orchestrator/rules/model_registry.yaml) は
+# 配備先 (~/.claude/skills/... または ~/.codex/skills/...) は
 # `gh skill install` の生成物。編集は必ず正本側で行い、再 install で反映する。
 #
 # 契約:
@@ -15,9 +15,11 @@
 # 2026-07-25 ユーザー判断: Gemini / Grok / Copilot は route に使わない
 # (runner skill 自体は他用途のため残置)。対応 tier / role が存在しない依頼は、
 # 暗黙 fallback せず route 不在としてユーザーへ blocked 報告すること。
+#
+# v3: provider: parent と codex self_elision を追加し、resolver を親相対化。
 
-version: 2
-updated_at: "2026-07-25"
+version: 3
+updated_at: "2026-07-28"
 
 execution_modes:
   self: >-
@@ -25,8 +27,9 @@ execution_modes:
     統合・裁定・最終報告のオーケストレーション作業専用。
     具体タスク実行には使わない。
   agent_tool: >-
-    Claude Code の Agent tool で同 provider の subagent へ委譲する
-    (Self-Elision: 外部 CLI subprocess を起動しない、が親も直接実行しない)。
+    親 provider の subagent 機構 (Claude Code: Agent tool / Codex: custom agent)
+    で同 provider の subagent へ委譲する (Self-Elision: 外部 CLI subprocess を
+    起動しない、が親も直接実行しない)。
   cli_runner: >-
     provider 対応の runner skill で外部 CLI subprocess として実行する。
 
@@ -34,12 +37,35 @@ providers:
   codex:
     runner: codex-cli-runner
     mode: cli_runner
+    self_elision: >-
+      親が Codex のときは cli_runner を使わず agent_tool へ委譲する。
+      親が Claude Code 等のときのみ codex-cli-runner を使う。
   claude_code:
     runner: claude-cli-runner
     mode: agent_tool
     self_elision: >-
       親が Claude Code のときは cli_runner を使わず agent_tool へ委譲する。
       親が Codex 等のときのみ claude-cli-runner を使う。
+
+provider_resolution:
+  parent: >-
+    親自身の provider キー (claude_code / codex) に置換する。
+    tiers の同名列で model / effort を解決し、mode は self_elision により
+    常に agent_tool になる。
+
+harness_notes:
+  codex_custom_agents: >-
+    Codex custom agent の model / model_reasoning_effort の解決順は
+    「agent file の値 > 明示 spawn 値 > [agents] 既定 > 親値」
+    (Codex manual https://developers.openai.com/codex/codex-manual.md、2026-07-28 取得)。
+    不変条件: tier の正本はこの registry のため、~/.codex/agents/*.toml に
+    model / model_reasoning_effort を pin しないこと (pin すると spawn override が
+    無効化され tier が無言で無視される)。
+    運用契約: Codex 親では spawn 時に model / effort を必ず明示すること。省略は
+    親既定 (現状 medium) への暗黙 fallback であり、tier 未適用として扱う。
+    full-history fork と model / effort override の併用不可は、実行環境の
+    spawn_agent callable schema の観測 (2026-07-28、ハーネス版依存) であり
+    manual 由来ではない。
 
 # worker tier ladder — Claude と GPT を同一の賢さ軸に並べた実行層。
 #
@@ -59,6 +85,8 @@ providers:
 # - 反復実行ループ(閾値・例外は AGENTS.md の反復スクリプト化ルール参照)は
 #   スクリプト化を優先し、スクリプト生成・実行の委譲は C/B tier から始める。
 # - 会話応答・軽微な単発編集は委譲しない(委譲の固定費 > 実行コストのため)。
+# - クロスモデルレビューが必要な場合は、role の provider を親と異なる列へ
+#   明示して cli_runner で倒してよい (逸脱理由を artifact または報告に記録)。
 tiers:
   S:
     intent: >-
@@ -93,29 +121,30 @@ roles:
     tier: dynamic  # 親が tiers の選択規則に従いタスクごとに推論する
     use_for: 実装、コード生成、ファイル作業、調査・執筆など実行系全般
   reviewer_tech:
-    provider: claude_code
+    provider: parent
     mode: agent_tool
     subagent: tech
-    tier: A  # claude 列。 不可逆・高リスク案件は S へ昇格可
+    tier: A  # 親 provider の列で解決。不可逆・高リスク案件は S へ昇格可
     use_for: 設計・実装方針・コード・アーキテクチャ・不可逆リスク・長期保守性のレビュー
   reviewer_biz:
-    provider: claude_code
+    provider: parent
     mode: agent_tool
     subagent: biz
-    tier: A  # claude 列。重要な事業判断は S へ昇格可
+    tier: A  # 親 provider の列で解決。重要な事業判断は S へ昇格可
     use_for: 事業前提、顧客価値、収益性、運用設計、意思決定のトレードオフ整理
   secretary:
-    provider: claude_code
+    provider: parent
     mode: agent_tool
     subagent: personal
-    tier: B  # claude 列
+    tier: B  # 親 provider の列で解決
     use_for: >-
       予定調整、タスク整理、連絡文案、実務段取り。
       secret・認証情報・raw の予定本文/連絡先を渡さない (AGENTS.md の personal 制約に準拠)。
   committer:
-    provider: claude_code
+    provider: parent
     mode: agent_tool
-    tier: A  # claude 列 = opus に pin。ユーザー明示指示 (2026-07-25) による固定
+    tier: A  # Claude Code 親は A 固定 (2026-07-25 ユーザー指示)。
+             # Codex 親は未 pin・目安 B (pin はユーザー判断待ち)。
     use_for: git commit などの定型実行作業
 
 # skill 固有の override。参照形式: skills.<skill>.roles.<role>

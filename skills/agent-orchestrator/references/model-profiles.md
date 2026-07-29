@@ -1,13 +1,13 @@
 ---
 title: "Model Profiles — worker tier ladder の判断補助"
-updated_at: 2026-07-25
+updated_at: 2026-07-28
 ---
 
 # Model Profiles
 
 tier ladder(`rules/model_registry.yaml` の `tiers`)に載っているモデルの特性メモ。
 **tier / モデルの割り当ての正本は registry** であり、このファイルは
-親オーケストレータ(Fable)が柔軟判断するときの判断材料に徹する。
+親オーケストレータ(Claude Code / Codex)が柔軟判断するときの判断材料に徹する。
 
 living document として運用する: 委譲の実測(得意・不得意・失敗パターン)に
 気づいたら「実測メモ」へ追記し、恒久的な傾向が見えたら registry の
@@ -15,12 +15,16 @@ living document として運用する: 委譲の実測(得意・不得意・失�
 
 ## 実行経路の違い(モデル以前に効く差)
 
-| 観点 | Codex 列(cli_runner) | Claude 列(agent_tool) |
+列→実行経路の対応は親相対で決まる(正本: registry `providers.*.self_elision`)。
+親と同じ provider の列は agent_tool(subagent 機構)、異なる provider の列は
+cli_runner になる。
+
+| 観点 | cli_runner(親と異なる provider の列) | agent_tool(親と同じ provider の列) |
 |---|---|---|
 | 実行形態 | 外部 CLI subprocess。`.context/` に prompt / JSONL / summary / failure が残る | 同一ハーネス内 subagent |
-| ツール | Codex 側の設定・ツール(web search 可)。親の MCP は使えない | **親と同じ MCP・ブラウザ・ローカルツール・権限を継承** |
-| コンテキスト | 完全分離。背景は prompt.md に書き直す必要あり | 分離だが Agent prompt で軽量に受け渡せる |
-| コスト | Codex クレジット(現在余剰) | Claude 側の利用枠(Fable セッションと同じプール) |
+| ツール | 委譲先 CLI 側の設定・ツール(web search 可)。親の MCP は使えない | **親と同じ MCP・ブラウザ・ローカルツール・権限を継承** |
+| コンテキスト | 完全分離。背景は prompt.md に書き直す必要あり | 分離だが subagent prompt で軽量に受け渡せる |
+| コスト | 委譲先 provider の利用枠(Codex クレジットは現在余剰) | 親セッションと同じ利用枠・プール |
 | 向き | 独立した大きめの作業、大量並列 WP、観測可能性が欲しい作業 | セッション文脈・ローカル環境に密着した作業 |
 
 ## モデル別プロファイル
@@ -63,11 +67,12 @@ living document として運用する: 委譲の実測(得意・不得意・失�
 
 ## 使い分けヒント(tier が同じとき)
 
-- 大量・長時間・並列の実装/調査 → Codex 列(クレジット余剰 + 観測可能な artifact)
-- MCP・ブラウザ・ローカル権限・セッション文脈が要る → Claude 列
+- 大量・長時間・並列の実装/調査 → Codex 列(クレジット余剰。Claude 親からは cli_runner の観測可能な artifact も利点)
+- 親の MCP・ブラウザ・ローカル権限・セッション文脈が要る → 親と同 provider の列(agent_tool)
 - 日本語の対外文書・ニュアンス重視の執筆 → Claude 列
 - agentic coding の一点突破 → Codex 列(sol)
-- Codex 成果物の品質検証(クロスモデルレビュー) → Claude 列
+- クロスモデルレビュー(worker と別 provider による品質検証) → 親と異なる
+  provider の列を明示選択する(registry の目安からの逸脱として理由を記録)
 
 ## 実測メモ
 

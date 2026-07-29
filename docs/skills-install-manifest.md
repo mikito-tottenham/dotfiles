@@ -1,6 +1,6 @@
 ---
 title: "Skill Install Manifest"
-updated_at: 2026-07-25
+updated_at: 2026-07-29
 ---
 
 # Skill Install Manifest
@@ -24,7 +24,6 @@ gh skill install . docs-entrypoint-check --from-local --agent claude-code --scop
 gh skill install . docs-evaluator --from-local --agent claude-code --scope user
 gh skill install . grok-cli-runner --from-local --agent claude-code --scope user
 gh skill install . code-evaluator --from-local --agent claude-code --scope user
-gh skill install . opus-4-7-tuning --from-local --agent claude-code --scope user
 gh skill install . opus-4-8-tuning --from-local --agent claude-code --scope user
 gh skill install . gpt-5-5-tuning --from-local --agent claude-code --scope user
 gh skill install . codex-cli-runner --from-local --agent claude-code --scope user
@@ -51,12 +50,12 @@ gh skill install . docs-entrypoint-check --from-local --agent codex --scope user
 gh skill install . docs-evaluator --from-local --agent codex --scope user
 gh skill install . grok-cli-runner --from-local --agent codex --scope user
 gh skill install . code-evaluator --from-local --agent codex --scope user
-gh skill install . opus-4-7-tuning --from-local --agent codex --scope user
 gh skill install . opus-4-8-tuning --from-local --agent codex --scope user
 gh skill install . gpt-5-5-tuning --from-local --agent codex --scope user
 gh skill install . claude-cli-runner --from-local --agent codex --scope user
 gh skill install . gemini-cli-runner --from-local --agent codex --scope user
 gh skill install . copilot-cli-runner --from-local --agent codex --scope user
+gh skill install . agent-orchestration-evaluator --from-local --agent codex --scope user
 gh skill install . ai-usage-coach --from-local --agent codex --scope user
 gh skill install . soundcore-minutes --from-local --agent codex --scope user
 gh skill install . ghq-repo-placement --from-local --agent codex --scope user
@@ -66,6 +65,7 @@ gh skill install . handoff --from-local --agent codex --scope user
 gh skill install . git-branch-review --from-local --agent codex --scope user
 gh skill install . dads-design --from-local --agent codex --scope user
 gh skill install . gws-cli-runner --from-local --agent codex --scope user
+gh skill install . agent-orchestrator --from-local --agent codex --scope user
 ```
 
 ## Third-party external skills
