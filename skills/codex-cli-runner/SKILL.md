@@ -31,7 +31,7 @@ Before running Codex, make these decisions explicitly:
 - Defaults: omit `--model`, `--effort`, and `--profile` unless the caller, model registry, or role explicitly requires an override.
 - Timeout: rely on the 600-second wrapper default unless the task contract says otherwise.
 - Prompt profile: rely on `--prompt-profile auto` when passing an explicit GPT-5.5 model; use `--prompt-profile gpt-5-5` only when the CLI default is GPT-5.5 and `--model` is omitted.
-- Extra Codex args: pass each Codex CLI token as its own `--extra-codex-arg=<token>` value, especially for leading-hyphen tokens.
+- Extra Codex args: pass each Codex CLI token as its own `--extra-codex-arg=<token>` value, especially for leading-hyphen tokens. Never pass `-i`/`--image` this way; see Images below.
 
 Do not add "think hard", fixed progress-update scaffolds, or mandatory step-by-step narration to simulate effort. Use `--effort` only when the caller explicitly asks for an effort override.
 
@@ -148,7 +148,14 @@ Use these patterns when testing the wrapper itself without spending Codex API bu
 - Use `--prompt-profile gpt-5-5` when the caller knows the CLI default model is GPT-5.5 but does not pass `--model`.
 - Pass each expected output as `--expected-artifact`; use an absolute path or a path relative to the wrapper output directory.
 - Use `--extra-codex-arg` for narrow additions when explicitly required. Pass one Codex CLI token per wrapper argument, for example `--extra-codex-arg=--sandbox --extra-codex-arg=read-only`, `--extra-codex-arg=--ask-for-approval --extra-codex-arg=never`, or `--extra-codex-arg=--config --extra-codex-arg=key=value`.
+- The wrapper launches Codex with stdin attached to `/dev/null`, so runs started from background shells or with piped stdin do not hang on `Reading additional input from stdin...`. Do not rely on caller-side stdin redirection.
 - Keep final orchestration in the caller. This skill only runs Codex and records observable artifacts.
+
+## Images
+
+Do not pass `-i`/`--image` through `--extra-codex-arg`. `codex exec -i/--image` takes variadic arguments, so it swallows the following positional prompt as an image path; the run then has no positional prompt and falls back to reading one from stdin (observed 2026-07-31: 0 JSONL events, hang until timeout exit `124` while stdin stayed open). The `--image=<path>` form avoids the prompt swallowing but showed the same stdin-dependent hang in background-shell runs.
+
+For image tasks, keep images on local paths and instruct Codex in the source prompt to open them with the `view_image` tool. This is the stable path for this wrapper.
 
 ## Validation
 

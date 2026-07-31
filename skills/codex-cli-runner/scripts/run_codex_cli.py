@@ -268,6 +268,7 @@ def main() -> int:
         proc = subprocess.run(
             command,
             cwd=str(cwd),
+            stdin=subprocess.DEVNULL,
             stdout=stdout_fh,
             stderr=stderr_fh,
             check=False,
