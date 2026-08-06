@@ -16,6 +16,7 @@ Frame each delegation as an outcome-first contract: source prompt, expected arti
 - Save the real assignment as `.context/<task>/prompt.md`.
 - Do not pass a large prompt body as an inline shell argument. Pass a short instruction that tells Codex to read `.context/<task>/run.prompt.md`.
 - Use the wrapper's 600-second timeout default, or pass an explicit timeout override when the task needs a shorter or longer limit.
+- Keep the wrapper's stall watchdog enabled: it kills the run when `run.events.jsonl` and `run.err` both stop growing for `--stall-timeout-seconds` (default 300; 0 disables) and records `stall_timeout`.
 - Do not force `--sandbox`, `--ask-for-approval`, or bypass flags by default. Let Codex config/profile decide unless the caller explicitly requests an override via extra args.
 - Do not treat 0-byte `run.events.jsonl` or `run.err` as a hang by itself.
 
@@ -30,6 +31,7 @@ Before running Codex, make these decisions explicitly:
 - When `--output-dir .context/<task>` is used, pass `--expected-artifact result.md`, not `--expected-artifact .context/<task>/result.md`; the latter resolves under `.context/<task>/.context/<task>/`.
 - Defaults: omit `--model`, `--effort`, and `--profile` unless the caller, model registry, or role explicitly requires an override.
 - Timeout: rely on the 600-second wrapper default unless the task contract says otherwise.
+- Stall watchdog: rely on the 300-second default; raise `--stall-timeout-seconds` only for tasks whose single commands legitimately stay silent longer, and pass `0` only when a caller explicitly accepts unbounded silent runs.
 - Prompt profile: rely on `--prompt-profile auto` when passing an explicit GPT-5.5 model; use `--prompt-profile gpt-5-5` only when the CLI default is GPT-5.5 and `--model` is omitted.
 - Extra Codex args: pass each Codex CLI token as its own `--extra-codex-arg=<token>` value, especially for leading-hyphen tokens.
 
@@ -54,6 +56,7 @@ python3 <skill-dir>/scripts/run_codex_cli.py \
 
 Add `--model <model>`, `--effort <low|medium|high|xhigh>`, or `--profile <profile>` only when overriding Codex CLI defaults.
 Add `--timeout-seconds <seconds>` only when overriding the 600-second default.
+Add `--stall-timeout-seconds <seconds>` only when overriding the 300-second no-progress default (`0` disables).
 
 The wrapper writes:
 
@@ -61,8 +64,14 @@ The wrapper writes:
 - `run.events.jsonl`: Codex JSONL stdout events
 - `run.err`: stderr
 - `last-message.md`: final Codex message from `--output-last-message`
-- `summary.json`: command, resolved `cwd`, exit code, elapsed time, byte counts, parsed errors, prompt profile, `failure_reasons`, `warnings`, `recommended_next_action`, and `expected_artifacts`
+- `summary.json`: command, resolved `cwd`, exit code, elapsed time, byte counts, parsed errors, prompt profile, `stalled`, `stall_timeout_seconds`, `failure_reasons`, `warnings`, `recommended_next_action`, and `expected_artifacts`
 - `failure.md`: only when the wrapper run fails
+
+## Timeout And Sleep Semantics
+
+- `--timeout-seconds` (GNU `timeout`), the stall watchdog, and `elapsed_seconds` all measure awake time on macOS: none of them advance while the machine sleeps, so a run that spans sleep can stay alive far longer in wall-clock time than the configured timeout.
+- The stall watchdog closes the observed gap: a stream hang (for example a `Reconnecting... (request timed out)` error with no further events) is killed after `--stall-timeout-seconds` of no growth in `run.events.jsonl` and `run.err`, via SIGTERM to the process group and SIGKILL after a grace period.
+- A stall failure does not invalidate already-materialized artifacts. The wrapper never converts materialized expected artifacts into early success; on `stall_timeout`, the caller must judge from `summary.json.expected_artifacts` and the event tail whether the artifacts are usable or the run must be redone.
 
 ## Prompt Profiles
 
@@ -97,6 +106,7 @@ These checks prove runner execution and non-empty artifact materialization only.
 Treat any of these as failure:
 
 - Timeout exit, normally exit code `124`.
+- Stall watchdog kill: no growth in `run.events.jsonl` and `run.err` for `--stall-timeout-seconds`, recorded as `stall_timeout` with `stalled=true`.
 - Non-zero process exit.
 - stderr contains authentication, model, permission, quota, or rate-limit error patterns, and the run lacks an independent success signal (exit `0`, a `turn.completed` event, non-empty `last-message.md`, no error events, and every expected artifact present).
 - JSONL events contain obvious error records.
@@ -134,6 +144,7 @@ Use these patterns when testing the wrapper itself without spending Codex API bu
 - For command-construction checks only, pass `--timeout-bin /usr/bin/true`. This bypasses Codex entirely and should fail wrapper success checks because no JSONL events, final message, or expected artifact are produced.
 - For end-to-end wrapper success without API spend, create a small fake Codex executable under `.context/<task>/bin/` and pass it with `--codex-bin <path-to-fake-codex>`. The fake CLI must write JSONL stdout, honor `-o <last-message>`, and create the expected artifact.
 - Minimal fake behavior: exit `0`, print one non-error JSON object such as `{"type":"event","status":"ok"}`, parse `-o <path>` and write a non-empty final message there, then write the requested expected artifact such as `result.md`.
+- For a stall-watchdog check, use a fake Codex that prints one event, flushes stdout, then sleeps far longer than a small `--stall-timeout-seconds` (for example `5`). Expect exit `1`, `failure_reasons` containing `stall_timeout`, `stalled=true`, and no surviving fake Codex process.
 - Prefer an absolute `--codex-bin` path for fake CLIs unless you have verified the relative path resolves from `--cwd`.
 - Keep fake CLIs under `.context/<task>/bin/` and use them only in validation. Do not use `--codex-bin` for real Codex delegation.
 - Do not hand-edit `summary.json`, `run.events.jsonl`, `run.err`, `last-message.md`, or `failure.md`. If a controlled test needs explanation, write a separate `notes.md`.
@@ -163,6 +174,7 @@ For runtime validation, run:
 
 - no-API command construction
 - no-API fake Codex success
+- no-API stall watchdog kill
 - real short smoke prompt
 - real file read/write prompt
 - forced timeout failure

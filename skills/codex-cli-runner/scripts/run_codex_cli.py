@@ -8,12 +8,16 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Any
 
+
+STALL_POLL_SECONDS = 5
+STALL_KILL_GRACE_SECONDS = 10
 
 ERROR_RE = re.compile(
     r"(auth|authentication|api key|login|model|permission|rate limit|rate-limit|quota|overloaded)",
@@ -58,6 +62,15 @@ def parse_args() -> argparse.Namespace:
         help="Codex config profile. Omit to use the Codex CLI configured default.",
     )
     parser.add_argument("--timeout-seconds", type=int, default=600, help="Timeout in seconds. Defaults to 600.")
+    parser.add_argument(
+        "--stall-timeout-seconds",
+        type=int,
+        default=300,
+        help=(
+            "Kill the run when run.events.jsonl and run.err stop growing for this many seconds. "
+            "Measured in awake time; sleep does not advance the timer. 0 disables the stall watchdog. Defaults to 300."
+        ),
+    )
     parser.add_argument(
         "--expected-artifact",
         action="append",
@@ -164,6 +177,63 @@ def write_launch_prompt(path: Path, source_prompt: Path, profile: str) -> None:
     path.write_text("\n".join(sections), encoding="utf-8")
 
 
+def terminate_process_group(proc: subprocess.Popen) -> None:
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        proc.wait(timeout=STALL_KILL_GRACE_SECONDS)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        proc.wait()
+
+
+def run_with_stall_watchdog(
+    command: list[str],
+    cwd: Path,
+    stdout_fh: Any,
+    stderr_fh: Any,
+    watch_paths: list[Path],
+    stall_timeout_seconds: int,
+) -> tuple[subprocess.Popen, bool]:
+    proc = subprocess.Popen(
+        command,
+        cwd=str(cwd),
+        stdout=stdout_fh,
+        stderr=stderr_fh,
+        start_new_session=True,
+    )
+    stalled = False
+    if stall_timeout_seconds <= 0:
+        proc.wait()
+        return proc, stalled
+
+    last_sizes: tuple[int, ...] | None = None
+    last_progress = time.monotonic()
+    while True:
+        try:
+            proc.wait(timeout=STALL_POLL_SECONDS)
+            break
+        except subprocess.TimeoutExpired:
+            pass
+        sizes = tuple(
+            path.stat().st_size if path.exists() else 0 for path in watch_paths
+        )
+        now = time.monotonic()
+        if sizes != last_sizes:
+            last_sizes = sizes
+            last_progress = now
+        elif now - last_progress >= stall_timeout_seconds:
+            stalled = True
+            terminate_process_group(proc)
+            break
+    return proc, stalled
+
+
 def record_is_error(record: dict[str, Any]) -> bool:
     record_type = str(record.get("type", "")).lower()
     record_level = str(record.get("level", "")).lower()
@@ -265,12 +335,13 @@ def main() -> int:
 
     start = time.monotonic()
     with events_path.open("wb") as stdout_fh, stderr_path.open("wb") as stderr_fh:
-        proc = subprocess.run(
+        proc, stalled = run_with_stall_watchdog(
             command,
-            cwd=str(cwd),
-            stdout=stdout_fh,
-            stderr=stderr_fh,
-            check=False,
+            cwd,
+            stdout_fh,
+            stderr_fh,
+            [events_path, stderr_path],
+            args.stall_timeout_seconds,
         )
     elapsed = round(time.monotonic() - start, 3)
 
@@ -303,7 +374,9 @@ def main() -> int:
 
     failure_reasons: list[str] = []
     warnings: list[str] = []
-    if proc.returncode == 124:
+    if stalled:
+        failure_reasons.append("stall_timeout")
+    elif proc.returncode == 124:
         failure_reasons.append("timeout")
     elif proc.returncode != 0:
         failure_reasons.append("nonzero_exit")
@@ -326,7 +399,14 @@ def main() -> int:
     elif stderr_error_pattern:
         warnings.append("stderr_error_pattern_downgraded")
 
-    if "timeout" in failure_reasons:
+    if "stall_timeout" in failure_reasons:
+        recommended = (
+            "Codex produced no new events or stderr output for the stall window. "
+            "Inspect the run.events.jsonl tail for stream errors such as Reconnecting, judge in the caller whether "
+            "materialized expected artifacts are usable, and raise --stall-timeout-seconds only if the task "
+            "legitimately stays silent longer."
+        )
+    elif "timeout" in failure_reasons:
         recommended = "Inspect run.events.jsonl for partial progress, then rerun with a tighter prompt or larger timeout."
     elif "stderr_cli_error" in failure_reasons:
         recommended = "Fix authentication, model, permission, quota, or rate-limit settings before rerunning."
@@ -345,6 +425,8 @@ def main() -> int:
         "output_dir": str(output_dir),
         "exit_code": proc.returncode,
         "elapsed_seconds": elapsed,
+        "stall_timeout_seconds": args.stall_timeout_seconds,
+        "stalled": stalled,
         "events_path": str(events_path),
         "stderr_path": str(stderr_path),
         "last_message_path": str(last_message_path),
