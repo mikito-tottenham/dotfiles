@@ -203,6 +203,7 @@ def run_with_stall_watchdog(
     proc = subprocess.Popen(
         command,
         cwd=str(cwd),
+        stdin=subprocess.DEVNULL,
         stdout=stdout_fh,
         stderr=stderr_fh,
         start_new_session=True,
