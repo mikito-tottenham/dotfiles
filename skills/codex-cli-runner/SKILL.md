@@ -15,7 +15,7 @@ Frame each delegation as an outcome-first contract: source prompt, expected arti
 - Put every run under `.context/<task>/`.
 - Save the real assignment as `.context/<task>/prompt.md`.
 - Do not pass a large prompt body as an inline shell argument. Pass a short instruction that tells Codex to read `.context/<task>/run.prompt.md`.
-- Use the wrapper's 600-second timeout default, or pass an explicit timeout override when the task needs a shorter or longer limit.
+- The wrapper runs without a timeout by default (`--timeout-seconds 0`; GNU timeout treats duration 0 as no limit). Pass a positive `--timeout-seconds` only when the task contract needs a hard limit.
 - Keep the wrapper's stall watchdog enabled: it kills the run when `run.events.jsonl` and `run.err` both stop growing for `--stall-timeout-seconds` (default 300; 0 disables) and records `stall_timeout`.
 - Do not force `--sandbox`, `--ask-for-approval`, or bypass flags by default. Let Codex config/profile decide unless the caller explicitly requests an override via extra args.
 - Do not treat 0-byte `run.events.jsonl` or `run.err` as a hang by itself.
@@ -30,7 +30,7 @@ Before running Codex, make these decisions explicitly:
 - Expected artifacts: pass every required output with `--expected-artifact`; relative paths resolve from `--output-dir`, so use absolute paths for artifacts that must be written outside `.context/<task>/`.
 - When `--output-dir .context/<task>` is used, pass `--expected-artifact result.md`, not `--expected-artifact .context/<task>/result.md`; the latter resolves under `.context/<task>/.context/<task>/`.
 - Defaults: omit `--model`, `--effort`, and `--profile` unless the caller, model registry, or role explicitly requires an override.
-- Timeout: rely on the 600-second wrapper default unless the task contract says otherwise.
+- Timeout: none by default (unbounded run). Pass `--timeout-seconds <seconds>` only when the caller explicitly needs a bounded run; the stall watchdog, not a kill timer, is the default protection against silent hangs.
 - Stall watchdog: rely on the 300-second default; raise `--stall-timeout-seconds` only for tasks whose single commands legitimately stay silent longer, and pass `0` only when a caller explicitly accepts unbounded silent runs.
 - Prompt profile: rely on `--prompt-profile auto` when passing an explicit GPT-5.5 model; use `--prompt-profile gpt-5-5` only when the CLI default is GPT-5.5 and `--model` is omitted.
 - Extra Codex args: pass each Codex CLI token as its own `--extra-codex-arg=<token>` value, especially for leading-hyphen tokens. Never pass `-i`/`--image` this way; see Images below.
@@ -43,7 +43,8 @@ Do not add "think hard", fixed progress-update scaffolds, or mandatory step-by-s
 Use this form, with `<prompt>` kept short and pointing to the generated launch prompt:
 
 ```bash
-timeout 600 codex exec --json -o <artifact>.last-message.md "<prompt>" > <artifact>.events.jsonl 2> <artifact>.err
+timeout 0 codex exec --json -o <artifact>.last-message.md "<prompt>" > <artifact>.events.jsonl 2> <artifact>.err
+# duration 0 = no time limit; replace 0 with a positive number of seconds to enforce one
 ```
 
 For repeatable runs, prefer the bundled wrapper:
@@ -56,7 +57,7 @@ python3 <skill-dir>/scripts/run_codex_cli.py \
 ```
 
 Add `--model <model>`, `--effort <low|medium|high|xhigh>`, or `--profile <profile>` only when overriding Codex CLI defaults.
-Add `--timeout-seconds <seconds>` only when overriding the 600-second default.
+Add `--timeout-seconds <seconds>` only when a positive hard limit is required (default 0 = no timeout).
 Add `--stall-timeout-seconds <seconds>` only when overriding the 300-second no-progress default (`0` disables).
 
 The wrapper writes:
@@ -106,7 +107,7 @@ These checks prove runner execution and non-empty artifact materialization only.
 
 Treat any of these as failure:
 
-- Timeout exit, normally exit code `124`.
+- Timeout exit, normally exit code `124` (only possible when a positive `--timeout-seconds` was set; the default is unbounded).
 - Stall watchdog kill: no growth in `run.events.jsonl` and `run.err` for `--stall-timeout-seconds`, recorded as `stall_timeout` with `stalled=true`.
 - Non-zero process exit.
 - stderr contains authentication, model, permission, quota, or rate-limit error patterns, and the run lacks an independent success signal (exit `0`, a `turn.completed` event, non-empty `last-message.md`, no error events, and every expected artifact present).
@@ -185,4 +186,4 @@ For runtime validation, run:
 - no-API stall watchdog kill
 - real short smoke prompt
 - real file read/write prompt
-- forced timeout failure
+- forced timeout failure (pass a small positive `--timeout-seconds`)

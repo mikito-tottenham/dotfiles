@@ -61,7 +61,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Codex config profile. Omit to use the Codex CLI configured default.",
     )
-    parser.add_argument("--timeout-seconds", type=int, default=600, help="Timeout in seconds. Defaults to 600.")
+    parser.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=0,
+        help="Timeout in seconds. Defaults to 0 (no timeout). Pass a positive value to enforce a hard limit.",
+    )
     parser.add_argument(
         "--stall-timeout-seconds",
         type=int,
