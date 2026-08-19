@@ -12,7 +12,7 @@
     "allow": [
       "mcp__pencil",
       "Bash(gh pr merge *)",
-      "Bash(gh pr merge *)"
+      "Bash(git merge *)"
     ]
   },
   "enabledPlugins": {
@@ -46,6 +46,7 @@
   "skipAutoPermissionPrompt": true,
   "skipDangerousModePermissionPrompt": true,
   "effortLevel": "high",
+  "tui": "fullscreen",
   "fallbackModel": null,
   "hooks": {
     "SessionStart": [
