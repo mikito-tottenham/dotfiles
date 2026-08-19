@@ -46,7 +46,7 @@
 # Google Workspace (gws) アカウント運用
 
 - gws は常に `gws-account <profile> ...` で実行し、素の `gws`（デフォルト認証状態）はアカウント境界のある作業で使わないこと（ADR-0048）
-- この環境の gws プロファイル対応は、`gws-account taskell` = `mikito.ebishima@taskell.ai`（taskell.ai 作業、Taskell Management 共有ドライブ含む）、`gws-account ges-claude` = `mikito.ebishima@yoake-entertainment.jp`（yoake 系）とすること
+- この環境の gws プロファイル対応は、`gws-account taskell` = `mikito.ebishima@taskell.ai`（taskell.ai 作業、Taskell Management 共有ドライブ含む）、`gws-account ges-claude` = `mikito.ebishima@yoake-entertainment.jp`（yoake 系）、`gws-account twinplanet` = `mikito.ebishima@twinplanet.co.jp`（TWIN PLANET 作業）とすること
 - 各プロファイルの OAuth クライアントは所属組織の internal 設定のため、別組織のアカウントを選ぶと `403 org_internal` になる。`manzoku@oasys-wallet.com` は他環境（Manzoku）の作業アカウントであり、この環境のブラウザでは選択できない。リポジトリ文書に記載された作業アカウント名を、この環境の再ログイン先としてそのまま案内しないこと
 - gws の再認証をユーザーへ依頼する前に、`gws-account <profile> auth status` で有効な別プロファイル（token_valid）による代替可否を確認すること。1 プロファイルの失効は全プロファイルの失効ではない。ただし別アカウントへの自動切り替えを復旧経路にしないこと
 - 再認証を依頼するときは、対象プロファイル（`gws-account <profile> auth login` の形まで）と、ブラウザのアカウント選択画面で選ぶべきメールアドレスを明示すること
