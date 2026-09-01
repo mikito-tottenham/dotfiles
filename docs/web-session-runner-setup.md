@@ -89,21 +89,20 @@ BOOTSTRAP_REPO_DIR="$DOTFILES" BOOTSTRAP_WEB_SKIP_OP=true "$DOTFILES/scripts/boo
 exit 0
 ```
 
-### 4. すべての environment に同じ設定を入れる
+### 4. 設定は environment ごとに独立している
 
 Claude Code on the web は environment を複数持てる（既定の `Default` と任意の追加分）。
-**どの environment でセッションを開いても再現状態が変わらないよう、すべての environment に
-上記 1〜3 を同じ内容で設定する。**
+**設定は environment 間でコピーされない。上記 1〜3 は「実際に使う environment」に必ず入れる。**
 
 - Network access は **`Custom` + 上記 2 の allowlist** にする。既定の `Trusted` は
   「検証済みパッケージ配布元のみ」で `cache.agilebits.com` / `*.1password.com` に届かず、
   op の導入も restore もできない。
-- Environment variables（token 類）は environment ごとに個別設定が必要で、コピーされない。
-- 新しい environment を追加したときも同じ 3 点を設定する。
+- Environment variables（token 類）は environment ごとの個別設定で、他からコピーされない。
+- environment を複数使い分けるなら、そのすべてに 1〜3 を入れる。使わない environment は対象外。
 
-> 2026-09-01 実測: `Default` が未設定（Network access=`Trusted`・env 空・Setup script 空）のまま
-> 放置されており、その environment でセッションを開くと環境再現が一切効かない状態だった。
-> `My claude` だけを設定していても、environment を切り替えた瞬間に無効になる。
+> 2026-09-01 実測: 既定の `Default` は未設定（Network access=`Trusted`・env 空・Setup script 空）
+> だった。設定済みの environment を選んでいる限り問題ないが、environment を切り替えると
+> 環境再現は一切効かなくなる。どの environment でセッションを開いているかは常に意識する。
 
 ## Codex cloud の environment 設定（UI）
 
