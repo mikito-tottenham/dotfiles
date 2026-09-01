@@ -89,6 +89,22 @@ BOOTSTRAP_REPO_DIR="$DOTFILES" BOOTSTRAP_WEB_SKIP_OP=true "$DOTFILES/scripts/boo
 exit 0
 ```
 
+### 4. すべての environment に同じ設定を入れる
+
+Claude Code on the web は environment を複数持てる（既定の `Default` と任意の追加分）。
+**どの environment でセッションを開いても再現状態が変わらないよう、すべての environment に
+上記 1〜3 を同じ内容で設定する。**
+
+- Network access は **`Custom` + 上記 2 の allowlist** にする。既定の `Trusted` は
+  「検証済みパッケージ配布元のみ」で `cache.agilebits.com` / `*.1password.com` に届かず、
+  op の導入も restore もできない。
+- Environment variables（token 類）は environment ごとに個別設定が必要で、コピーされない。
+- 新しい environment を追加したときも同じ 3 点を設定する。
+
+> 2026-09-01 実測: `Default` が未設定（Network access=`Trusted`・env 空・Setup script 空）のまま
+> 放置されており、その environment でセッションを開くと環境再現が一切効かない状態だった。
+> `My claude` だけを設定していても、environment を切り替えた瞬間に無効になる。
+
 ## Codex cloud の environment 設定（UI）
 
 Codex settings → Environments → 対象 environment で設定する（repo 内ファイルからは設定できない）。
