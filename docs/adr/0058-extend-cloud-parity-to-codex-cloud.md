@@ -59,6 +59,9 @@ ADR-0045 は Claude Code on the web の ephemeral 環境について、`scripts/
   セッション内 on-demand restore ができない。env var 枠なら agent phase で restore が通り、
   ADR-0045 の「Setup script では restore せずスナップショットに焼き込まない」という判断を
   Codex 側でも維持できる。Setup script は Claude と同じく `BOOTSTRAP_WEB_SKIP_OP=true` で呼ぶ。
+  Codex 固有の maintenance script（キャッシュ再開時に走る）でも同じフラグを維持し、
+  dotfiles の `git pull --ff-only` と `bootstrap-web` の再実行だけを行う。
+  `bootstrap-web` が冪等であることがこの運用の前提になる。
 - **`scripts/verify-cloud-parity` を追加する。** 実環境を検査し、期待リストと突き合わせて
   `OK` / `MISSING` / `N/A` を出す。`MISSING` が 1 件でもあれば exit 1。期待リスト
   （`claude_skills` / `codex_skills` / `mcp_servers`）は `bootstrap-web` から抽出して使い、

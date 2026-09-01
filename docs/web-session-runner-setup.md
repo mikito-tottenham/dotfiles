@@ -152,7 +152,28 @@ BOOTSTRAP_REPO_DIR="$DOTFILES" BOOTSTRAP_WEB_SKIP_OP=true "$DOTFILES/scripts/boo
 exit 0
 ```
 
-### 4. 既知の差分
+### 4. Maintenance script（キャッシュ再開時）
+
+Codex cloud はコンテナをキャッシュ（最大 12h）し、再開時に maintenance script を走らせる。
+これを設定しないと、dotfiles を更新してもキャッシュ内の古い clone が使われ続ける
+（Claude 側で「Setup script を編集しないと再ビルドされない」のと同じハマりどころ）。
+
+```bash
+#!/bin/bash
+set -uo pipefail
+DOTFILES=/opt/dotfiles
+if [ -d "$DOTFILES/.git" ]; then
+  git -C "$DOTFILES" pull --ff-only >/dev/null 2>&1 || echo "[maint] dotfiles pull failed (継続)"
+fi
+BOOTSTRAP_REPO_DIR="$DOTFILES" BOOTSTRAP_WEB_SKIP_OP=true "$DOTFILES/scripts/bootstrap-web" \
+  || echo "[maint] bootstrap-web non-zero (継続)"
+exit 0
+```
+
+`bootstrap-web` は冪等なので再実行して問題ない。ここでも `BOOTSTRAP_WEB_SKIP_OP=true` を
+維持し、secret はキャッシュへ焼き込まない。
+
+### 5. 既知の差分
 
 - Codex cloud には Claude Code の SessionStart hook に相当する仕組みが無いため、
   dotfiles セッションでも自動 restore はされない。restore は毎回 on-demand で実行する。
