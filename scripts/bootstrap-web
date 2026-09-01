@@ -9,11 +9,13 @@ set -euo pipefail
 #   3. 配布スキルを再インストール
 #        - first-party (repo skills/): 必須。欠落・検証失敗があれば最後に exit 1。
 #        - third-party (公開 GitHub): best-effort。取得失敗は skip し、集計して継続する。
-#   4. runner CLI を best-effort で用意 (codex/gemini/ghq/gh/gws/copilot)。認証は env / 1Password
+#   4. runner CLI と共通ツールを best-effort で用意 (jq/rg/codex/gemini/ghq/gh/gws/copilot)。認証は env / 1Password
 #      由来 (GH_TOKEN・GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE・COPILOT_GITHUB_TOKEN 等、未設定なら warn)。
 #      grok は xAI OAuth、soundcore は対話ブラウザのため対象外。
 #   5. フル 1Password 化: OP_SERVICE_ACCOUNT_TOKEN があれば op を導入し opmaterialize restore を
 #      実行し、dotfiles.env (op:// 参照)・secret-backed file・private subagent を一括復元する。
+#   6. headless 再現できる MCP サーバーを user scope に登録する (best-effort)。
+#      ローカルアプリ依存 (pencil) と対話 OAuth 必須 (slack-twin / claude.ai コネクタ) は対象外。
 #
 # 再現対象は「web で復元可能なサブセット」であり、manifest 全体ではない。
 # empirical-prompt-tuning は upstream 不在 (404) のため対象外。
@@ -33,7 +35,11 @@ set -euo pipefail
 #
 # 設計判断は docs/adr/0045-reproduce-web-session-environment-via-session-start-hook.md を参照。
 
-REPO_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+# REPO_DIR は BOOTSTRAP_REPO_DIR > CLAUDE_PROJECT_DIR > スクリプト位置 の順に解決する。
+# Codex cloud には CLAUDE_PROJECT_DIR が無いため、スクリプト位置フォールバックが主経路になる。
+# Claude Code on the web では CLAUDE_PROJECT_DIR がセッション repo を指しうるので、
+# Setup script 側で BOOTSTRAP_REPO_DIR (または CLAUDE_PROJECT_DIR) を dotfiles に固定する。
+REPO_DIR="${BOOTSTRAP_REPO_DIR:-${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}}"
 CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
 CODEX_SKILLS_DIR="$HOME/.codex/skills"
 STATUS_FILE="${BOOTSTRAP_WEB_STATUS:-$HOME/.cache/bootstrap-web/status.json}"
@@ -78,10 +84,19 @@ third_party_installed=()
 third_party_skipped=()   # "name: reason"
 runner_cli_installed=()
 runner_cli_skipped=()     # "name: reason"
+mcp_registered=()
+mcp_skipped=()            # "name: reason"
 onepassword_status="not-run"
+
+# 再現する MCP サーバー ("name|transport|url")。headless で再現できるものだけを載せる。
+# 対象外: pencil (ローカル macOS アプリ依存), slack-twin / claude.ai コネクタ (対話 OAuth 必須)。
+mcp_servers=(
+  "mfc_ca|http|https://alpha.mcp.developers.biz.moneyforward.com/mcp/ca/v3"
+)
 
 record_tp_skipped() { third_party_skipped+=("$1: $2"); }
 record_cli_skipped() { runner_cli_skipped+=("$1: $2"); }
+record_mcp_skipped() { mcp_skipped+=("$1: $2"); }
 
 # first-party skill のエージェント別リスト。docs/skills-install-manifest.md と対応させること。
 # Claude Code には codex-cli-runner、Codex には claude-cli-runner を入れる差分に注意。
@@ -249,6 +264,26 @@ install_third_party() {
 ensure_runner_clis() {
   info "runner CLI を用意中 (best-effort)..."
 
+  # jq: onepassword-secret-materialize の field 方式 secret 復元が必須依存にしている。
+  # ここで落ちると ensure_onepassword の restore が field 方式分だけ復元できないため warn を出す。
+  if command -v jq >/dev/null 2>&1; then
+    runner_cli_installed+=("jq (既存)")
+  elif install_jq && command -v jq >/dev/null 2>&1; then
+    runner_cli_installed+=("jq")
+  else
+    record_cli_skipped "jq" "GitHub release 取得失敗"
+    warn "  jq を導入できない: field 方式の secret-backed file は復元できない"
+  fi
+
+  # rg (ripgrep): AGENTS.md の検索運用ルールが前提にする CLI。
+  if command -v rg >/dev/null 2>&1; then
+    runner_cli_installed+=("rg (既存)")
+  elif install_ripgrep && command -v rg >/dev/null 2>&1; then
+    runner_cli_installed+=("rg")
+  else
+    record_cli_skipped "rg" "GitHub release 取得失敗"
+  fi
+
   # codex: CLI (npm) + 認証 (CODEX_AUTH_JSON -> ~/.codex/auth.json)
   if command -v codex >/dev/null 2>&1; then
     runner_cli_installed+=("codex (既存)")
@@ -353,6 +388,41 @@ ensure_runner_clis() {
 
 # 1Password CLI を公式配布から best-effort 導入する (downloads/cache hosts 許可時のみ成功)。
 # version は OP_CLI_VERSION で上書き可。zip 展開は python3 を使い unzip 依存を避ける。
+install_jq() {
+  command -v curl >/dev/null 2>&1 || return 1
+  local arch tag
+  case "$(uname -m)" in
+    x86_64|amd64) arch=amd64 ;;
+    aarch64|arm64) arch=arm64 ;;
+    *) return 1 ;;
+  esac
+  tag=$(curl -fsSI --max-time 15 "https://github.com/jqlang/jq/releases/latest" 2>/dev/null \
+    | grep -i '^location:' | tr -d '\r' | awk -F/ '{print $NF}')
+  [ -n "$tag" ] || return 1
+  make_tmp
+  local d="$TMP_LAST"
+  curl -fsSL --max-time 60 "https://github.com/jqlang/jq/releases/download/${tag}/jq-linux-${arch}" -o "$d/jq" 2>/dev/null || return 1
+  install -m 0755 "$d/jq" /usr/local/bin/jq 2>/dev/null
+}
+
+install_ripgrep() {
+  command -v curl >/dev/null 2>&1 || return 1
+  local arch tag
+  case "$(uname -m)" in
+    x86_64|amd64) arch=x86_64-unknown-linux-musl ;;
+    aarch64|arm64) arch=aarch64-unknown-linux-gnu ;;
+    *) return 1 ;;
+  esac
+  tag=$(curl -fsSI --max-time 15 "https://github.com/BurntSushi/ripgrep/releases/latest" 2>/dev/null \
+    | grep -i '^location:' | tr -d '\r' | awk -F/ '{print $NF}')
+  [ -n "$tag" ] || return 1
+  make_tmp
+  local d="$TMP_LAST"
+  curl -fsSL --max-time 90 "https://github.com/BurntSushi/ripgrep/releases/download/${tag}/ripgrep-${tag}-${arch}.tar.gz" -o "$d/rg.tgz" 2>/dev/null || return 1
+  tar -xzf "$d/rg.tgz" -C "$d" 2>/dev/null || return 1
+  [ -f "$d/ripgrep-${tag}-${arch}/rg" ] && install -m 0755 "$d/ripgrep-${tag}-${arch}/rg" /usr/local/bin/rg 2>/dev/null
+}
+
 install_op() {
   command -v curl >/dev/null 2>&1 || return 1
   command -v python3 >/dev/null 2>&1 || return 1
@@ -463,6 +533,50 @@ ensure_onepassword() {
   fi
 }
 
+mcp_exists() { # $1=name -> 0 if already registered in ~/.claude.json
+  python3 - "$1" <<'PYCHK' 2>/dev/null
+import json, os, sys
+try:
+    d = json.load(open(os.path.expanduser("~/.claude.json")))
+except Exception:
+    sys.exit(1)
+sys.exit(0 if sys.argv[1] in (d.get("mcpServers") or {}) else 1)
+PYCHK
+}
+
+# MCP は claude CLI の user scope に登録する (~/.claude.json)。ephemeral なクラウド環境では
+# セッション終了で失われるため毎回登録し、既存があれば何もしない (冪等)。
+ensure_mcp_servers() {
+  info "MCP サーバーを登録中 (best-effort)..."
+  if ! command -v claude >/dev/null 2>&1; then
+    record_mcp_skipped "(all)" "claude CLI が無い"
+    warn "  claude CLI が無いため MCP 登録を skip"
+    return 0
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    record_mcp_skipped "(all)" "python3 が無い (冪等性チェック不可)"
+    warn "  python3 が無いため MCP 登録を skip"
+    return 0
+  fi
+  local entry name transport url
+  for entry in "${mcp_servers[@]}"; do
+    IFS='|' read -r name transport url <<< "$entry"
+    if mcp_exists "$name"; then
+      mcp_registered+=("$name (既存)")
+      info "  既存: $name"
+      continue
+    fi
+    if claude mcp add --transport "$transport" --scope user "$name" "$url" >/dev/null 2>&1; then
+      mcp_registered+=("$name")
+      info "  registered: $name (--scope user)"
+    else
+      record_mcp_skipped "$name" "claude mcp add 失敗"
+      warn "  登録失敗: $name"
+    fi
+  done
+  info "MCP 完了 (registered:${#mcp_registered[@]} / skipped:${#mcp_skipped[@]})"
+}
+
 write_status() { # $1=overall_success(true/false) [$2=failure_stage]
   local overall="$1" stage="${2:-}" dir
   dir="$(dirname "$STATUS_FILE")"
@@ -478,6 +592,8 @@ write_status() { # $1=overall_success(true/false) [$2=failure_stage]
     printf '  "third_party_skipped": %s,\n' "$(json_array ${third_party_skipped[@]+"${third_party_skipped[@]}"})"
     printf '  "runner_cli_installed": %s,\n' "$(json_array ${runner_cli_installed[@]+"${runner_cli_installed[@]}"})"
     printf '  "runner_cli_skipped": %s,\n' "$(json_array ${runner_cli_skipped[@]+"${runner_cli_skipped[@]}"})"
+    printf '  "mcp_registered": %s,\n' "$(json_array ${mcp_registered[@]+"${mcp_registered[@]}"})"
+    printf '  "mcp_skipped": %s,\n' "$(json_array ${mcp_skipped[@]+"${mcp_skipped[@]}"})"
     printf '  "onepassword": %s\n' "$(json_string "$onepassword_status")"
     printf '}\n'
   } > "$STATUS_FILE"
@@ -505,6 +621,7 @@ main() {
   STAGE="install_third_party"; install_third_party
   STAGE="ensure_runner_clis"; ensure_runner_clis
   STAGE="ensure_onepassword"; ensure_onepassword
+  STAGE="ensure_mcp_servers"; ensure_mcp_servers
   STAGE="finalize"
 
   info "==== サマリ ===="
@@ -514,6 +631,8 @@ main() {
   if [ "${#third_party_skipped[@]}" -gt 0 ]; then warn "  skipped: ${third_party_skipped[*]}"; fi
   info "runner CLI (best-effort): installed ${#runner_cli_installed[@]} / skipped ${#runner_cli_skipped[@]}"
   if [ "${#runner_cli_skipped[@]}" -gt 0 ]; then warn "  skipped: ${runner_cli_skipped[*]}"; fi
+  info "MCP (best-effort): registered ${#mcp_registered[@]} / skipped ${#mcp_skipped[@]}"
+  if [ "${#mcp_skipped[@]}" -gt 0 ]; then warn "  skipped: ${mcp_skipped[*]}"; fi
   info "1Password (opmaterialize): ${onepassword_status}"
 
   local overall=true stage=""

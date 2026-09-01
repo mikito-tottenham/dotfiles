@@ -1,18 +1,23 @@
 ---
-title: "Web Session Runner & 1Password Setup Runbook"
-updated_at: 2026-07-23
+title: "Cloud Session Runner & 1Password Setup Runbook"
+updated_at: 2026-09-01
 ---
 
-# Web Session Runner & 1Password Setup Runbook
+# Cloud Session Runner & 1Password Setup Runbook
 
-Claude Code on the web（ephemeral クラウドセッション）で、runner CLI（codex / gemini /
-ghq / gh / gws / copilot）と 1Password 由来の secret を再現するための運用手順。設計判断の
-正本は ADR-0045、本書はそれを「迷わず実行する」ための手順書。
+クラウドの ephemeral セッションで、runner CLI（codex / gemini / ghq / gh / gws / copilot /
+jq / rg）と 1Password 由来の secret を再現するための運用手順。対象は
+**Claude Code on the web** と **Codex cloud** の 2 つ。設計判断の正本は ADR-0045 / ADR-0058、
+本書はそれを「迷わず実行する」ための手順書。
+
+2 つのクラウドは env / secret の注入タイミングが逆なので、environment 設定は流用せず
+それぞれの節に従うこと。再現差分の確認は `scripts/verify-cloud-parity` で行う。
 
 ## 全体像
 
 クラウドセッションは毎回まっさらな VM で起動し、リポジトリを clone し直す。永続するのは
-git に push した内容だけ。そこで以下の3層で環境を再現する。
+git に push した内容だけ。そこで以下の3層で環境を再現する（**Claude Code on the web** の場合。
+Codex cloud には SessionStart hook 相当が無いため Setup script と on-demand restore の 2 層になる）。
 
 | 層 | 適用範囲 | キャッシュ | secret 復元 | 設定場所 |
 | :-- | :-- | :-- | :-- | :-- |
@@ -24,6 +29,9 @@ git に push した内容だけ。そこで以下の3層で環境を再現する
 それを呼ぶ薄いラッパー。
 
 ### 重要な制約（ハマりどころ）
+
+以下は **Claude Code on the web** の制約。Codex cloud は env / secret の注入タイミングが逆なので、
+「Codex cloud の environment 設定（UI）」節に従うこと。
 
 - **environment 変数は Setup script（プロビジョニング）フェーズには注入されない。** Claude の
   セッション側にのみ入る。そのため Setup script から `opmaterialize restore`（token 必須）は
@@ -38,7 +46,7 @@ git に push した内容だけ。そこで以下の3層で環境を再現する
 - **GitHub は git（proxy）と MCP ツールですでに触れる。** `gh` CLI（`GH_TOKEN`）は別物で、
   web では基本不要（skill 配置は bootstrap-web がファイルコピー、PR/issue/CI/release は MCP）。
 
-## クラウド environment の設定（UI）
+## Claude Code on the web の environment 設定（UI）
 
 環境セレクタ（クラウドアイコン）→ 対象 environment の歯車（編集）で以下を設定する。
 
@@ -73,11 +81,107 @@ if [ ! -d "$DOTFILES/.git" ]; then
     || { echo "[setup] dotfiles clone failed"; exit 0; }
 fi
 ln -sf "$DOTFILES/dot_local/bin/executable_gws-account" /usr/local/bin/gws-account 2>/dev/null || true
-# bootstrap-web は REPO_DIR を CLAUDE_PROJECT_DIR 優先で解決するため、source を /opt/dotfiles に
-# 固定する（CLAUDE_PROJECT_DIR がセッション repo を指していると別プロジェクトが source になる）。
-CLAUDE_PROJECT_DIR="$DOTFILES" BOOTSTRAP_WEB_SKIP_OP=true "$DOTFILES/scripts/bootstrap-web" \
+# bootstrap-web の REPO_DIR は BOOTSTRAP_REPO_DIR > CLAUDE_PROJECT_DIR > スクリプト位置 の順に
+# 解決される。source を /opt/dotfiles に固定するため BOOTSTRAP_REPO_DIR を渡す
+# （CLAUDE_PROJECT_DIR がセッション repo を指していると別プロジェクトが source になる）。
+BOOTSTRAP_REPO_DIR="$DOTFILES" BOOTSTRAP_WEB_SKIP_OP=true "$DOTFILES/scripts/bootstrap-web" \
   || echo "[setup] bootstrap-web non-zero (継続)"
 exit 0
+```
+
+## Codex cloud の environment 設定（UI）
+
+Codex settings → Environments → 対象 environment で設定する（repo 内ファイルからは設定できない）。
+**Claude Code on the web とは env / secret の注入タイミングが逆**なので、設定を流用しないこと。
+
+| 項目 | Claude Code on the web | Codex cloud |
+| :-- | :-- | :-- |
+| env var の注入先 | agent phase のみ | setup script + agent phase |
+| secret 専用枠 | なし（env var のみ） | あり（**setup のみ**・agent phase 開始前に削除） |
+| setup 中の network | allowlist に従う | 常に有効 |
+| agent phase の network | 管理 proxy 経由 | **既定 off**（allowlist で許可） |
+| キャッシュ無効化 | Setup script / allowed hosts の変更 | 12h 経過、または setup / maintenance script・env・secret の変更 |
+
+出典: [Cloud environments](https://learn.chatgpt.com/docs/environments/cloud-environment.md)。
+
+### 1. Environment variables（secret 枠は使わない）
+
+`OP_SERVICE_ACCOUNT_TOKEN` は **secret 枠ではなく environment variables 枠**に置く。
+secret 枠は setup script でしか読めず agent phase 開始前に削除されるため、セッション内の
+on-demand restore ができない。env var 枠なら agent phase でも `opmaterialize restore` が通り、
+Claude 側と同じ「setup では restore しない・セッション内で restore する」運用に揃う。
+
+```
+OP_SERVICE_ACCOUNT_TOKEN=ops_xxxxxxxx   # 1Password service account（read 限定推奨）
+```
+
+> secret 枠に置いて setup script で restore する方法もあるが、復元結果がコンテナ
+> スナップショットに焼き込まれる（最大 12h 残る）。既定では採らない。
+> `GEMINI_API_KEY` / `GH_TOKEN` / `COPILOT_GITHUB_TOKEN` は対応 runner を使う場合のみ追加。
+
+### 2. Internet access（agent phase の allowlist）
+
+agent phase は既定で遮断される。setup phase は常に network があるので設定不要。
+セッション内で restore と runner 実行をするため、以下を allowlist に加える。
+
+```
+cache.agilebits.com              # op バイナリ配布
+*.1password.com                  # op 実行時の 1Password API
+github.com                       # skill / CLI の取得
+objects.githubusercontent.com    # GitHub release アセット
+registry.npmjs.org               # codex / gemini / copilot CLI
+proxy.golang.org                 # ghq (go install)
+```
+
+### 3. Setup script
+
+```bash
+#!/bin/bash
+set -uo pipefail
+DOTFILES=/opt/dotfiles
+if [ ! -d "$DOTFILES/.git" ]; then
+  git clone --depth 1 https://github.com/mikito-tottenham/dotfiles.git "$DOTFILES" \
+    || { echo "[setup] dotfiles clone failed"; exit 0; }
+fi
+ln -sf "$DOTFILES/dot_local/bin/executable_gws-account" /usr/local/bin/gws-account 2>/dev/null || true
+# Codex cloud には CLAUDE_PROJECT_DIR が無いため BOOTSTRAP_REPO_DIR で source を固定する。
+# secret をスナップショットへ焼き込まないため restore は skip し、agent phase の
+# on-demand `opmaterialize restore` に委ねる。
+BOOTSTRAP_REPO_DIR="$DOTFILES" BOOTSTRAP_WEB_SKIP_OP=true "$DOTFILES/scripts/bootstrap-web" \
+  || echo "[setup] bootstrap-web non-zero (継続)"
+exit 0
+```
+
+### 4. 既知の差分
+
+- Codex cloud には Claude Code の SessionStart hook に相当する仕組みが無いため、
+  dotfiles セッションでも自動 restore はされない。restore は毎回 on-demand で実行する。
+- MCP 登録ステップ（`ensure_mcp_servers`）は `claude` CLI がある環境でのみ動く。
+  Codex cloud では skip され、`status.json` の `mcp_skipped` に理由が残る。
+
+## parity 検証（両クラウド共通）
+
+`scripts/verify-cloud-parity` が、ローカルとクラウドの再現差分を実環境から検査する。
+期待リスト（skill / MCP）の正本は `scripts/bootstrap-web` の配列で、検証側は再定義しない。
+
+```bash
+BOOTSTRAP_REPO_DIR=/opt/dotfiles /opt/dotfiles/scripts/verify-cloud-parity          # 表形式
+BOOTSTRAP_REPO_DIR=/opt/dotfiles /opt/dotfiles/scripts/verify-cloud-parity --json   # 機械可読
+BOOTSTRAP_REPO_DIR=/opt/dotfiles /opt/dotfiles/scripts/verify-cloud-parity --quiet  # サマリ行のみ
+```
+
+判定は `OK` / `MISSING`（= 移植差分）/ `N/A`（この環境では対象外）。`MISSING` が 1 件でも
+あれば exit 1。secret の実値は出力せず有無だけを見る。
+
+検査対象: skill（claude / codex）、CLI、設定ファイル、private subagent、認証材料
+（`dotfiles.env` / gws プロファイル / `codex auth.json` / `OP_SERVICE_ACCOUNT_TOKEN` の有無）、
+MCP、plugin、`bootstrap-web` の `status.json`。
+
+`MISSING` が出たときの復旧:
+
+```bash
+BOOTSTRAP_REPO_DIR=/opt/dotfiles /opt/dotfiles/scripts/bootstrap-web
+opmaterialize restore
 ```
 
 ## セッション内での secret 復元（on-demand）
@@ -193,9 +297,12 @@ API キー系は 1Password に保存し `~/.config/op/dotfiles.env` に `KEY=op:
 ## 動作確認（新しいクラウドセッションで）
 
 ```bash
-# Setup script が走ったか
+# 一括確認（推奨）: 期待リストとの差分を出す
+BOOTSTRAP_REPO_DIR=/opt/dotfiles /opt/dotfiles/scripts/verify-cloud-parity
+
+# 個別確認: Setup script が走ったか
 cat ~/.cache/bootstrap-web/status.json        # overall_success:true / onepassword:"op-installed: ..."
-command -v op gws gws-account codex            # 導入確認
+command -v op gws gws-account codex jq rg      # 導入確認
 
 # secret 復元（dotfiles 以外のセッション）
 opmaterialize restore
@@ -267,6 +374,8 @@ web セッション内で `gh skill` を直接叩きたい場合のみ `GH_TOKEN
 ## 関連
 
 - 設計判断: `docs/adr/0045-reproduce-web-session-environment-via-session-start-hook.md`
+- Codex cloud 対応と parity 検証: `docs/adr/0058-extend-cloud-parity-to-codex-cloud.md`
+- parity 検証スクリプト: `scripts/verify-cloud-parity`
 - 1Password CLI 認証: `docs/adr/0044-use-op-cli-runner-for-1password-cli-auth.md`
 - field 方式 secret: `docs/adr/0046-support-field-based-secrets-in-opmaterialize.md`
 - skill 配備の正本: `docs/skills-install-manifest.md`

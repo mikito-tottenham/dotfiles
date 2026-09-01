@@ -1,0 +1,251 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2154
+# (claude_skills / codex_skills / mcp_servers は bootstrap-web から eval で読み込む)
+set -uo pipefail
+
+# verify-cloud-parity: ローカル (macOS) 環境とクラウド環境 (Claude Code on the web /
+# Codex cloud) の再現差分を、実環境を検査して突き合わせる。
+#
+# 使い方:
+#   scripts/verify-cloud-parity            # 人間可読の表
+#   scripts/verify-cloud-parity --json     # 機械可読 (JSON)
+#   scripts/verify-cloud-parity --quiet    # サマリ行のみ
+#
+# 期待値の正本は scripts/bootstrap-web の配列 (claude_skills / codex_skills / mcp_servers) で、
+# 本スクリプトはそこから抽出して使う。二重管理を作らないため、ここでリストを再定義しない。
+# ただし third-party skill と CLI 一覧は bootstrap-web 側が関数内にハードコードしているため、
+# 下の THIRD_PARTY_SKILLS / CLI_* だけは同期対象として本スクリプトが持つ。
+#
+# 判定:
+#   OK      期待どおり存在する
+#   MISSING 期待されるが無い (= 移植差分)
+#   N/A     この環境では対象外 (macOS 専用 / クラウド専用)
+#
+# exit code: 0 = MISSING 無し / 1 = MISSING あり / 2 = 実行前提が壊れている
+#
+# secret の実値は一切出力しない (有無のみ)。
+
+REPO_DIR="${BOOTSTRAP_REPO_DIR:-${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}}"
+BOOTSTRAP="$REPO_DIR/scripts/bootstrap-web"
+
+MODE="table"
+for arg in "$@"; do
+  case "$arg" in
+    --json) MODE="json" ;;
+    --quiet) MODE="quiet" ;;
+    -h|--help) sed -n '3,25p' "$0"; exit 0 ;;
+    *) printf 'unknown option: %s\n' "$arg" >&2; exit 2 ;;
+  esac
+done
+
+[ -f "$BOOTSTRAP" ] || { printf 'verify-cloud-parity: bootstrap-web が見つからない: %s\n' "$BOOTSTRAP" >&2; exit 2; }
+
+# bootstrap-web から期待リストを抽出する (実行はしない)。
+eval "$(sed -n '/^claude_skills=(/,/^)/p; /^codex_skills=(/,/^)/p; /^mcp_servers=(/,/^)/p' "$BOOTSTRAP")"
+
+# bootstrap-web の install_third_party がハードコードしている公開 skill (同期対象)
+THIRD_PARTY_SKILLS="gws-shared gws-drive gws-drive-upload grill-me"
+
+# bootstrap-web が導入する CLI (同期対象)
+CLI_BOOTSTRAP="jq rg codex gemini ghq gh gws copilot op"
+# chezmoi / opmaterialize 経由で入る、または実行前提の CLI
+CLI_BASE="git python3 chezmoi opmaterialize oprun gws-account"
+# ローカル (macOS) 専用。クラウドでは N/A
+CLI_LOCAL_ONLY="brew mas hermes"
+
+results_name=()
+results_cat=()
+results_status=()
+results_note=()
+
+record() { # $1=category $2=name $3=status $4=note
+  results_cat+=("$1"); results_name+=("$2"); results_status+=("$3"); results_note+=("${4:-}")
+}
+
+# クラウド (ephemeral Linux コンテナ) かどうかの判定。CLAUDE_CODE_REMOTE は Claude Code on the
+# web が立てる既知の変数。それ以外は「macOS ローカルではない」ことをもってクラウド扱いにする
+# (Codex cloud が立てる変数は公開仕様に無いため決め打ちしない)。判定は表示と N/A 分類にのみ使い、
+# 検査そのものは環境非依存に行う。
+is_cloud() { [ "${CLAUDE_CODE_REMOTE:-}" = "true" ] || [ "$(uname -s)" != "Darwin" ]; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+log() { [ "$MODE" = "json" ] || printf '\033[1;34m[verify]\033[0m %s\n' "$1" >&2; }
+
+# ---------- 1. skills ----------
+check_skills() {
+  local dir="$1" label="$2"; shift 2
+  local s
+  for s in "$@"; do
+    if [ -f "$dir/$s/SKILL.md" ]; then
+      record "skill:$label" "$s" OK
+    else
+      record "skill:$label" "$s" MISSING "$dir/$s/SKILL.md が無い"
+    fi
+  done
+}
+
+log "skill を検査中 (claude:${#claude_skills[@]} + third-party / codex:${#codex_skills[@]} + third-party)"
+# shellcheck disable=SC2086
+check_skills "$HOME/.claude/skills" claude "${claude_skills[@]}" $THIRD_PARTY_SKILLS
+# shellcheck disable=SC2086
+check_skills "$HOME/.codex/skills" codex "${codex_skills[@]}" $THIRD_PARTY_SKILLS
+
+# ---------- 2. CLI ----------
+log "CLI を検査中"
+for c in $CLI_BASE $CLI_BOOTSTRAP; do
+  if have "$c"; then record cli "$c" OK; else record cli "$c" MISSING "PATH に無い"; fi
+done
+for c in $CLI_LOCAL_ONLY; do
+  if have "$c"; then
+    record cli "$c" OK "ローカル専用"
+  elif is_cloud; then
+    record cli "$c" N/A "クラウドでは対象外"
+  else
+    record cli "$c" MISSING "ローカルに無い"
+  fi
+done
+
+# ---------- 3. 設定ファイル ----------
+log "設定ファイルを検査中"
+check_file() { # $1=category $2=path $3=note
+  if [ -e "$2" ]; then record "$1" "${2/#$HOME/\~}" OK "${3:-}"; else record "$1" "${2/#$HOME/\~}" MISSING "${3:-}"; fi
+}
+check_file config "$HOME/.claude/settings.json"
+check_file config "$HOME/.claude/CLAUDE.md"
+check_file config "$HOME/.claude/statusline.py"
+check_file config "$HOME/.claude/hooks/context_guard.py"
+check_file config "$HOME/.codex/AGENTS.md"
+check_file config "$HOME/.codex/AGENTS-common.md"
+check_file config "$HOME/.codex/hooks.json"
+check_file config "$HOME/.gitconfig"
+check_file config "$HOME/.zshenv"
+check_file config "$HOME/.config/git/ignore"
+
+# ---------- 4. private subagent (1Password 復元対象) ----------
+log "private subagent を検査中"
+for a in biz personal tech; do
+  check_file agent "$HOME/.claude/agents/$a.md" "opmaterialize restore で復元"
+  check_file agent "$HOME/.codex/agents/$a.toml" "opmaterialize restore で復元"
+done
+
+# ---------- 5. secret-backed / 認証材料 (有無のみ) ----------
+log "認証材料を検査中 (値は出力しない)"
+check_file secret "$HOME/.config/op/dotfiles.env" "op:// 参照ファイル"
+if [ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+  record secret OP_SERVICE_ACCOUNT_TOKEN OK "env に設定あり"
+elif is_cloud; then
+  record secret OP_SERVICE_ACCOUNT_TOKEN MISSING "environment 変数に未登録 (restore 不可)"
+else
+  record secret OP_SERVICE_ACCOUNT_TOKEN N/A "ローカルは op アプリ認証"
+fi
+gws_profiles=0
+for f in "$HOME"/.config/gws/accounts/*/credentials.json; do
+  [ -e "$f" ] && gws_profiles=$((gws_profiles + 1))
+done
+if [ "$gws_profiles" -gt 0 ]; then
+  record secret "gws プロファイル" OK "$gws_profiles 件"
+else
+  record secret "gws プロファイル" MISSING "opmaterialize restore 未実行?"
+fi
+if [ -f "$HOME/.codex/auth.json" ]; then
+  record secret "codex auth.json" OK
+elif is_cloud; then
+  record secret "codex auth.json" MISSING "CODEX_AUTH_JSON 未設定?"
+else
+  record secret "codex auth.json" MISSING "codex login 未実行?"
+fi
+
+# ---------- 6. MCP ----------
+log "MCP を検査中"
+if [ "${#mcp_servers[@]}" -gt 0 ] && have python3; then
+  for entry in "${mcp_servers[@]}"; do
+    name="${entry%%|*}"
+    if python3 -c 'import json,os,sys; d=json.load(open(os.path.expanduser("~/.claude.json"))); sys.exit(0 if sys.argv[1] in (d.get("mcpServers") or {}) else 1)' "$name" 2>/dev/null; then
+      record mcp "$name" OK
+    else
+      record mcp "$name" MISSING "claude.json に未登録"
+    fi
+  done
+fi
+record mcp "pencil / slack-twin / claude.ai コネクタ" N/A "ローカルアプリ依存・対話 OAuth のため再現対象外"
+
+# ---------- 7. plugins ----------
+log "plugin を検査中"
+if have python3 && [ -f "$HOME/.claude/settings.json" ]; then
+  plugin_lines="$(python3 - "$HOME/.claude/settings.json" "$HOME/.claude/plugins/installed_plugins.json" <<'PYP' 2>/dev/null
+import json, os, sys
+try:
+    enabled = (json.load(open(sys.argv[1])) or {}).get("enabledPlugins") or {}
+except Exception:
+    enabled = {}
+try:
+    installed = (json.load(open(sys.argv[2])) or {}).get("plugins") or {}
+except Exception:
+    installed = {}
+for name, on in enabled.items():
+    if not on:
+        continue
+    print("%s\t%s" % (name, "OK" if name in installed else "MISSING"))
+PYP
+)"
+  while IFS=$'\t' read -r pname pstat; do
+    [ -n "$pname" ] || continue
+    if [ "$pstat" = OK ]; then record plugin "$pname" OK; else record plugin "$pname" MISSING "marketplace 解決に失敗"; fi
+  done <<< "$plugin_lines"
+fi
+
+# ---------- 8. bootstrap の実行結果 ----------
+status_file="${BOOTSTRAP_WEB_STATUS:-$HOME/.cache/bootstrap-web/status.json}"
+if [ -f "$status_file" ]; then
+  record bootstrap status.json OK "$status_file"
+elif is_cloud; then
+  record bootstrap status.json MISSING "bootstrap-web 未実行?"
+else
+  record bootstrap status.json N/A "ローカルでは bootstrap-web を使わない"
+fi
+
+# ---------- 出力 ----------
+total=${#results_name[@]}
+ok=0; missing=0; na=0
+for i in $(seq 0 $((total - 1))); do
+  case "${results_status[$i]}" in
+    OK) ok=$((ok + 1)) ;;
+    MISSING) missing=$((missing + 1)) ;;
+    N/A) na=$((na + 1)) ;;
+  esac
+done
+
+if [ "$MODE" = json ]; then
+  printf '{\n  "timestamp": "%s",\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf '  "cloud": %s,\n' "$(is_cloud && echo true || echo false)"
+  printf '  "summary": {"ok": %d, "missing": %d, "na": %d, "total": %d},\n' "$ok" "$missing" "$na" "$total"
+  printf '  "items": [\n'
+  for i in $(seq 0 $((total - 1))); do
+    sep=","; [ "$i" -eq $((total - 1)) ] && sep=""
+    printf '    {"category": "%s", "name": "%s", "status": "%s", "note": "%s"}%s\n' \
+      "${results_cat[$i]}" "${results_name[$i]}" "${results_status[$i]}" "${results_note[$i]}" "$sep"
+  done
+  printf '  ]\n}\n'
+elif [ "$MODE" = quiet ]; then
+  printf 'ok=%d missing=%d na=%d total=%d\n' "$ok" "$missing" "$na" "$total"
+else
+  printf '\n%-18s %-42s %-8s %s\n' CATEGORY NAME STATUS NOTE
+  printf '%s\n' "--------------------------------------------------------------------------------------------"
+  for i in $(seq 0 $((total - 1))); do
+    color=""; reset=$'\033[0m'
+    case "${results_status[$i]}" in
+      OK) color=$'\033[1;32m' ;;
+      MISSING) color=$'\033[1;31m' ;;
+      N/A) color=$'\033[1;33m' ;;
+      *) color=""; reset="" ;;
+    esac
+    printf '%-18s %-42s %s%-8s%s %s\n' \
+      "${results_cat[$i]}" "${results_name[$i]}" "$color" "${results_status[$i]}" "$reset" "${results_note[$i]}"
+  done
+  printf '\n環境: %s\n' "$(is_cloud && echo 'クラウド (ephemeral)' || echo 'ローカル')"
+  printf 'サマリ: OK=%d MISSING=%d N/A=%d (total %d)\n' "$ok" "$missing" "$na" "$total"
+  [ "$missing" -gt 0 ] && printf '\nMISSING がある場合の復旧: bootstrap-web の再実行 → opmaterialize restore\n'
+fi
+
+[ "$missing" -eq 0 ] || exit 1
+exit 0

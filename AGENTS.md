@@ -63,8 +63,12 @@
 - 配布する repo オリジナル skill は publisher layout の `skills/` 配下を正本として git 管理すること
 - publisher layout の skill は `gh skill install --from-local <repo-root> <skill> --agent <agent> --scope user` を標準配備経路とし、chezmoi で `~/.claude/skills/` や `~/.codex/skills/` へ直接配備しないこと
 - 新しいマシン向けの復元情報は当面 script 化せず、`docs/skills-install-manifest.md` の docs-only manifest を正本として保存すること
-- ただし Claude Code on the web の ephemeral 環境に限り、`scripts/bootstrap-web` と SessionStart hook（`.claude/hooks/session-start.sh`）で `chezmoi apply` とスキル再インストールを自動化してよい（ADR-0045）。これはセッション起動時の再現専用で、ローカル / macOS の標準配備は引き続き `gh skill install` と docs-only manifest を正本とすること
+- ただしクラウドの ephemeral 環境（Claude Code on the web / Codex cloud）に限り、`scripts/bootstrap-web` と SessionStart hook（`.claude/hooks/session-start.sh`、Claude のみ）で `chezmoi apply` とスキル再インストールを自動化してよい（ADR-0045・ADR-0058）。これはセッション起動時の再現専用で、ローカル / macOS の標準配備は引き続き `gh skill install` と docs-only manifest を正本とすること
 - `scripts/bootstrap-web` では first-party skill を必須（欠落で `exit 1`）、公開 third-party skill を best-effort（取得失敗は skip）として扱い、結果を `$BOOTSTRAP_WEB_STATUS` に機械可読で残すこと。`chezmoi apply --force` がハーネス書き込みの `~/.gitconfig` も上書きし、web セッションのコミットが dotfiles の git identity になる点は意識的受容事項として ADR-0045 に記録すること
+- `scripts/bootstrap-web` はプラットフォーム非依存に保ち、source の固定は `BOOTSTRAP_REPO_DIR` で行うこと（`CLAUDE_PROJECT_DIR` は Claude 固有のため前提にしない、ADR-0058）
+- skill / CLI / MCP を増減したときは `docs/skills-install-manifest.md`・`scripts/bootstrap-web`・`scripts/verify-cloud-parity` の 3 箇所を同期すること。期待リストの正本は `bootstrap-web` の配列とし、検証側でリストを再定義しないこと
+- クラウド環境の再現差分は `scripts/verify-cloud-parity` で検査すること。`MISSING` は移植差分、`N/A` はその環境の対象外を意味し、secret は有無だけを検査して実値を出力しないこと
+- headless で再現できない要素（ローカルアプリ依存の MCP、対話 OAuth 必須の連携）は再現対象に含めず、対象外である理由を配列コメントと手順書に残すこと
 - external skill はこの repo に vendoring せず、`gh skill` による install / update / remove を標準運用とすること
 - ただし fork 元 `rmanzoku/dotfiles` の publisher layout skill は external ではなく repo オリジナル skill と同格に扱い、同一 path `skills/<name>` へ verbatim copy で取り込み、first-party として `docs/skills-install-manifest.md` と `scripts/bootstrap-web` を同期すること（fork sync との整合が目的）
 - third-party external skill が upstream publisher layout を持たない場合は、`docs/skills-install-manifest.md` に `fetch + gh skill install --from-local` 手順を残して管理すること
