@@ -103,3 +103,41 @@ ADR-0045 は Claude Code on the web の ephemeral 環境について、`scripts/
   （`installed_plugins.json` に無い）。クラウド固有の欠落ではなく既存の設定不整合であり、
   対処は本 ADR の範囲外（`dot_claude/settings.json` は Codex の管理対象）。
 - クラウド実測（Claude Code on the web / Codex cloud での `verify-cloud-parity` 実行）は未実施。
+
+## 追記 (2026-09-02, Claude Code / Claude Opus 5)
+
+Claude Code on the web で実測したところ `OK=80 / MISSING=11 / N/A=4` となり、private subagent
+6 件が `MISSING` だった。`status.json` の `onepassword` は `restored` で restore 自体は成功して
+いたため、原因を追ったところ **`Secrets Manifest` の `out_path` が chezmoi source を指していた**
+ことが分かった。
+
+- マニフェストの復元先: `$HOME/.local/share/chezmoi/dot_claude/agents/private_biz.md`
+- 実際の chezmoi source: ghq checkout（ADR-0056 で移行済み）
+
+source を移した際にマニフェストが追随しておらず、かつ旧 source `~/.local/share/chezmoi/` が
+ローカルに残っていたため `opmaterialize diff` は `unchanged` を返し、**壊れていることが
+ローカルからは観測できない状態**だった。クラウドでは旧パスへ復元されるが、そこは chezmoi
+source ではないため `chezmoi apply` の対象にならず、`~/.claude/agents/` に配置されない。
+
+**決定**: secret-backed file の `out_path` は **chezmoi source ではなく最終配置先**を指す。
+
+```
+$HOME/.local/share/chezmoi/dot_claude/agents/private_biz.md  →  $HOME/.claude/agents/biz.md
+$HOME/.local/share/chezmoi/dot_codex/agents/private_biz.toml →  $HOME/.codex/agents/biz.toml
+```
+
+source パスはマシンごとに異なり（ローカルは ghq checkout、Claude Code on the web は
+`/opt/dotfiles`、Codex cloud は `/workspace/<repo>`）、source を指す限りクラウドでは機能しない。
+最終配置先なら環境に依存しない。ローカルでは `chezmoi apply` と `opmaterialize restore` が
+同じ内容を同じ場所へ書くため競合しない。
+
+2026-09-02 に private subagent 6 行を書き換え済み。`opmaterialize diff` で 6 件とも
+`unchanged`（`~/.claude/agents/*.md`・`~/.codex/agents/*.toml`）になることを確認した。
+
+未対応（同じ問題を抱えるが今回のスコープ外）:
+
+- `$HOME/.local/share/chezmoi/dot_config/private_private-secretary/private_empty_facts.jsonl`
+  が旧 source パスのまま残っている。
+- `~/.config/gws/accounts/yoake/` の 2 ファイルが `missing`。
+- `dotfiles.env` / `taskell/credentials.json` / `gws/client_secret.json` が `changed`
+  （ローカルと 1Password が乖離）。

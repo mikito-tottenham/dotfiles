@@ -29,6 +29,15 @@ The manifest is a TSV with columns `type  item  out_path  mode  vault`, stored i
 
 `restore` and `diff` support both types. `add` is document-based only and refuses against a field-based (Secure Note) manifest; register field-based secrets manually in 1Password (a Secure Note with a `content` field plus a `field` manifest row).
 
+`out_path` must point at the **final deployed location**, never at a chezmoi source path. Source
+paths differ per machine (local ghq checkout, `/opt/dotfiles` on Claude Code on the web,
+`/workspace/<repo>` on Codex cloud), so a manifest row pointing into the source tree restores to a
+directory that `chezmoi apply` does not read, and the file never reaches its target. Write
+`$HOME/.claude/agents/biz.md`, not `$HOME/.local/share/chezmoi/dot_claude/agents/private_biz.md`.
+A stale source path is invisible to `opmaterialize diff` while an old source directory still exists
+locally, so verify the target path itself when a restored file appears to be missing on a new
+machine (2026-09-02: private subagents were restored into a stale source tree and never deployed).
+
 ## Stable Invocation
 
 Before any live 1Password operation, verify the command path and authentication state without printing secret material:
