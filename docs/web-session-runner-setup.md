@@ -1,6 +1,6 @@
 ---
 title: "Cloud Session Runner & 1Password Setup Runbook"
-updated_at: 2026-09-01
+updated_at: 2026-09-02
 ---
 
 # Cloud Session Runner & 1Password Setup Runbook
@@ -106,8 +106,13 @@ Claude Code on the web は environment を複数持てる（既定の `Default` 
 
 ## Codex cloud の environment 設定（UI）
 
-Codex settings → Environments → 対象 environment で設定する（repo 内ファイルからは設定できない）。
-**Claude Code on the web とは env / secret の注入タイミングが逆**なので、設定を流用しないこと。
+[Codex settings → Environments](https://chatgpt.com/codex/settings/environments) で設定する
+（repo 内ファイルからは設定できない）。**Claude Code on the web とは構造が違う**ので、設定を流用しないこと。
+
+- **environment はリポジトリごと**に作る（Claude は environment を選んで任意の repo を開く方式）。
+- repo は **`/workspace/<repo-name>`** に clone され、setup script はその repo root で走る。
+  そのため dotfiles repo の environment では `./scripts/bootstrap-web` がそのまま使える。
+- **setup script と maintenance script は network が常に有効**。遮断されるのは agent phase だけ。
 
 | 項目 | Claude Code on the web | Codex cloud |
 | :-- | :-- | :-- |
@@ -134,38 +139,52 @@ OP_SERVICE_ACCOUNT_TOKEN=ops_xxxxxxxx   # 1Password service account（read 限�
 > スナップショットに焼き込まれる（最大 12h 残る）。既定では採らない。
 > `GEMINI_API_KEY` / `GH_TOKEN` / `COPILOT_GITHUB_TOKEN` は対応 runner を使う場合のみ追加。
 
-### 2. Internet access（agent phase の allowlist）
+### 2. Agent internet access
 
-agent phase は既定で遮断される。setup phase は常に network があるので設定不要。
-セッション内で restore と runner 実行をするため、以下を allowlist に加える。
+agent phase は既定で **Off**（`Internet access will be disabled after setup`）。
+セッション内で `opmaterialize restore` を実行するには **On** にする必要がある。
+setup / maintenance は常に network があるので、この設定は agent phase だけに効く。
 
-```
-cache.agilebits.com              # op バイナリ配布
-*.1password.com                  # op 実行時の 1Password API
-github.com                       # skill / CLI の取得
-objects.githubusercontent.com    # GitHub release アセット
-registry.npmjs.org               # codex / gemini / copilot CLI
-proxy.golang.org                 # ghq (go install)
-```
+UI は 3 つに分かれている。
+
+| 欄 | 設定値 |
+| :-- | :-- |
+| Domain allowlist | `Common dependencies`（GitHub / npm / Go proxy 等はここに含まれる） |
+| Additional allowed domains | `cache.agilebits.com, downloads.1password.com, *.1password.com` |
+| Allowed HTTP Methods | `All methods` |
+
+1Password 系は `Common dependencies` に入らないので Additional 側に足す。カンマ区切り。
+
+> UI 上に「ELEVATED RISK」の警告が出るとおり、agent internet access を On にすると
+> prompt injection や exfiltration のリスクが上がる。必要なドメインとメソッドだけに絞る。
+> restore をセッション内で行わない運用（secret 枠 + setup script で restore）を選ぶなら
+> On にせず Off のままにできるが、その場合は復元結果がコンテナキャッシュに焼き込まれる。
 
 ### 3. Setup script
 
+**dotfiles repo の environment**（repo 自体が source なので 1 行で済む）:
+
 ```bash
-#!/bin/bash
-set -uo pipefail
+BOOTSTRAP_WEB_SKIP_OP=true ./scripts/bootstrap-web
+```
+
+**それ以外の repo の environment**（dotfiles を別途 clone して source に指定する）:
+
+```bash
 DOTFILES=/opt/dotfiles
 if [ ! -d "$DOTFILES/.git" ]; then
-  git clone --depth 1 https://github.com/mikito-tottenham/dotfiles.git "$DOTFILES" \
-    || { echo "[setup] dotfiles clone failed"; exit 0; }
+  git clone --depth 1 https://github.com/mikito-tottenham/dotfiles.git "$DOTFILES" || exit 0
 fi
 ln -sf "$DOTFILES/dot_local/bin/executable_gws-account" /usr/local/bin/gws-account 2>/dev/null || true
-# Codex cloud には CLAUDE_PROJECT_DIR が無いため BOOTSTRAP_REPO_DIR で source を固定する。
-# secret をスナップショットへ焼き込まないため restore は skip し、agent phase の
-# on-demand `opmaterialize restore` に委ねる。
-BOOTSTRAP_REPO_DIR="$DOTFILES" BOOTSTRAP_WEB_SKIP_OP=true "$DOTFILES/scripts/bootstrap-web" \
-  || echo "[setup] bootstrap-web non-zero (継続)"
-exit 0
+BOOTSTRAP_REPO_DIR="$DOTFILES" BOOTSTRAP_WEB_SKIP_OP=true "$DOTFILES/scripts/bootstrap-web"
 ```
+
+`BOOTSTRAP_WEB_SKIP_OP=true` は secret をコンテナキャッシュへ焼き込まないため。restore は
+agent phase の on-demand 実行に委ねる（上記 1 の方針）。
+
+> UI のテキストエリアへブラウザ経由で長い文字列を打ち込むと**文字が落ちることがある**
+> （2026-09-02 実測: `./scripts` → `/scripts`、`||` → `|`、`1password` → `1pssword`）。
+> 貼り付け後は必ず表示を読み返して検証すること。短い 1 行にしておくと事故が減る。
 
 ### 4. Maintenance script（キャッシュ再開時）
 
@@ -173,16 +192,21 @@ Codex cloud はコンテナをキャッシュ（最大 12h）し、再開時に 
 これを設定しないと、dotfiles を更新してもキャッシュ内の古い clone が使われ続ける
 （Claude 側で「Setup script を編集しないと再ビルドされない」のと同じハマりどころ）。
 
+maintenance script は「キャッシュから再開したコンテナで、ブランチを checkout した後」に走る。
+repo 側は Codex が最新にしてくれるので、bootstrap を再実行するだけでよい。
+
+**dotfiles repo の environment**:
+
 ```bash
-#!/bin/bash
-set -uo pipefail
+BOOTSTRAP_WEB_SKIP_OP=true ./scripts/bootstrap-web
+```
+
+**それ以外の repo の environment**:
+
+```bash
 DOTFILES=/opt/dotfiles
-if [ -d "$DOTFILES/.git" ]; then
-  git -C "$DOTFILES" pull --ff-only >/dev/null 2>&1 || echo "[maint] dotfiles pull failed (継続)"
-fi
-BOOTSTRAP_REPO_DIR="$DOTFILES" BOOTSTRAP_WEB_SKIP_OP=true "$DOTFILES/scripts/bootstrap-web" \
-  || echo "[maint] bootstrap-web non-zero (継続)"
-exit 0
+[ -d "$DOTFILES/.git" ] && git -C "$DOTFILES" pull --ff-only >/dev/null 2>&1
+BOOTSTRAP_REPO_DIR="$DOTFILES" BOOTSTRAP_WEB_SKIP_OP=true "$DOTFILES/scripts/bootstrap-web"
 ```
 
 `bootstrap-web` は冪等なので再実行して問題ない。ここでも `BOOTSTRAP_WEB_SKIP_OP=true` を
