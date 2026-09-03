@@ -3,9 +3,12 @@
 [user]
 	email = 32815656+mikito-tottenham@users.noreply.github.com
 	name = Mikito Ebishima
+# gh は GH_TOKEN を 1Password から受け取るため、helper 側で oprun を噛ませる。
+# これにより 1Password の認可が要るのは GitHub への通信時だけになり、
+# status / log / diff / commit などのローカル操作は 1Password がロック中でも動く。
 [credential "https://github.com"]
 	helper =
-	helper = !gh auth git-credential
+	helper = !oprun gh auth git-credential
 [credential "https://gist.github.com"]
 	helper =
-	helper = !gh auth git-credential
+	helper = !oprun gh auth git-credential

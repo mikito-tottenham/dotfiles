@@ -15,3 +15,12 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 . "$HOME/.local/bin/env"
 export PATH=$PATH:$HOME/.maestro/bin
+
+# Entire CLI shell completion
+autoload -Uz compinit && compinit && source <(entire completion zsh)
+
+alias gh='oprun gh'
+# git は oprun で包まない。包むと status / log / diff などのローカル操作まで
+# 1Password の認可待ちになり、ロック中や非対話セッションで全て失敗するため。
+# GitHub への通信に要る GH_TOKEN は ~/.gitconfig の credential helper
+# (!oprun gh auth git-credential) が必要なときだけ取りに行く。

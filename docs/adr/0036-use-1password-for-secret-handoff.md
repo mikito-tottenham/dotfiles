@@ -3,8 +3,8 @@ title: "Use 1Password For Secret Handoff"
 date: 2026-05-20
 agent: "Codex GPT-5"
 status: "accepted"
-updated_at: 2026-06-22
-updated_by_agent_model: "Claude Code"
+updated_at: 2026-08-16
+updated_by_agent_model: "Codex GPT-5"
 ---
 
 # Context
@@ -30,6 +30,10 @@ op run --env-file "$OP_DOTFILES_ENV_FILE" -- <command>
 
 When `OP_DOTFILES_ENV_FILE` is unset, it defaults to `~/.config/op/dotfiles.env`.
 
+GitHub tokens remain in 1Password and are not persisted to macOS Keychain through `gh auth login`.
+Interactive Zsh resolves `gh` to `oprun gh`, which injects `GH_TOKEN` from the unmanaged 1Password reference file only for the lifetime of the invoked process.
+Git itself is not wrapped in `oprun`; Git HTTPS uses the credential helper `!oprun gh auth git-credential`, so 1Password authorization is required only when Git actually talks to GitHub (ADR-0055).
+
 Secret-backed files that must exist on disk are declared in a 1Password Document item named `Secrets Manifest` and restored with the `opmaterialize` script bundled in the `onepassword-secret-materialize` skill.
 The manifest is not managed by this repository because it can reveal individual secret item names and local file destinations.
 Generated files remain ignored.
@@ -44,6 +48,7 @@ AI agents use the `onepassword-secret-materialize` skill as the workflow entrypo
 - `~/.zshenv.local` remains available for non-secret machine-local overrides only.
 - New machines restore the wrapper and example file through chezmoi, then create the local reference file manually.
 - Commands that need API keys should be launched with `oprun <command>` or a direct `op run --env-file ... -- <command>`.
+- GitHub CLI and Git HTTPS operations use the existing `GH_TOKEN` reference through `oprun`; do not copy the resolved token into macOS Keychain or `gh`'s persistent authentication store.
 - Resolved config files produced by `op inject` must stay outside git and under ignored local paths such as `~/.config/op/injected/`.
 - File-based secrets such as VPN configs should be restored with `opmaterialize` into stable `~/.config/...` paths.
 - New file-based secrets should be registered with `opmaterialize add` instead of editing the manifest by hand when possible.

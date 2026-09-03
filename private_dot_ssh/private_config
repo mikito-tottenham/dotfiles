@@ -3,9 +3,13 @@ Include ~/.ssh/config.local
 Host github.com
     HostName github.com
     User git
-    IdentityFile ~/.ssh/id_ed25519
-    IdentitiesOnly yes
 
 # Keep client- or project-specific GitHub identities in an unmanaged local file.
 # Example aliases belong in ~/.ssh/config.local and can target github.com with a
 # separate IdentityFile, so the managed repo does not disclose client names.
+
+# 秘密鍵はディスクに置かず 1Password の SSH agent から受け取る（→ ADR-0055）。
+# マシン側で 1Password アプリの 設定 → 開発者 → 「SSH エージェントを使用する」を
+# 有効にすると agent.sock が生成される。IdentitiesOnly は agent の鍵を弾くため付けない。
+Host *
+    IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"

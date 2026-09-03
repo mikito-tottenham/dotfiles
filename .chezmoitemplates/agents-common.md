@@ -8,6 +8,9 @@
 - 作業の成功条件を検証可能な形で定め、バグ修正や機能追加では再現・テスト・差分確認などの具体的な確認手段まで含めて完了判断すること
 - 再現テストを書くときは、観測済みの失敗と既存契約だけを固定し、未確認の戻り値・エラー型・出力形式を新しい期待値として作らないこと
 - secret 実値は 1Password に保存し、CLI では `op run --env-file` / `op read` と `op://...` secret reference 経由で受け渡すこと
+- **認証は例外なく 1Password 経由とすること**。ツール独自の認証ストアへ実値を保存する経路（`gh auth login` の keyring、平文の token file、1Password 管理外の SSH 秘密鍵など）は、1Password が使えないときの代替経路としても採用しないこと。SSH が要る場合は 1Password の SSH agent を使う
+- 認証が通らない場合の一次切り分けは 1Password 側（アプリのロック解除、CLI 統合の有効化、`op whoami` の確認）とし、別ストアへ実値を置く回避策で復旧させないこと
+- 1Password への依存は認証が必要な操作だけに限定すること。読み取り専用のローカル操作（`git status` / `git log` 等）まで `op run` を経由させると、1Password のロック中や非対話セッションで作業全体が停止する（例: `alias git='oprun git'` ではなく、git credential helper 側で `oprun` を噛ませる。→ dotfiles ADR-0055）
 - `~/.config/op/dotfiles.env` は管理外の secret reference 置き場とし、実値を書かないこと
 - `~/.zshenv.local` は secret の置き場ではなく、マシン固有の非 secret local override に限定すること
 - 永続的に参照すべき指示や、worktree / セッションをまたいで再現が必要な情報は Memory ではなく git 管理ファイル（作業リポジトリの `docs/`・`.agents/`、またはグローバル dotfiles 例: `~/.codex/AGENTS.md`）に保存し、恒久性のあるユーザー指示・再発しやすい運用判断・複数回参照しそうな手順は原則その作業ターン内で反映すること
