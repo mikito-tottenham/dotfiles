@@ -11,6 +11,7 @@ fi
 if [ "$#" -eq 0 ]; then
   printf '%s\n' "usage: oprun <command> [args...]" >&2
   printf '%s\n' "uses: op run --env-file \"$env_file\" -- <command>" >&2
+  printf '%s\n' "set OPRUN_NO_MASKING=1 when the command must emit the secret itself (git credential helper)" >&2
   exit 64
 fi
 
@@ -18,6 +19,13 @@ if [ ! -r "$env_file" ]; then
   printf '%s\n' "oprun: env file not readable: $env_file" >&2
   printf '%s\n' "create it from ~/.config/op/dotfiles.env.example and store only op:// secret references in it" >&2
   exit 66
+fi
+
+# op run は既定で子プロセスの出力中のシークレットを "<concealed by 1Password>" に
+# 置換する。トークンそのものを出力するのが仕事のコマンド（git credential helper 等）
+# では出力が壊れるため、その用途に限り OPRUN_NO_MASKING=1 で無効化する。
+if [ "${OPRUN_NO_MASKING:-0}" = "1" ]; then
+  exec op run --no-masking --env-file "$env_file" -- "$@"
 fi
 
 exec op run --env-file "$env_file" -- "$@"

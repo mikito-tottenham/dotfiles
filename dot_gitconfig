@@ -6,9 +6,12 @@
 # gh は GH_TOKEN を 1Password から受け取るため、helper 側で oprun を噛ませる。
 # これにより 1Password の認可が要るのは GitHub への通信時だけになり、
 # status / log / diff / commit などのローカル操作は 1Password がロック中でも動く。
+# OPRUN_NO_MASKING=1 は必須。無いと op run が出力中のトークンを
+# "<concealed by 1Password>" に置換し、git が 24 文字のプレースホルダで
+# 認証しようとして "Invalid username or token" で失敗する（→ ADR-0055）。
 [credential "https://github.com"]
 	helper =
-	helper = !oprun gh auth git-credential
+	helper = !OPRUN_NO_MASKING=1 oprun gh auth git-credential
 [credential "https://gist.github.com"]
 	helper =
-	helper = !oprun gh auth git-credential
+	helper = !OPRUN_NO_MASKING=1 oprun gh auth git-credential
