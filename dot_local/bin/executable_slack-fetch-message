@@ -1,0 +1,255 @@
+#!/usr/bin/env python3
+"""Slack のメッセージ permalink を Web API で取得し、Markdown / JSON で出力する (read-only)。
+
+    slack-fetch-message 'https://<ws>.slack.com/archives/C0XXXX/p1788422861861069'
+    slack-fetch-message '<permalink>' --json > .context/slack/<name>.json
+
+前提: token は **環境変数 `SLACK_API_TOKEN`** で供給される (user token `xoxp-…` / bot token
+`xoxb-…` のどちらでも可)。実値をコマンドライン引数やこのスクリプトに書かない。
+1Password の reference は `~/.config/op/dotfiles.env` に `SLACK_API_TOKEN=op://...` として置き、
+`op run --env-file="$HOME/.config/op/dotfiles.env" -- slack-fetch-message ...` の形で実値へ解決する。
+作業リポジトリの `.env` (direnv) から供給する場合は実値を書く (reference のままだと本 CLI が拒否する)。
+
+必要な Slack App scope (読取のみ): channels:history (必須) / groups:history, im:history, mpim:history
+(非公開・DM を読む場合) / channels:read, groups:read, users:read (名前解決、無ければ ID 表示)。
+
+呼ぶ API (すべて read): conversations.replies (本文とスレッド) / conversations.info (チャンネル名、
+best effort) / users.info (投稿者名、best effort)。書込系 API (chat.postMessage 等) は実装しない。
+
+出力: 本文は stdout。進捗・エラーは stderr (token 値は出さない)。
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+ENV_KEY = "SLACK_API_TOKEN"
+API_BASE = "https://slack.com/api/"
+PAGE_LIMIT = 200
+JST = ZoneInfo("Asia/Tokyo")
+
+_PERMALINK_RE = re.compile(
+    r"^https://(?P<workspace>[A-Za-z0-9-]+)\.slack\.com/archives/(?P<channel>[A-Z0-9]+)/p(?P<ts16>\d{16})/?$"
+)
+
+
+def log(message: str) -> None:
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {message}", file=sys.stderr, flush=True)
+
+
+# ─── permalink ───────────────────────────────────────────────────────────────
+
+def p_to_ts(ts16: str) -> str:
+    """permalink の `p1788422861861069` → API の `1788422861.861069`。"""
+    return f"{ts16[:-6]}.{ts16[-6:]}"
+
+
+def parse_permalink(url: str) -> dict[str, str | None]:
+    """permalink を workspace / channel / ts / thread_ts に分解する。
+
+    スレッド内返信の permalink は `?thread_ts=<親 ts>&cid=<channel>` を持つ。
+    返り値の `thread_ts` は返信のときだけ入る (親メッセージ自身なら None)。
+    """
+    parts = urllib.parse.urlsplit(url.strip())
+    base = urllib.parse.urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+    m = _PERMALINK_RE.match(base)
+    if not m:
+        raise ValueError(
+            "Slack の permalink ではありません: 期待形式 https://<ws>.slack.com/archives/<CHANNEL>/p<16桁>"
+        )
+    query = urllib.parse.parse_qs(parts.query)
+    ts = p_to_ts(m.group("ts16"))
+    thread_ts = (query.get("thread_ts") or [None])[0]
+    if thread_ts == ts:
+        thread_ts = None
+    return {
+        "workspace": m.group("workspace"),
+        "channel": m.group("channel"),
+        "ts": ts,
+        "thread_ts": thread_ts,
+    }
+
+
+# ─── Slack Web API ───────────────────────────────────────────────────────────
+
+class SlackApiError(RuntimeError):
+    def __init__(self, method: str, error: str, needed: str | None = None):
+        self.method = method
+        self.error = error
+        self.needed = needed
+        detail = f"{method}: {error}" + (f" (needed scope: {needed})" if needed else "")
+        super().__init__(detail)
+
+
+def slack_get(token: str, method: str, params: dict[str, str]) -> dict:
+    url = API_BASE + method + "?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        raise SlackApiError(method, f"HTTP {e.code}") from e
+    except urllib.error.URLError as e:
+        raise SlackApiError(
+            method,
+            f"network: {e.reason} — slack.com へ到達できません。リモート環境ならネットワークポリシーで "
+            "slack.com を許可すること",
+        ) from e
+    if not payload.get("ok"):
+        raise SlackApiError(method, payload.get("error", "unknown"), payload.get("needed"))
+    return payload
+
+
+def fetch_thread(token: str, channel: str, ts: str) -> list[dict]:
+    """conversations.replies を cursor で全ページ取得する。ts が単独メッセージなら 1 件だけ返る。"""
+    messages: list[dict] = []
+    cursor: str | None = None
+    page = 0
+    while True:
+        page += 1
+        params = {"channel": channel, "ts": ts, "limit": str(PAGE_LIMIT), "inclusive": "true"}
+        if cursor:
+            params["cursor"] = cursor
+        log(f"conversations.replies page {page} (channel={channel}, ts={ts})")
+        payload = slack_get(token, "conversations.replies", params)
+        messages.extend(payload.get("messages", []))
+        cursor = (payload.get("response_metadata") or {}).get("next_cursor") or None
+        if not cursor:
+            break
+    log(f"取得 {len(messages)} 件")
+    return messages
+
+
+class NameResolver:
+    """users.info / conversations.info を best effort で引く。scope 不足なら ID のまま返す。"""
+
+    def __init__(self, token: str):
+        self.token = token
+        self.users: dict[str, str] = {}
+        self.user_lookup_disabled = False
+
+    def user(self, user_id: str) -> str:
+        if not user_id:
+            return "(unknown)"
+        if user_id in self.users:
+            return self.users[user_id]
+        if self.user_lookup_disabled:
+            return user_id
+        try:
+            info = slack_get(self.token, "users.info", {"user": user_id})["user"]
+            name = (
+                (info.get("profile") or {}).get("display_name")
+                or info.get("real_name")
+                or info.get("name")
+                or user_id
+            )
+        except SlackApiError as e:
+            log(f"users.info 不可 ({e.error}) — 以降は user ID のまま表示")
+            self.user_lookup_disabled = True
+            name = user_id
+        self.users[user_id] = name
+        return name
+
+    def channel(self, channel_id: str) -> str:
+        try:
+            ch = slack_get(self.token, "conversations.info", {"channel": channel_id})["channel"]
+            return ch.get("name") or channel_id
+        except SlackApiError as e:
+            log(f"conversations.info 不可 ({e.error}) — channel ID のまま表示")
+            return channel_id
+
+
+# ─── rendering ───────────────────────────────────────────────────────────────
+
+_MENTION_RE = re.compile(r"<@([A-Z0-9]+)(?:\|[^>]*)?>")
+_CHANNEL_RE = re.compile(r"<#([A-Z0-9]+)\|([^>]*)>")
+_LINK_RE = re.compile(r"<((?:https?|mailto):[^>|]+)(?:\|([^>]*))?>")
+_SPECIAL_RE = re.compile(r"<!(channel|here|everyone)(?:\|[^>]*)?>")
+
+
+def render_text(text: str, user_name=lambda uid: uid) -> str:
+    """Slack mrkdwn の `<@U…>` / `<url|label>` / HTML entity を人が読める形にする。"""
+    text = _MENTION_RE.sub(lambda m: f"@{user_name(m.group(1))}", text)
+    text = _CHANNEL_RE.sub(lambda m: f"#{m.group(2) or m.group(1)}", text)
+    text = _SPECIAL_RE.sub(lambda m: f"@{m.group(1)}", text)
+    text = _LINK_RE.sub(lambda m: f"{m.group(2)} ({m.group(1)})" if m.group(2) else m.group(1), text)
+    return text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+
+
+def format_ts(ts: str) -> str:
+    dt = datetime.fromtimestamp(float(ts), tz=timezone.utc).astimezone(JST)
+    return dt.strftime("%Y-%m-%d %H:%M JST")
+
+
+def to_markdown(meta: dict, channel_name: str, messages: list[dict], resolver: NameResolver, target_ts: str) -> str:
+    lines = [
+        f"# Slack: #{channel_name} ({meta['workspace']})",
+        "",
+        f"- permalink: {meta['permalink']}",
+        f"- channel: {meta['channel']} / messages: {len(messages)}",
+        "",
+    ]
+    for msg in messages:
+        who = resolver.user(msg.get("user") or msg.get("bot_id") or "")
+        marker = " ← link 先" if msg.get("ts") == target_ts else ""
+        lines.append(f"## {who} — {format_ts(msg.get('ts', '0'))}{marker}")
+        lines.append("")
+        lines.append(render_text(msg.get("text", ""), resolver.user))
+        for f in msg.get("files", []) or []:
+            lines.append(f"- 添付: {f.get('name') or f.get('title') or f.get('id')} {f.get('permalink', '')}".rstrip())
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+# ─── main ────────────────────────────────────────────────────────────────────
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("permalink", help="Slack メッセージの permalink")
+    parser.add_argument("--json", action="store_true", help="Markdown ではなく API の生 JSON を出力する")
+    args = parser.parse_args()
+
+    token = os.environ.get(ENV_KEY, "").strip()
+    if not token:
+        print(f"ERROR: 環境変数 {ENV_KEY} が空です。1Password の reference を ~/.config/op/dotfiles.env に置き、op run 経由で供給してください。", file=sys.stderr)
+        return 1
+    if token.startswith("op://"):
+        print(f"ERROR: {ENV_KEY} が op:// reference のままです。op run --env-file 経由で実値へ解決してから渡してください。", file=sys.stderr)
+        return 1
+
+    try:
+        meta = parse_permalink(args.permalink)
+    except ValueError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 2
+    meta["permalink"] = args.permalink.strip()
+    root_ts = meta["thread_ts"] or meta["ts"]
+    log(f"開始: workspace={meta['workspace']} channel={meta['channel']} ts={meta['ts']} token={token[:4]}… ({len(token)} chars)")
+
+    try:
+        messages = fetch_thread(token, meta["channel"], root_ts)
+    except SlackApiError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 3
+
+    if args.json:
+        json.dump({"meta": meta, "messages": messages}, sys.stdout, ensure_ascii=False, indent=2)
+        sys.stdout.write("\n")
+    else:
+        resolver = NameResolver(token)
+        channel_name = resolver.channel(meta["channel"])
+        sys.stdout.write(to_markdown(meta, channel_name, messages, resolver, meta["ts"]))
+    log("完了")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
