@@ -148,6 +148,7 @@ Conductor などのツールが git worktree を立ち上げて dotfiles を編�
 | `.local/bin/env` | PATH 設定スクリプト |
 | `.local/bin/oprun` | `op run --env-file` 用ラッパー |
 | `.local/bin/opmaterialize` | `onepassword-secret-materialize` skill 同梱 script を呼び出すラッパー |
+| `.local/bin/slack-fetch-message` | Slack の message permalink を Web API で読み Markdown / JSON 出力する read-only CLI |
 | `.claude/CLAUDE.md` | Claude Code グローバル設定 |
 | `.claude/settings.json` | Claude Code 設定 |
 | `.codex/AGENTS.md` | Codex エージェント設定 |
@@ -176,6 +177,7 @@ Conductor などのツールが git worktree を立ち上げて dotfiles を編�
 | `.config/op/dotfiles.env.example` | `dot_config/private_op/dotfiles.env.example` |
 | `.local/bin/oprun` | `dot_local/bin/executable_oprun` |
 | `.local/bin/opmaterialize` | `dot_local/bin/executable_opmaterialize` |
+| `.local/bin/slack-fetch-message` | `dot_local/bin/executable_slack-fetch-message` |
 | `.qwen/QWEN.md` | `dot_qwen/QWEN.md` |
 | `.qwen/settings.json` | `dot_qwen/settings.json` |
 
@@ -196,6 +198,9 @@ $EDITOR ~/.config/op/dotfiles.env
 
 # 例: GEMINI_API_KEY を必要とするコマンドを 1Password 経由で実行
 oprun gemini --help
+
+# 例: SLACK_API_TOKEN (dotfiles.env に op:// 参照) を必要とする Slack 読み取り CLI
+oprun slack-fetch-message 'https://<ws>.slack.com/archives/<CHANNEL>/p<16桁>'
 
 # 直接読む必要がある単発処理
 op read 'op://<vault>/<item>/<field>'
