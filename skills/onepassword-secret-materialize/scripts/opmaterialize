@@ -29,9 +29,10 @@ restore:
   (notesPlain field) and materialize declared files into their paths.
 
 add:
-  Save a local file as a 1Password Document, then add or update the matching
-  row in "Secrets Manifest". 'add' is document-based; against a field-based
-  (Secure Note) manifest it refuses, so register field-based secrets manually.
+  Save a local file in 1Password, then add or update the matching row in
+  "Secrets Manifest". The storage layout follows the manifest: against a
+  field-based (Secure Note) manifest the file body is saved as a Secure Note
+  field (requires jq), otherwise as a 1Password Document.
 
 Manifest columns:
   type    item    out_path    mode    vault
@@ -329,12 +330,14 @@ process_manifest() {
 update_manifest_file() {
   manifest="$1"
   next_manifest="$2"
-  item="$3"
-  out_path="$4"
-  mode="$5"
-  vault="$6"
+  kind="$3"
+  item="$4"
+  out_path="$5"
+  mode="$6"
+  vault="$7"
 
   awk -F '\t' -v OFS='\t' \
+    -v kind="$kind" \
     -v item="$item" \
     -v out_path="$out_path" \
     -v mode="$mode" \
@@ -343,7 +346,7 @@ update_manifest_file() {
       /^#/ || NF == 0 { print; next }
       $2 == item || $3 == out_path {
         if (!updated) {
-          print "document", item, out_path, mode, vault
+          print kind, item, out_path, mode, vault
           updated = 1
         }
         next
@@ -351,7 +354,7 @@ update_manifest_file() {
       { print }
       END {
         if (!updated) {
-          print "document", item, out_path, mode, vault
+          print kind, item, out_path, mode, vault
         }
       }
     ' "$manifest" > "$next_manifest"
@@ -360,7 +363,21 @@ update_manifest_file() {
 upload_manifest() {
   manifest="$1"
   if [ "$manifest_exists" = true ]; then
-    if [ -n "$manifest_vault" ]; then
+    if [ "$manifest_kind" = "field" ]; then
+      # Secure Note manifest: rewrite notesPlain via the documented
+      # get -> template -> piped edit roundtrip so the TSV stays off argv.
+      manifest_json="$work_dir/manifest.$$.json"
+      manifest_next_json="$work_dir/manifest.$$.next.json"
+      op item get "$manifest_item" --vault "$manifest_vault" --format json > "$manifest_json"
+      jq --rawfile m "$manifest" '
+          if any((.fields // [])[]; (.purpose // "") == "NOTES")
+          then .fields = [ .fields[] | if (.purpose // "") == "NOTES" then .value = $m else . end ]
+          else .fields = ((.fields // []) + [{"id": "notesPlain", "type": "STRING", "purpose": "NOTES", "label": "notesPlain", "value": $m}])
+          end
+        ' "$manifest_json" > "$manifest_next_json"
+      op item edit "$manifest_item" --vault "$manifest_vault" < "$manifest_next_json" >/dev/null
+      rm -f "$manifest_json" "$manifest_next_json"
+    elif [ -n "$manifest_vault" ]; then
       op document edit "$manifest_item" "$manifest" --vault "$manifest_vault" --file-name "secrets-manifest.tsv" --title "$manifest_item" >/dev/null
     else
       op document edit "$manifest_item" "$manifest" --file-name "secrets-manifest.tsv" --title "$manifest_item" >/dev/null
@@ -374,23 +391,51 @@ upload_manifest() {
   fi
 }
 
+add_field_secret() {
+  # Store the file body as a Secure Note '$field_label' field. The secret
+  # value stays off argv: it travels only through jq --rawfile and the
+  # documented get -> template -> piped edit roundtrip, with tmp files under
+  # the umask-protected work_dir (same guarantee as restore).
+  if op item get "$add_item" --vault "$add_vault" >/dev/null 2>&1; then
+    field_item_action="updated"
+  else
+    op item create --category "Secure Note" --title "$add_item" --vault "$add_vault" >/dev/null
+    field_item_action="created"
+  fi
+  item_json="$work_dir/additem.$$.json"
+  item_next_json="$work_dir/additem.$$.next.json"
+  op item get "$add_item" --vault "$add_vault" --format json > "$item_json"
+  jq --rawfile body "$source_abs" --arg label "$field_label" '
+      if any((.fields // [])[]; .label == $label)
+      then .fields = [ .fields[] | if .label == $label then .value = $body else . end ]
+      else .fields = ((.fields // []) + [{"id": $label, "type": "CONCEALED", "label": $label, "value": $body}])
+      end
+    ' "$item_json" > "$item_next_json"
+  op item edit "$add_item" --vault "$add_vault" < "$item_next_json" >/dev/null
+  rm -f "$item_json" "$item_next_json"
+  printf '%s\n' "$field_item_action field item: $add_item"
+}
+
 add_file() {
   if [ ! -r "$source_file" ]; then
     printf '%s\n' "opmaterialize: file not readable: $source_file" >&2
     exit 66
   fi
-  # 'add' is document-based. Refuse before creating anything when the manifest
-  # item exists and is NOT a Document (field-based Secure Note), so we neither
-  # orphan a Document nor half-update the manifest. The category probe does not
-  # need jq, so this guard never fails open. A missing manifest (first-time add)
-  # yields an empty category and is allowed. Field-mode 'add' is a follow-up.
+  # 'add' follows the manifest layout. A field-based (Secure Note) manifest
+  # gets a Secure Note field secret plus a 'field' manifest row; a Document
+  # manifest, or a missing manifest (first-time add), keeps the historical
+  # document-based layout. The category probe does not need jq, so this
+  # dispatch never fails open into the wrong layout.
+  manifest_kind="document"
   if [ -n "$manifest_vault" ]; then
     manifest_category="$(manifest_item_category)"
     if [ -n "$manifest_category" ] && [ "$manifest_category" != "DOCUMENT" ]; then
-      printf '%s\n' "opmaterialize: 'add' is document-based but manifest '$manifest_item' is '$manifest_category' (field-based vault)." >&2
-      printf '%s\n' "opmaterialize: register the secret as a Secure Note '$field_label' field plus a 'field' manifest row manually, or extend 'add' for field mode." >&2
-      exit 64
+      manifest_kind="field"
     fi
+  fi
+  if [ "$manifest_kind" = "field" ] && ! command -v jq >/dev/null 2>&1; then
+    printf '%s\n' "opmaterialize: 'jq' is required to add against a field-based manifest" >&2
+    exit 127
   fi
   source_abs="$(cd "$(dirname "$source_file")" && pwd)/$(basename "$source_file")"
   if [ -z "$add_out_path" ]; then
@@ -403,7 +448,9 @@ add_file() {
     manifest_vault="$add_vault"
   fi
 
-  if op document edit "$add_item" "$source_abs" --vault "$add_vault" --file-name "$(basename "$source_abs")" --title "$add_item" >/dev/null 2>&1; then
+  if [ "$manifest_kind" = "field" ]; then
+    add_field_secret
+  elif op document edit "$add_item" "$source_abs" --vault "$add_vault" --file-name "$(basename "$source_abs")" --title "$add_item" >/dev/null 2>&1; then
     printf '%s\n' "updated document: $add_item"
   else
     op document create "$source_abs" --vault "$add_vault" --file-name "$(basename "$source_abs")" --title "$add_item" >/dev/null
@@ -414,11 +461,19 @@ add_file() {
   next_manifest="$work_dir/secrets-manifest.next.tsv"
   manifest_exists=true
   if ! download_manifest "$manifest" >/dev/null 2>&1; then
+    if [ "$manifest_kind" = "field" ]; then
+      # The category probe just saw a Secure Note manifest, so a failed
+      # download is a transient error; creating a same-title Document
+      # manifest next to it would fork the manifest. Fail instead.
+      rm -f "$manifest"
+      printf '%s\n' "opmaterialize: manifest '$manifest_item' exists but could not be read; retry after checking 'op' auth" >&2
+      exit 74
+    fi
     manifest_exists=false
     printf '# type\titem\tout_path\tmode\tvault\n' > "$manifest"
   fi
 
-  update_manifest_file "$manifest" "$next_manifest" "$add_item" "$add_out_path" "$add_mode" "$add_vault"
+  update_manifest_file "$manifest" "$next_manifest" "$manifest_kind" "$add_item" "$add_out_path" "$add_mode" "$add_vault"
   upload_manifest "$next_manifest"
   rm -f "$manifest" "$next_manifest"
   printf '%s\n' "updated manifest: $manifest_item"
