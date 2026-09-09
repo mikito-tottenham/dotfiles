@@ -57,6 +57,7 @@
 - 各プロファイルの OAuth クライアントは所属組織の internal 設定のため、別組織のアカウントを選ぶと `403 org_internal` になる。他環境（Manzoku）の作業アカウントはこの環境のブラウザでは選択できない。リポジトリ文書に記載された作業アカウント名を、この環境の再ログイン先としてそのまま案内しないこと
 - gws の再認証をユーザーへ依頼する前に、`gws-account <profile> auth status` で有効な別プロファイル（token_valid）による代替可否を確認すること。1 プロファイルの失効は全プロファイルの失効ではない。ただし別アカウントへの自動切り替えを復旧経路にしないこと
 - 再認証を依頼するときは、対象プロファイル（`gws-account <profile> auth login` の形まで）と、ブラウザのアカウント選択画面で選ぶべきメールアドレスを明示すること
+- カレンダーの共有権限は `calendar-acl plan` で差分を確認してから `calendar-acl apply` で変更し、`gws calendar acl` の直接実行や Web UI での個別変更を混ぜないこと。ポリシー実値は 1Password 管理で `opmaterialize restore` で復元する（ADR-0059）
 
 # Plan 共通ルール
 
