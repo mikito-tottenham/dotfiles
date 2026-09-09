@@ -1,0 +1,43 @@
+# calendar-acl の desired state（サンプル）
+#
+# 実値は第三者のメールアドレスを含むため、この public リポジトリには置かない。
+# 1Password の "Secrets Manifest" 経由で管理する:
+#   保存: opmaterialize add ~/.config/calendar-acl/policy.yaml
+#   復元: opmaterialize restore
+#   確認: opmaterialize diff
+#
+# 反映: calendar-acl plan で差分確認 -> calendar-acl apply で適用
+
+# 本人が持つ全アカウント相互に付与するロール
+# freeBusyReader=予定あり/なしのみ, reader=詳細閲覧, writer=詳細閲覧+編集
+self_role: writer
+
+# 本人アカウント間の変更で共有通知メールを送るか
+send_notifications: false
+
+accounts:
+  - email: you@example-a.com
+    profile: profile-a          # gws-account の profile 名
+  - email: you@example-b.com
+    profile: profile-b
+  - email: you@gmail.example
+    # 専用 profile が無く、別 profile の owner 権限を借りて操作する場合。
+    # borrowed_profile を立てると「操作者自身の降格」判定から除外される
+    profile: profile-b
+    borrowed_profile: true
+
+calendars:
+  - id: you@example-a.com
+    # grants: 作成・修正の対象。accounts 由来の self_role より優先される
+    grants:
+      - {type: domain, value: example-a.com, role: reader}
+      - {type: user, value: assistant@example-a.com, role: writer}
+
+  - id: you@example-b.com
+    grants:
+      # domain scope は Workspace のプライマリドメインを指定する。
+      # ログインに使うエイリアスドメインを渡すと API が Not Found を返す
+      - {type: domain, value: example-b.com, role: reader}
+    # revoke: 削除の対象。ポリシーに現れない ACL は報告のみで削除しない
+    revoke:
+      - {type: domain, value: stale.example.com}

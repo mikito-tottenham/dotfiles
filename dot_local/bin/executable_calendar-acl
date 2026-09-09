@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+"""calendar-acl: Google カレンダーの共有権限（ACL）を宣言的に管理する
+
+ポリシー:
+- desired state は ~/.config/calendar-acl/policy.yaml（--policy で変更可）。実値は
+  個人情報を含むため git 管理せず、1Password から opmaterialize で復元する
+- accounts に列挙した本人アカウントには、全カレンダーで相互に self_role を付与する
+- calendars[].grants は作成・修正の対象。calendars[].revoke は削除の対象
+- ポリシーに現れない ACL は UNMANAGED として報告するだけで削除しない（意図しない
+  権限剥奪を避けるため。消す場合は revoke に明示する）
+- カレンダーのデータオーナー自身の owner 行は常に対象外
+- 操作に使う profile 自身の権限を下げる変更は、そのカレンダーの他の変更をすべて
+  適用した後に実行する。降格すると以後 ACL を書き込めなくなるため
+- 同じカレンダーで付与が失敗した場合、その後の削除は実行しない（置き換え途中で
+  共有を空白にしないため）
+- 失敗は握り潰さず、対象ごとに理由を出して最後に非 0 で終了する
+
+使い方:
+  calendar-acl plan     差分を表示する（API への書き込みは行わない）
+  calendar-acl apply    差分を適用する
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+
+try:
+    import yaml
+except ImportError:
+    sys.exit("calendar-acl: PyYAML が必要です（python3 -m pip install pyyaml）")
+
+DEFAULT_POLICY = os.path.expanduser("~/.config/calendar-acl/policy.yaml")
+ROLE_RANK = {
+    "none": 0,
+    "freeBusyReader": 1,
+    "reader": 2,
+    "writerWithoutPrivateAccess": 3,
+    "writer": 4,
+    "owner": 5,
+}
+
+
+def log(msg: str) -> None:
+    print(msg, flush=True)
+
+
+def run_gws(profile: str, args: list[str], params=None, body=None):
+    cmd = ["gws-account", profile, "calendar"] + args
+    if params is not None:
+        cmd += ["--params", json.dumps(params, ensure_ascii=False)]
+    if body is not None:
+        cmd += ["--json", json.dumps(body, ensure_ascii=False)]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout).strip()
+        detail = detail.splitlines()[-1] if detail else f"exit {proc.returncode}"
+        raise RuntimeError(detail)
+    out = proc.stdout.strip()
+    return json.loads(out) if out else {}
+
+
+def load_policy(path: str) -> dict:
+    with open(path, encoding="utf-8") as fh:
+        policy = yaml.safe_load(fh)
+    if not policy:
+        raise SystemExit(f"calendar-acl: ポリシーが空です: {path}")
+    for key in ("self_role", "accounts", "calendars"):
+        if key not in policy:
+            raise SystemExit(f"calendar-acl: ポリシーに '{key}' がありません: {path}")
+    return policy
+
+
+def desired_for(cal: dict, policy: dict) -> tuple[dict, dict]:
+    """(desired, revoke) を {(scope_type, scope_value): role} 形式で返す"""
+    self_role = policy["self_role"]
+    desired = {}
+    for acct in policy["accounts"]:
+        if acct["email"] != cal["id"]:
+            desired[("user", acct["email"])] = self_role
+    for g in cal.get("grants") or []:
+        desired[(g["type"], g["value"])] = g["role"]
+    revoke = {(r["type"], r["value"]): None for r in cal.get("revoke") or []}
+    return desired, revoke
+
+
+def current_for(profile: str, calendar_id: str) -> dict:
+    resp = run_gws(profile, ["acl", "list"], params={"calendarId": calendar_id, "maxResults": 250})
+    current = {}
+    for item in resp.get("items", []):
+        scope = item.get("scope", {})
+        stype, svalue = scope.get("type"), scope.get("value")
+        # データオーナー自身の owner 行は管理対象外
+        if stype == "user" and svalue == calendar_id and item.get("role") == "owner":
+            continue
+        current[(stype, svalue)] = item.get("role")
+    return current
+
+
+def diff_calendar(cal: dict, policy: dict, profile: str) -> list[dict]:
+    desired, revoke = desired_for(cal, policy)
+    current = current_for(profile, cal["id"])
+    actions = []
+    for key, role in desired.items():
+        now = current.get(key)
+        if now == role:
+            continue
+        actions.append({
+            "op": "grant", "scope_type": key[0], "scope_value": key[1],
+            "role": role, "from": now,
+            "kind": "create" if now is None else "update",
+        })
+    for key in revoke:
+        if key in current:
+            actions.append({
+                "op": "revoke", "scope_type": key[0], "scope_value": key[1],
+                "role": None, "from": current[key], "kind": "delete",
+            })
+    for key, role in current.items():
+        if key not in desired and key not in revoke:
+            actions.append({
+                "op": "unmanaged", "scope_type": key[0], "scope_value": key[1],
+                "role": role, "from": role, "kind": "report",
+            })
+    # 操作 profile 自身の権限を下げる変更は最後に回す（降格後は ACL を書き込めなくなるため）
+    operator = profile_email(profile, policy)
+
+    def sort_key(a):
+        touches_operator = a["scope_value"] == operator and a["from"] is not None
+        demotes = a["op"] == "revoke" or (
+            a["op"] == "grant" and ROLE_RANK.get(a["role"], 0) < ROLE_RANK.get(a["from"], 0)
+        )
+        # 付与を削除より先に行い、権限の空白期間を作らない
+        return (
+            1 if (touches_operator and demotes) else 0,
+            1 if a["op"] == "revoke" else 0,
+            a["scope_value"] or "",
+        )
+
+    return sorted(actions, key=sort_key)
+
+
+def profile_email(profile: str, policy: dict) -> str | None:
+    """profile が本来ログインしているアカウントの email（借用している側は除く）"""
+    for acct in policy["accounts"]:
+        if acct.get("profile") == profile and not acct.get("borrowed_profile"):
+            return acct["email"]
+    return None
+
+
+def resolve_profile(cal: dict, policy: dict) -> str:
+    if cal.get("profile"):
+        return cal["profile"]
+    for acct in policy["accounts"]:
+        if acct["email"] == cal["id"]:
+            return acct["profile"]
+    raise SystemExit(f"calendar-acl: profile を解決できません: {cal['id']}")
+
+
+def render(action: dict) -> str:
+    mark = {"create": "+", "update": "~", "delete": "-", "report": "?"}[action["kind"]]
+    target = f"{action['scope_type']}:{action['scope_value']}"
+    if action["kind"] == "create":
+        return f"  {mark} {target} -> {action['role']}"
+    if action["kind"] == "update":
+        return f"  {mark} {target} : {action['from']} -> {action['role']}"
+    if action["kind"] == "delete":
+        return f"  {mark} {target} : {action['from']} を削除"
+    return f"  {mark} {target} : {action['role']}（未管理・変更しない）"
+
+
+def apply_action(profile: str, calendar_id: str, action: dict, notify: bool) -> None:
+    rule_id = f"{action['scope_type']}:{action['scope_value']}"
+    if action["op"] == "grant":
+        run_gws(
+            profile, ["acl", "insert"],
+            params={"calendarId": calendar_id, "sendNotifications": notify},
+            body={"role": action["role"],
+                  "scope": {"type": action["scope_type"], "value": action["scope_value"]}},
+        )
+    elif action["op"] == "revoke":
+        run_gws(profile, ["acl", "delete"],
+                params={"calendarId": calendar_id, "ruleId": rule_id})
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Google カレンダーの共有権限を宣言的に管理する")
+    parser.add_argument("command", choices=["plan", "apply"])
+    parser.add_argument("--policy", default=DEFAULT_POLICY)
+    parser.add_argument("--calendar", help="この ID のカレンダーだけを対象にする")
+    args = parser.parse_args()
+
+    policy = load_policy(args.policy)
+    notify = bool(policy.get("send_notifications", False))
+    calendars = policy["calendars"]
+    if args.calendar:
+        calendars = [c for c in calendars if c["id"] == args.calendar]
+        if not calendars:
+            raise SystemExit(f"calendar-acl: ポリシーに無いカレンダーです: {args.calendar}")
+
+    log(f"[start] {args.command} policy={args.policy} calendars={len(calendars)} "
+        f"self_role={policy['self_role']} notify={notify}")
+    changed = failed = unmanaged = 0
+
+    for index, cal in enumerate(calendars, 1):
+        profile = resolve_profile(cal, policy)
+        log(f"[{index}/{len(calendars)}] {cal['id']} (profile={profile})")
+        try:
+            actions = diff_calendar(cal, policy, profile)
+        except RuntimeError as exc:
+            log(f"  [FAIL] ACL を取得できません: {exc}")
+            failed += 1
+            continue
+
+        pending = [a for a in actions if a["op"] != "unmanaged"]
+        for action in actions:
+            log(render(action))
+            if action["op"] == "unmanaged":
+                unmanaged += 1
+        if not pending:
+            log("  変更なし")
+            continue
+        if args.command == "plan":
+            changed += len(pending)
+            continue
+        grant_failed = False
+        for action in pending:
+            # 付与に失敗したまま削除へ進むと、置き換えるはずだった共有を戻せないまま
+            # 権限を剥奪してしまう。同じカレンダーの削除は中止する
+            if action["op"] == "revoke" and grant_failed:
+                log(f"  [SKIP] {action['scope_type']}:{action['scope_value']}: "
+                    "同じカレンダーで付与が失敗したため削除を中止")
+                continue
+            try:
+                apply_action(profile, cal["id"], action, notify)
+                changed += 1
+            except RuntimeError as exc:
+                log(f"  [FAIL] {action['scope_type']}:{action['scope_value']}: {exc}")
+                failed += 1
+                if action["op"] == "grant":
+                    grant_failed = True
+
+    verb = "適用予定" if args.command == "plan" else "適用"
+    log(f"[done] {verb}={changed} 失敗={failed} 未管理={unmanaged}")
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
