@@ -1,6 +1,6 @@
 ---
 name: agent-orchestration-evaluator
-description: Evaluate and tune AI agent orchestration rules, model resolvers, skill role assignments, slash commands, and prompt harnesses so parent agents stay orchestration-only and researcher/reviewer/worker roles are delegated. Use when asked to review resolver semantics, Self-Elision, self vs subagent boundaries, multi-agent skill design, Claude/Codex/Gemini/Grok delegation, or runner-skill migration.
+description: Audit or tune agent orchestration boundaries and role resolution. Use for self-vs-subagent execution, Self-Elision, model resolvers, runner ownership, delegated review prompts, or fallback/remediation behavior.
 ---
 
 # Agent Orchestration Evaluator
@@ -29,7 +29,7 @@ Use these terms consistently:
 | Self-Elision | Runtime optimization when a delegated role resolves to the same provider/model as the parent. Skip external CLI, but still delegate to a same-provider/model subagent. |
 | Runner skill | A wrapper skill for observable Claude / Codex / Gemini / Grok CLI or API-backed subprocess execution, stream logs, timeouts, expected artifacts, and failure reports. |
 | Resolver | Logic that maps role -> alias -> provider/model/config/execution mode. It should not become a raw command cookbook when runner skills exist. |
-| Bypass remediation review | A separate review triggered when the parent or a delegated worker bypasses an error in a way that may recur, skip validation, reduce reproducibility, or reveal missing setup, permissions, dependencies, docs, hooks, or skills. |
+| Bypass remediation review | The permanent-fix review defined by the target repo's canonical instruction file (in these dotfiles, the AGENTS-common 恒久対策レビュー rule). That rule owns the trigger conditions and required fields; this skill only checks that workflows invoke it. |
 | Promotion candidate | A repeated orchestration failure or waste pattern that may deserve a durable home such as resolver policy, runner hardening, AGENTS guidance, a skill, a script, a test, or an evaluator backlog item. |
 
 ## Invariants
@@ -53,9 +53,8 @@ Flag or fix violations of these invariants:
 15. Review and finding roles should not filter findings by vague importance bars during the discovery phase. Prefer coverage-first finding prompts, then rank, dedupe, or verify in a separate role or phase.
 16. Tool-use policy should be explicit enough for required evidence gathering, but should not force fixed tool-call counts or stale progress scaffolds that fight newer model tool-triggering behavior.
 17. Long-running delegated work must leave enough artifacts, summaries, and failure reports for the parent orchestrator to recover after context compaction or a runner restart.
-18. Error bypasses must not silently become the accepted workflow. If a command, tool, environment, permission, dependency, or validation error is bypassed and recurrence, skipped validation, setup drift, or reproducibility risk remains, the workflow must trigger an explicit bypass remediation review.
-19. Bypass remediation review may be delegated to a subagent, reviewer, evaluator, or runner when available, but the parent orchestrator must verify the proposed permanent fix against repository code, configuration, docs, tests, and managed state boundaries before adopting it.
-20. Repeated fallback, subline execution, delegated-role confusion, or runner bypass observed in session history or an AI-usage coach report is evidence for an orchestration audit, not proof of an orchestration defect by itself.
+18. Error bypasses must not silently become the accepted workflow: workflows must invoke the canonical bypass remediation review rule, and a delegated review proposal is verified by the parent against source-of-truth files before adoption.
+19. Repeated fallback, subline execution, delegated-role confusion, or runner bypass observed in session history or an AI-usage coach report is evidence for an orchestration audit, not proof of an orchestration defect by itself.
 
 ## Audit Workflow
 
@@ -71,17 +70,17 @@ Flag or fix violations of these invariants:
    - Identify execution-only roles that consume an already planned prompt or consensus output, such as `creator`, `apply_consensus`, doc renderer, formatter, or conversion worker.
 
 3. **Check boundaries**
-   - Look for wording that says Self-Elision means "current agent directly executes", "execute as self", "親が兼任", or similar.
-   - Look for `self` phases that perform concrete task execution instead of orchestration.
-   - Look for raw CLI construction inside skills when a runner skill exists.
-   - Look for subagent fallbacks that silently become direct parent execution.
-   - Look for delegated prompts that allow Phase C/D synthesis, final edits, or reading other workers' outputs without an explicit reason.
-   - Look for skills that hard-code concrete model names, provider names, effort settings, timeout defaults, or CLI flags that should come from a resolver/registry or runner skill.
-   - Look for code-review prompts that tell finding roles to report only high-severity, important, or certain issues before a separate ranking or verification phase.
-   - Look for fixed tool-call quotas, forced progress checkpoints, or stale "always use tools" language that should be replaced by outcome/evidence-based tool guidance.
-   - Look for wording that tells agents to "find another way", "work around", "skip", "continue anyway", "ignore", or "use a fallback" after errors without defining when a bypass remediation review is required.
-   - Look for workflows where failed tests, missing tools, permission errors, dependency problems, authentication issues, broken hooks, or unavailable subagents/runners can be bypassed without recording the cause, validation gap, permanent-fix candidate, and owner.
-   - When a coach report, session audit, or structured usage report identifies repeated fallback or wasted subline execution, trace it back to resolver semantics, runner contracts, prompts, and docs before deciding whether the durable home is orchestration policy, a skill, a script, a test, or no promotion.
+   Test each invariant against the sources. Wording that usually signals a violation, keyed to the invariant number:
+   - (1, 6) Self-Elision described as "current agent directly executes", "execute as self", "親が兼任", or similar.
+   - (3) `self` phases that perform concrete task execution instead of orchestration.
+   - (7, 8) raw CLI construction inside skills when a runner skill exists.
+   - (12) subagent fallbacks that silently become direct parent execution.
+   - (13) delegated prompts that allow Phase C/D synthesis, final edits, or reading other workers' outputs without an explicit reason.
+   - (10) hard-coded model names, provider names, effort settings, timeout defaults, or CLI flags that should come from a resolver/registry or runner skill.
+   - (15) finding roles told to report only high-severity, important, or certain issues before a separate ranking or verification phase.
+   - (16) fixed tool-call quotas, forced progress checkpoints, or stale "always use tools" language.
+   - (18) "find another way", "work around", "skip", "continue anyway", "ignore", or "use a fallback" after errors, or bypassable failures (tests, tools, permissions, dependencies, auth, hooks, subagents/runners) without invoking the canonical bypass remediation review rule.
+   - (19) When a coach report, session audit, or structured usage report identifies repeated fallback or wasted subline execution, trace it back to resolver semantics, runner contracts, prompts, and docs before deciding whether the durable home is orchestration policy, a skill, a script, a test, or no promotion.
 
 4. **Evaluate model and effort policy**
    - Check whether skills only name logical roles and resolver paths, not concrete model IDs.
@@ -96,8 +95,7 @@ Flag or fix violations of these invariants:
    - Check Claude, Codex, Gemini, and Grok roles for available runner skills before accepting raw `claude`, `codex`, `gemini`, `grok`, direct API, or ad hoc wrapper calls inside skill text.
    - Same-provider subagents should have a bounded responsibility and a clear return artifact or final report shape.
    - Long-running roles should write summaries, blocked-state reports, and expected artifacts in stable paths so compaction does not make the work unrecoverable.
-   - Bypass remediation reviews should classify the error cause, temporary bypass, permanent-remediation options, repo-managed changes, machine-local state, and verification plan.
-   - If the bypass review is delegated, check that the subagent or runner prompt forbids direct adoption of its proposal and requires the parent to verify against source-of-truth files.
+   - Bypass remediation reviews follow the canonical rule's field list; check that the rule exists in the target repo and that a delegated review prompt forbids direct adoption of its proposal (invariant 18).
    - Treat promotion candidates as review inputs. Require recurrence, friction, risk, portability, and future-value evidence before recommending a reusable orchestration rule or skill.
 
 6. **Report or tune**
@@ -106,152 +104,7 @@ Flag or fix violations of these invariants:
 
 ## Tuning Patterns
 
-### Replace Direct Self-Elision
-
-Bad:
-
-```text
-If resolved provider/model matches current agent, execute as self and skip command construction.
-```
-
-Good:
-
-```text
-If resolved provider/model matches current agent, skip external CLI subprocess construction and delegate the role to a same-provider/model subagent. The parent orchestrator must not perform aliased AI agent roles directly.
-```
-
-### Separate `self` From Delegated Roles
-
-Use `self` for orchestration phases. These phases may decide and synthesize, but should not perform concrete worker tasks when delegation is available:
-
-```yaml
-roles:
-  understand: self
-  synthesize: self
-  adjudicate: self
-```
-
-Use aliases for delegated work:
-
-```yaml
-roles:
-  researcher_1: { alias: claude_researcher }
-  researcher_2: { alias: codex_researcher }
-  reviewer_1: { alias: claude_reviewer }
-```
-
-### Keep Skills Model-Agnostic
-
-Skills should point to the resolver or registry path:
-
-```markdown
-**Model resolution**: `rules/model_registry.yaml` -> `skills.<skill>.roles.<role>`
-```
-
-Avoid authoritative model details in skills:
-
-```markdown
-Bad: `researcher_2` uses `gpt-5.5` with `medium`.
-Good: `researcher_2` resolves through `skills.research.roles.researcher_2`; concrete model and effort live in the resolver/registry.
-```
-
-If a skill includes an example command or model for illustration, mark it non-authoritative and verify it cannot drift from the resolver.
-
-### Prefer Lightweight Execution Models
-
-For roles that execute an already planned prompt, apply accepted changes, render artifacts, format output, or perform a bounded conversion, check that the resolver defaults to a lightweight setting such as low effort. Escalate only when there is evidence that the role must make novel design judgments, handle ambiguous requirements, or resolve conflicts.
-
-Typical policy:
-
-| Role type | Default expectation |
-|---|---|
-| `creator`, `apply_consensus`, renderer, formatter | Lightweight / low effort unless evals justify more. |
-| `researcher`, `reviewer`, `judge`, architecture analyzer | Medium or higher depending on risk and evidence needs. |
-| Parent `self` orchestration | No concrete model allocation inside the skill; uses the entrypoint agent. |
-
-### Define Provider-Specific Same-Provider Delegation
-
-Keep this as execution guidance, not model allocation:
-
-| Current provider | Same-provider delegation |
-|---|---|
-| `claude_code` | Claude Code subagent / Agent tool, with the skill's artifact contract. |
-| `codex` | `spawn_agent`, with explicit ownership and expected artifacts. |
-| `gemini` | Gemini subagent mechanism if available; otherwise use the skill's explicit fallback. |
-| Other | Define explicitly before relying on Self-Elision. |
-
-### Preserve Runner Ownership
-
-When a role resolves to a different provider and a runner skill exists, say:
-
-```text
-The resolver determines role/provider/model/config. The runner skill performs the subprocess execution and owns prompt-file handling, timeout, stream logs, expected artifact checks, summary, and failure reporting.
-```
-
-Avoid duplicating wrapper command lines in every skill unless no runner exists.
-
-Expected runner mapping:
-
-| Provider / backend | Preferred runner |
-|---|---|
-| Claude Code CLI | `claude-cli-runner` |
-| Codex CLI | Use `codex-cli-runner` when available; do not inline `codex exec` details in dependent skills. If unavailable, keep only an explicit resolver fallback contract. |
-| Gemini CLI | `gemini-cli-runner` |
-| Grok CLI or API-backed handoff | `grok-cli-runner` |
-
-Prefer runners that provide prompt-file handoff, timeout control, expected artifact checks, summary, and failure reporting. Keep the skill text at the level of "use the runner skill"; do not inline runner command details.
-
-### Separate Finding From Filtering
-
-For review harnesses and bug-finding roles, check whether the prompt separates broad discovery from downstream ranking:
-
-```text
-Finding role: report every plausible issue with confidence and estimated severity.
-Verifier/ranker role: dedupe, rank, and decide what meets the final reporting bar.
-```
-
-Avoid vague discovery-phase filters such as "only important issues" or "be conservative" unless the role is explicitly a final reporting filter.
-
-### Use Outcome-Based Tool Guidance
-
-Tool guidance should describe the evidence or state required, not a fixed number of calls:
-
-```text
-Use repository search before claiming a symbol is unused. Use web fetch only for cited current external docs.
-```
-
-Avoid stale scaffolds such as mandatory progress updates every N tool calls or unconditional tool use when the task can be completed directly.
-
-### Detect Silent Error Bypasses
-
-Flag workflow text that lets an agent bypass errors without a durable review path:
-
-```text
-Bad: If the command fails, use another method and continue.
-Good: If the command fails, use a temporary bypass only when it preserves validation. Trigger bypass remediation review when the failure may recur, skips validation, reveals missing setup, or lowers reproducibility.
-```
-
-Recommended remediation review contract:
-
-- Error cause and observed command/tool output summary.
-- Temporary bypass used and what validation it preserves or loses.
-- Permanent-fix candidates across repo-managed config/docs/hooks/skills and machine-local state.
-- Whether a subagent, reviewer, evaluator, or runner should investigate the permanent fix.
-- Verification required before adopting the fix.
-
-### Delegated Prompt Contract
-
-Subagent or runner prompts should include:
-
-- Role and scope.
-- Working directory.
-- Source prompt path for multi-line instructions.
-- Expected artifact paths.
-- Success criteria and blocked-state reporting.
-- Allowed side effects.
-- Evidence rules.
-- Compaction/restart recovery expectations for long-running work.
-- Prohibition on orchestration, synthesis, final response editing, and reading sibling worker outputs unless explicitly allowed.
+Read [references/tuning-patterns.md](references/tuning-patterns.md) only when drafting or applying a correction. Audit-only work can use the invariants and boundary checks above without loading the examples.
 
 ## Output Format
 
@@ -295,5 +148,5 @@ Stop only when:
 - Dependent skills/prompts no longer contradict the canonical resolver.
 - Review/finding roles preserve discovery coverage before final filtering.
 - Long-running runner or subagent roles leave recoverable artifacts for compaction or restart.
-- Error bypasses that may recur, skip validation, or reduce reproducibility trigger an explicit bypass remediation review with cause, temporary bypass, permanent-fix candidates, ownership boundary, and verification plan.
+- Error bypasses invoke the canonical bypass remediation review rule instead of a locally redefined one.
 - Durable architectural changes are recorded in the target repo's ADR or equivalent long-lived documentation when the repo requires it.

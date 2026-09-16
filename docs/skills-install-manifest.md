@@ -1,31 +1,33 @@
 ---
 title: "Skill Install Manifest"
-updated_at: 2026-07-29
+updated_at: 2026-09-15
 ---
 
 # Skill Install Manifest
 
 新しいマシンで配布 skill を復元するときは、この一覧を正本として `gh skill install` を実行する。
 
+> **install は必ず `chezmoi source-path` が返す root で実行すること。** 各行の `.` はその root（この環境では ghq 配下の dotfiles checkout）を指す。`~/.local/share/chezmoi` など別 clone や worktree から実行すると、配備コピーの `metadata.local-path` が編集中の正本と別の checkout を指す stale install になる（2026-09-15 に 43 件検出）。実行前に `cd "$(chezmoi source-path)"` し、配備後は `skill-manager` の `doctor`（`source_drift` カテゴリ）で `SOURCE_PATH_STALE` が無いことを確認する。
+
 当面は script を作らず、docs-only の install manifest として維持する。
 将来 `gh` 側に manifest 機能が入ったら、そちらへ移行を検討する。
 
-Claude Code on the web の ephemeral 環境に限り、`scripts/bootstrap-web`（SessionStart hook 経由）が **web で復元可能なサブセット**を自動再インストールする（ADR-0045）。サブセットは「first-party 全部（必須）＋ 公開 third-party のうち取得できたもの（best-effort）」で、manifest 全体とは一致しない。first-party の欠落は bootstrap を失敗させ、third-party の取得失敗は skip して継続する。upstream 不在の skill（下記 `empirical-prompt-tuning`）は対象外。スキルを追加・削除したときは、この manifest と `scripts/bootstrap-web` のリストを同期すること。
+Claude Code on the web の ephemeral 環境に限り、`scripts/bootstrap-web`（SessionStart hook 経由）が **web で復元可能なサブセット**を自動再インストールする（ADR-0045）。サブセットは「first-party 全部（必須）＋ 公開 third-party のうち取得できたもの（best-effort）」で、manifest 全体とは一致しない。first-party の欠落は bootstrap を失敗させ、third-party の取得失敗は skip して継続する。2026-09-15 時点で third-party は全て撤去済みのため、bootstrap-web の取得対象は first-party のみ。スキルを追加・削除したときは、この manifest と `scripts/bootstrap-web` のリストを同期すること。
 
 ## First-party publisher skills
 
-repo root を install source にして実行する。
+`chezmoi source-path` の root を install source にして実行する。
 
 ### Claude Code
 
 ```bash
+cd "$(chezmoi source-path)"
 gh skill install . skill-manager --from-local --agent claude-code --scope user
 gh skill install . docs-entrypoint-check --from-local --agent claude-code --scope user
 gh skill install . docs-evaluator --from-local --agent claude-code --scope user
 gh skill install . grok-cli-runner --from-local --agent claude-code --scope user
 gh skill install . code-evaluator --from-local --agent claude-code --scope user
-gh skill install . opus-4-8-tuning --from-local --agent claude-code --scope user
-gh skill install . gpt-5-5-tuning --from-local --agent claude-code --scope user
+gh skill install . model-tuning --from-local --agent claude-code --scope user
 gh skill install . codex-cli-runner --from-local --agent claude-code --scope user
 gh skill install . gemini-cli-runner --from-local --agent claude-code --scope user
 gh skill install . copilot-cli-runner --from-local --agent claude-code --scope user
@@ -40,18 +42,22 @@ gh skill install . git-branch-review --from-local --agent claude-code --scope us
 gh skill install . dads-design --from-local --agent claude-code --scope user
 gh skill install . gws-cli-runner --from-local --agent claude-code --scope user
 gh skill install . agent-orchestrator --from-local --agent claude-code --scope user
+gh skill install . external-report --from-local --agent claude-code --scope user
 ```
 
 ### Codex
 
+> `gh skill install --agent codex` は `~/.agents/skills/`（universal 先）に書き、`~/.codex/skills/` には書かない（2026-09-15 実測、gh skill preview）。Codex は両方を読むため、install 後に `~/.codex/skills/<skill>/` を `rsync -a --delete ~/.agents/skills/<skill>/ ~/.codex/skills/<skill>/` で同期し、二重化と stale を防ぐこと。
+
+
 ```bash
+cd "$(chezmoi source-path)"
 gh skill install . skill-manager --from-local --agent codex --scope user
 gh skill install . docs-entrypoint-check --from-local --agent codex --scope user
 gh skill install . docs-evaluator --from-local --agent codex --scope user
 gh skill install . grok-cli-runner --from-local --agent codex --scope user
 gh skill install . code-evaluator --from-local --agent codex --scope user
-gh skill install . opus-4-8-tuning --from-local --agent codex --scope user
-gh skill install . gpt-5-5-tuning --from-local --agent codex --scope user
+gh skill install . model-tuning --from-local --agent codex --scope user
 gh skill install . claude-cli-runner --from-local --agent codex --scope user
 gh skill install . gemini-cli-runner --from-local --agent codex --scope user
 gh skill install . copilot-cli-runner --from-local --agent codex --scope user
@@ -66,40 +72,24 @@ gh skill install . git-branch-review --from-local --agent codex --scope user
 gh skill install . dads-design --from-local --agent codex --scope user
 gh skill install . gws-cli-runner --from-local --agent codex --scope user
 gh skill install . agent-orchestrator --from-local --agent codex --scope user
+gh skill install . external-report --from-local --agent codex --scope user
 ```
+
+### 変更履歴（first-party）
+
+- 2026-09-15: `opus-4-8-tuning` と `gpt-5-5-tuning` を `model-tuning` 1 本に統合（旧世代の差分は `skills/model-tuning/references/legacy-*.md`）。`opus-4-7-tuning` は ADR-0053 で退役済みのため repo からも削除。`external-report` を登録。
 
 ## Third-party external skills
 
-third-party external skill はここへ追加で列挙する。
+third-party external skill はここへ追加で列挙する。2026-09-15 時点では有効な third-party skill は無く、以下は撤去記録と再導入条件として残す。撤去済み skill がまだ `~/.claude/skills` / `~/.codex/skills` に残っている場合は `gh skill remove <name> --agent <agent> --scope user` で外す。
 
-### `gws-*`
+### `gws-*`（撤去済み）
 
 - upstream: [googleworkspace/cli `skills/`](https://github.com/googleworkspace/cli/tree/main/skills)
-- status: installed globally for Claude Code and Codex
-- install mode: direct `gh skill install` from upstream GitHub repository
-- pin: `v0.22.5`
-- reason: upstream provides official per-service gws skills; keep them external and do not vendor them into this repo
-- scope: install only `gws-shared`, `gws-drive`, and `gws-drive-upload`
-- prerequisite: `googleworkspace-cli` must be installed; managed by `Brewfile` on macOS, and installed from the GitHub release (`v0.22.5`, gnu build) by `scripts/bootstrap-web` in web sessions
-- update note: keep the skill pin aligned with the installed `googleworkspace-cli` version
-
-#### Claude Code / Codex refresh
-
-repo root で実行する。
-
-```bash
-skills=(
-  gws-drive
-  gws-drive-upload
-  gws-shared
-)
-
-for agent in claude-code codex; do
-  for skill in "${skills[@]}"; do
-    gh skill install googleworkspace/cli "$skill" --pin v0.22.5 --agent "$agent" --scope user --force
-  done
-done
-```
+- status: **撤去済み（2026-09-15）**。`gws-shared` / `gws-drive` / `gws-drive-upload` は first-party の `gws-cli-runner` に吸収した
+- reason: upstream 本文が素の `gws auth login` を案内しており、この環境の「gws は常に `gws-account <profile>` 経由」ルール（ADR-0048）と衝突する。認証・アカウント境界を持つ `gws-cli-runner` を唯一の入口にする
+- prerequisite（継続）: `googleworkspace-cli` 自体は `gws-cli-runner` が使うため引き続き必要。macOS は `Brewfile`、web セッションは `scripts/bootstrap-web` が GitHub release（`v0.22.5`, gnu build）から導入する
+- 再導入条件: upstream skill が `gws-account` 相当のプロファイル指定を前提にするか、`gws-cli-runner` が upstream の per-service 手順を wrap しきれなくなった場合に再検討する。再導入時は pin を `googleworkspace-cli` のバージョンに揃える
 
 ### `empirical-prompt-tuning`
 
@@ -112,7 +102,7 @@ done
 
 #### Claude Code / Codex refresh
 
-repo root で実行する。
+`chezmoi source-path` の root で実行する。
 
 ```bash
 mkdir -p .context/skill-bootstrap/empirical-prompt-tuning/skills/empirical-prompt-tuning
@@ -123,19 +113,9 @@ gh skill install ./.context/skill-bootstrap/empirical-prompt-tuning empirical-pr
 gh skill install ./.context/skill-bootstrap/empirical-prompt-tuning empirical-prompt-tuning --from-local --agent codex --scope user --force
 ```
 
-### `grill-me`
+### `grill-me`（撤去済み）
 
 - upstream: [mattpocock/skills `skills/productivity/grill-me`](https://github.com/mattpocock/skills/tree/main/skills/productivity/grill-me)
-- status: installed globally for Claude Code and Codex
-- install mode: direct `gh skill install` from upstream GitHub repository
-- reason: upstream is publisher-discoverable on GitHub, so direct external install is the standard path
-- update note: inspect changes with `gh skill preview mattpocock/skills grill-me` before running `gh skill update grill-me`
-
-#### Claude Code / Codex install
-
-repo root で実行する。
-
-```bash
-gh skill install mattpocock/skills grill-me --agent claude-code --scope user
-gh skill install mattpocock/skills grill-me --agent codex --scope user
-```
+- status: **撤去済み（2026-09-15）**。Claude Code は built-in `anthropic-skills:grill-me` で代替し、Codex は代替なし
+- reason: upstream 本文が `/grilling` 参照のみの stub で、単体では機能しない。Claude 側は同名 built-in と `/grill-me` の解決が曖昧になり、Codex 側は壊れた stub に当たる
+- 再導入条件: upstream が `grilling` 本体を同梱するか、Codex 側で複数解釈の確認フローが必要になった場合に、`gh skill preview mattpocock/skills grill-me` で本文を確認してから判断する

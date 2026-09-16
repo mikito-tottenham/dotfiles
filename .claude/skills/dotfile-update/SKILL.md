@@ -1,12 +1,6 @@
 ---
 name: dotfile-update
-description: >
-  chezmoi 管理の dotfiles リポジトリで dotfile を追加・変更・削除するためのワークフロースキル。
-  `dot_*` ファイル、`.chezmoiignore`、`Brewfile`、共通ルールファイル
-  （`dot_claude/CLAUDE.md`、`dot_codex/AGENTS.md`、`dot_qwen/QWEN.md`、`dot_gemini/GEMINI.md`）を
-  編集する依頼で必ず使用すること。
-  AI 間の設定対応、`json` から `toml` への変換、chezmoi の
-  `private_` / `dot_` / `symlink_` 属性や source / target の対応確認が関わる依頼にも適用すること。
+description: Update files managed by this chezmoi dotfiles repository, including `dot_*`, `.chezmoiignore`, `Brewfile`, and shared AI instruction sources. Use for source edits, apply planning, and drift validation; pair it with `chezmoi-knowledge` for repo-specific semantics. Use when asked for dotfile の追加・変更・削除, 共通ルールファイルの編集, AI 間の設定対応, or json から toml への変換.
 ---
 
 # dotfile-update
@@ -145,7 +139,7 @@ Step artifact:
 ## 注意事項
 
 - `Brewfile` の更新後は `brew bundle` の実行は不要（パッケージインストールはユーザーが別途行う）
-- シークレット（API キー等）は `~/.zshenv.local` に配置し、chezmoi 管理外とする。リポジトリにコミットしない
+- secret 実値は 1Password に保存し、`op run --env-file`、`op read`、または `op://...` secret reference 経由で渡す。`~/.zshenv.local` や git 管理ファイルへ実値を書かない
 - pre-commit hook（`.claude/hooks/chezmoi-pre-commit-hook`）がコミット前にドリフトを自動検出する。ドリフトがあるとコミットがブロックされるため、必ず apply まで完了させること
 - chezmoi の仕様に自信がない場合は、推測で編集せず公式ドキュメントを確認してから変更すること
 - `python` のような互換コマンドが必要な場合は、まず `symlink_` source で足りるかを確認し、macOS shim の都合で不適切な場合だけ wrapper script を検討すること

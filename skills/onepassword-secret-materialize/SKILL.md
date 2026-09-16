@@ -1,6 +1,6 @@
 ---
 name: onepassword-secret-materialize
-description: Manage this dotfiles repository's 1Password-backed secret file workflow. Use when the user asks to save, register, restore, diff, check, or materialize secret-backed files such as VPN configs, env files, API-key dotenv files, or other local config files through 1Password, especially with `opmaterialize`, `Secrets Manifest`, `Dotfiles Secrets`, `OP_ACCOUNT`, or paths under `~/.config`.
+description: Register, diff, or restore this dotfiles repository's 1Password-backed files through `opmaterialize` and its Secrets Manifest. Use for that file-materialization workflow, including VPN configs and dotenv files; use `op-cli-runner` for unrelated `op` command execution.
 ---
 
 # Onepassword Secret Materialize

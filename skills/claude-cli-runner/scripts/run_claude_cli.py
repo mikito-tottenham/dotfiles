@@ -20,23 +20,8 @@ ERROR_RE = re.compile(
     re.IGNORECASE,
 )
 
-OPUS_4_7_MODEL_RE = re.compile(r"opus.*4[-_.]?7|4[-_.]?7.*opus", re.IGNORECASE)
-OPUS_4_8_MODEL_RE = re.compile(r"opus.*4[-_.]?8|4[-_.]?8.*opus", re.IGNORECASE)
-
-OPUS_4_7_ADAPTER = """\
-## Claude Opus 4.7 Prompt Adapter
-
-Execute the source prompt literally and completely.
-
-- Treat the source prompt's outcome, constraints, tool limits, artifact paths, and completion criteria as the contract.
-- Do not add fixed progress-update scaffolding. Report progress only if the source prompt asks for it or a real blocker requires it.
-- Prefer direct completion over unnecessary subagents or tool calls. Use tools when needed to satisfy the source prompt, and respect explicit WebSearch/WebFetch, timeout, and output limits.
-- If scope is ambiguous, resolve only what is explicitly supported by the source prompt and mark genuinely missing inputs as blocked.
-- Do not emulate effort with phrases like "think hard"; rely on the CLI effort setting supplied by the caller.
-"""
-
-OPUS_4_8_ADAPTER = """\
-## Claude Opus 4.8 Prompt Adapter
+CLAUDE_ADAPTER = """\
+## Claude Code CLI Prompt Adapter
 
 Execute the source prompt literally and completely.
 
@@ -102,9 +87,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--prompt-profile",
-        choices=("auto", "opus-4-7", "opus-4-8", "none"),
+        choices=("auto", "claude", "none"),
         default="auto",
-        help="Prompt adapter profile. Auto applies an Opus adapter for explicit opus-4.7 or opus-4.8 models.",
+        help="Prompt adapter profile. Auto applies the model-agnostic Claude adapter; none suppresses it.",
     )
     return parser.parse_args()
 
@@ -146,14 +131,10 @@ def compact_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True)[:4000]
 
 
-def resolve_prompt_profile(requested: str, model: str | None) -> str:
-    if requested != "auto":
-        return requested
-    if model and OPUS_4_7_MODEL_RE.search(model):
-        return "opus-4-7"
-    if model and OPUS_4_8_MODEL_RE.search(model):
-        return "opus-4-8"
-    return "none"
+def resolve_prompt_profile(requested: str) -> str:
+    if requested == "auto":
+        return "claude"
+    return requested
 
 
 def write_launch_prompt(path: Path, source_prompt: Path, profile: str) -> None:
@@ -165,10 +146,8 @@ def write_launch_prompt(path: Path, source_prompt: Path, profile: str) -> None:
         "---",
         "",
     ]
-    if profile == "opus-4-7":
-        sections.extend([OPUS_4_7_ADAPTER, ""])
-    elif profile == "opus-4-8":
-        sections.extend([OPUS_4_8_ADAPTER, ""])
+    if profile == "claude":
+        sections.extend([CLAUDE_ADAPTER, ""])
     sections.extend(
         [
             "## Source Prompt",
@@ -253,7 +232,7 @@ def main() -> int:
     launch_prompt_path = output_dir / f"{args.stream_name}.prompt.md"
     summary_path = output_dir / "summary.json"
     failure_path = output_dir / "failure.md"
-    prompt_profile = resolve_prompt_profile(args.prompt_profile, args.model)
+    prompt_profile = resolve_prompt_profile(args.prompt_profile)
     write_launch_prompt(launch_prompt_path, prompt_file, prompt_profile)
 
     short_prompt = (

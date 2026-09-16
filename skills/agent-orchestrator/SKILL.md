@@ -1,6 +1,6 @@
 ---
 name: agent-orchestrator
-description: "Orchestrate multi-model AI delegation from a Claude Code or Codex parent session: classify work into roles, resolve provider/model/effort via rules/model_registry.yaml, and dispatch through subagents or codex-cli-runner / claude-cli-runner while the parent stays orchestration-only. Use when asked to 司令塔として進める, オーケストレーションする, マルチモデルで分担する, Codexへ委譲する, Claudeへ委譲する, or for any multi-step task where implementation, research, review, or GitHub work should be delegated instead of done by the parent agent."
+description: "Plan and coordinate delegated work across agents and runners. Use when splitting independent work packages, selecting role routes through rules/model_registry.yaml, or managing delegated execution. Use when asked to 司令塔として進める, オーケストレーションする, マルチモデルで分担する, Codexへ委譲する, or Claudeへ委譲する."
 ---
 
 # Agent Orchestrator
@@ -98,8 +98,9 @@ resolver の解決結果に従って runner skill または同 provider の suba
   prompt を直して再委譲する。昇格したことと理由を報告に残す。
 - 委譲失敗を理由に**親が黙って worker role を代行しない**。fallback は
   「tier 昇格して再委譲」「ユーザーへ blocked 報告」のように明示的に選び、報告に残す。
-- エラーを迂回して進めた場合、再発・検証省略・環境不備の可能性があるなら
-  bypass remediation review(原因 / 一時迂回 / 恒久対策候補 / 反映先 / 検証)を行う。
+- エラーを迂回して進めた場合の bypass remediation review(恒久対策レビュー)は、
+  親 AI の正規指示ファイル(AGENTS-common)の規則を正本とし、発動条件と整理項目は
+  そこに従う。本 skill では再定義しない。
 
 ## 発動
 

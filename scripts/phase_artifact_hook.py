@@ -82,6 +82,8 @@ def parse_artifact(path: Path) -> Artifact | None:
             return None
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
+    if not isinstance(data, dict):
+        return None
     if not all(str(data.get(key, "")).strip() for key in REQUIRED_KEYS):
         return None
     if parse_iso8601(str(data.get("created_at", ""))) is None:
@@ -111,6 +113,8 @@ def valid_single_step_exception(context_dir: Path) -> bool:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
             continue
         if data.get("enabled") is not True:
             continue

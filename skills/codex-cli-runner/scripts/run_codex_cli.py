@@ -24,10 +24,8 @@ ERROR_RE = re.compile(
     re.IGNORECASE,
 )
 
-GPT_5_5_MODEL_RE = re.compile(r"gpt[-_.]?5[-_.]?5", re.IGNORECASE)
-
-GPT_5_5_ADAPTER = """\
-## GPT-5.5 Prompt Adapter
+CODEX_ADAPTER = """\
+## Codex CLI Prompt Adapter
 
 Complete the source prompt as an outcome-first task contract.
 
@@ -52,9 +50,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--effort",
-        choices=("low", "medium", "high", "xhigh"),
+        choices=("low", "medium", "high", "xhigh", "max", "ultra"),
         default=None,
-        help="Codex model reasoning effort. Omit to use the Codex CLI configured default.",
+        help="Codex model reasoning effort, passed through unchanged. Omit to use the Codex CLI configured default.",
     )
     parser.add_argument(
         "--profile",
@@ -100,9 +98,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--prompt-profile",
-        choices=("auto", "gpt-5-5", "none"),
+        choices=("auto", "codex", "none"),
         default="auto",
-        help="Prompt adapter profile. Auto applies the GPT-5.5 adapter for explicit GPT-5.5 models.",
+        help="Prompt adapter profile. Auto applies the model-agnostic Codex adapter; none suppresses it.",
     )
     parser.add_argument(
         "--extra-codex-arg",
@@ -150,12 +148,10 @@ def compact_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True)[:4000]
 
 
-def resolve_prompt_profile(requested: str, model: str | None) -> str:
-    if requested != "auto":
-        return requested
-    if model and GPT_5_5_MODEL_RE.search(model):
-        return "gpt-5-5"
-    return "none"
+def resolve_prompt_profile(requested: str) -> str:
+    if requested == "auto":
+        return "codex"
+    return requested
 
 
 def write_launch_prompt(path: Path, source_prompt: Path, profile: str) -> None:
@@ -167,8 +163,8 @@ def write_launch_prompt(path: Path, source_prompt: Path, profile: str) -> None:
         "---",
         "",
     ]
-    if profile == "gpt-5-5":
-        sections.extend([GPT_5_5_ADAPTER, ""])
+    if profile == "codex":
+        sections.extend([CODEX_ADAPTER, ""])
     sections.extend(
         [
             "## Source Prompt",
@@ -313,7 +309,7 @@ def main() -> int:
     last_message_path = output_dir / "last-message.md"
     summary_path = output_dir / "summary.json"
     failure_path = output_dir / "failure.md"
-    prompt_profile = resolve_prompt_profile(args.prompt_profile, args.model)
+    prompt_profile = resolve_prompt_profile(args.prompt_profile)
     write_launch_prompt(launch_prompt_path, prompt_file, prompt_profile)
 
     short_prompt = (

@@ -1,6 +1,6 @@
 ---
 name: code-evaluator
-description: "Evaluate a repository, package, or subsystem when explicitly asked for a broad codebase assessment: architecture, maintainability, tests, documentation, dependency necessity, license/distribution risk, security, and AI/LLM ergonomics, delivered as an artifact-backed Markdown report. Use for whole-codebase or subsystem evaluations, architecture assessments, and dependency/license audits; not for ordinary narrow PR/diff review."
+description: "Produce a report-only broad evaluation of a repository or subsystem covering architecture, maintainability, tests, dependencies, licensing, security, and AI ergonomics. Use for codebase assessments or dependency/license audits; not ordinary narrow PR review."
 ---
 
 # Code Evaluator
@@ -26,11 +26,10 @@ Produce an evidence-backed evaluation report. Do not create patches, edit target
 Select the narrowest mode that matches the request:
 
 - `whole-codebase-evaluation`: Health check for a repository, package, or subsystem. Use summary-first output with pillar scores, sampling plan, coverage, positive signals, prioritized issues, and ideal-state recommendations.
-- `change-review`: Review a diff/PR/patch in a broader evaluator style. Use findings-first output with severity, file/line references, missing tests, and summary last. Stay limited to the diff and directly coupled boundaries; do not drift into unrelated whole-repo critique.
 - `license-audit`: Focus on dependency licenses, distribution context, prior accepted signals, unknown/no-license blockers, and remediation evidence.
 - `framework-best-practice-review`: Focus on idiomatic use of a named framework or library while still checking tests, boundaries, and dependency necessity. Record framework/library name, detected version, primary references consulted, and reviewer confidence for idiom claims.
 
-If the user gives no mode, infer it from the target and wording. If a normal PR review is requested without a broad assessment, prefer the environment's normal review workflow instead of this skill.
+If the user gives no mode, infer it from the target and wording. This skill has no diff/PR review mode: when the request is a PR, diff, or patch review, use the environment's normal review workflow (for example the built-in `/code-review`) instead of this skill, and use this skill only when the user also wants a broad assessment of the surrounding codebase.
 
 ## Workflow
 
@@ -77,7 +76,6 @@ If the user gives no mode, infer it from the target and wording. If a normal PR 
 ## Required Report Properties
 
 - For `whole-codebase-evaluation`, include `Executive Summary`, `Overall Score`, `Pillar Scores`, `Evidence Coverage`, `Checks Run`, `Checks Not Run`, `Positive Signals`, `Issues & Risks`, `Dependency Triage`, `License / Distribution Triage` when applicable, `What I Would Not Preserve`, and `Recommended Next Actions`. Start with summary and scores.
-- For `change-review`, include `Findings`, `Missing Tests`, `Evidence Coverage`, `Open Questions`, `Checks Run / Not Run`, and `Summary`. Start with findings ordered by severity and include file/line references when available.
 - For `license-audit`, include dependency and license/distribution matrices, distribution context assumptions, accepted or unresolved license signals, remediation evidence, blockers or needs-confirmation items, and recommended next actions.
 - For `framework-best-practice-review`, include framework/library name, detected version, primary references consulted, reviewer confidence for idiom claims, findings, tests/checks coverage, dependency necessity, and recommended next actions.
 - Use priority by risk/design importance, not human work phasing: `P0` blocker, `P1` high design/security/license risk, `P2` meaningful maintainability or dependency risk, `P3` optional cleanup.

@@ -44,7 +44,7 @@ done
 eval "$(sed -n '/^claude_skills=(/,/^)/p; /^codex_skills=(/,/^)/p; /^mcp_servers=(/,/^)/p' "$BOOTSTRAP")"
 
 # bootstrap-web の install_third_party がハードコードしている公開 skill (同期対象)
-THIRD_PARTY_SKILLS="gws-shared gws-drive gws-drive-upload grill-me"
+THIRD_PARTY_SKILLS=""  # 2026-09-15: gws-* は gws-cli-runner に吸収、grill-me は撤去（ADR-0062）
 
 # bootstrap-web が導入する CLI (同期対象)
 CLI_BOOTSTRAP="jq rg codex gemini ghq gh gws copilot op"

@@ -10,7 +10,6 @@
   "permissions": {
     "defaultMode": "bypassPermissions",
     "allow": [
-      "mcp__pencil",
       "Bash(gh pr merge *)",
       "Bash(git merge *)"
     ]
@@ -18,7 +17,6 @@
   "enabledPlugins": {
     "document-skills@anthropic-agent-skills": true,
     "skill-creator@claude-plugins-official": true,
-    "claude-code-metrics-plugin@oasys-dev-marketplace": true,
     "codex@openai-codex": true
   },
   "extraKnownMarketplaces": {
@@ -32,12 +30,6 @@
       "source": {
         "source": "github",
         "repo": "openai/codex-plugin-cc"
-      }
-    },
-    "oasys-dev-marketplace": {
-      "source": {
-        "source": "git",
-        "url": "git@github.com:oasysgames/claude-code-dev-marketplace.git"
       }
     }
   },

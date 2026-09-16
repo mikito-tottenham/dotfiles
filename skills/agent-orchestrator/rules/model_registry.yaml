@@ -17,9 +17,12 @@
 # 暗黙 fallback せず route 不在としてユーザーへ blocked 報告すること。
 #
 # v3: provider: parent と codex self_elision を追加し、resolver を親相対化。
+# v4 (2026-09-15): Codex 列を `~/.codex/models_cache.json` に実在する ID だけで構成。
+#   S/A = gpt-6-astra (config.toml 既定。effort は low/medium/high/xhigh/max/ultra)、
+#   B = gpt-5.6-sol、C = gpt-5.6-luna。gpt-5.5 は registry から外した。
 
-version: 3
-updated_at: "2026-07-28"
+version: 4
+updated_at: "2026-09-15"
 
 execution_modes:
   self: >-
@@ -92,13 +95,13 @@ tiers:
     intent: >-
       最難関。novel な設計判断、要件が曖昧で高リスク、失敗コストが大きい、
       複数の相反する制約の裁定が必要。
-    codex: { model: gpt-5.6-sol, effort: xhigh }
+    codex: { model: gpt-6-astra, effort: xhigh }
     claude_code: { model: fable }  # 親と同モデル。トークン最高価のため使用は最小限に
   A:
     intent: >-
       実装主力。設計判断を含む実装、複数ファイルにまたがる変更、
       本格的な調査・執筆、Web 調査、GitHub 連携作業。
-    codex: { model: gpt-5.6-sol, effort: high }
+    codex: { model: gpt-6-astra, effort: high }
     claude_code: { model: opus }
   B:
     intent: >-

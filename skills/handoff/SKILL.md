@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Create continuation handoffs for another agent, session, PR reviewer, or future machine. Use when the user asks to hand off work, defer work, resume later, prepare PR handoff context, transfer context across machines, summarize current state for the next agent, or preserve ignored artifacts such as `.context` without leaking secrets.
+description: "Create continuation handoffs for another agent, session, PR reviewer, or machine. Use when work must resume later or elsewhere, when the parent context is near its budget, or for PR handoff context and safe summaries of ignored local artifacts; triggers include 引き継ぎ, 新セッションへ切替, コンテキストが膨らんだ."
 ---
 
 # Handoff
@@ -13,6 +13,7 @@ Create a handoff packet that lets a fresh agent resume work without guessing. Ch
 
 1. Determine the destination:
    - Same worktree or same machine: write an ignored artifact under `.context/handoff/`.
+   - Same machine, new session because the parent context is near its budget (the AGENTS-common 150k-token rule, or a long execution phase after planning): write `.context/handoff/<date>-<task>.md` following the Context-Budget Handoff Contract below, then switch to a new session, subagent, or runner that starts by reading that file.
    - Cross-machine continuation: use a PR as the default carrier.
    - PR reviewer or collaborator: draft a PR comment unless the user explicitly asks to post it.
    - Deferred work without an open PR: write `.context/handoff/` locally and recommend the smallest durable next carrier, usually a branch or PR.
@@ -30,9 +31,9 @@ Create a handoff packet that lets a fresh agent resume work without guessing. Ch
 ## Medium Rules
 
 `.context/handoff/`:
-- Use for local same-worktree continuation, active investigation state, or intermediate notes that should not be committed.
-- Include front matter with `task`, `phase_or_step`, and `created_at` when the repository requires artifact gating.
-- Make filenames stable and scannable, such as `.context/handoff/2026-06-04-topic.md`.
+- Use for local same-worktree continuation, active investigation state, intermediate notes that should not be committed, and context-budget handoffs to a new session on the same machine.
+- Always include front matter with `task`, `phase_or_step`, and `created_at`; these are the artifact-gate keys and the receiving session uses them to locate the current Phase.
+- Make filenames stable and scannable, such as `.context/handoff/2026-06-04-topic.md` (`<date>-<task>.md`). When the same task is handed off again, write a new file rather than editing the old one; the newest `created_at` is authoritative.
 
 PR handoff:
 - Use for cross-machine continuation by default.
@@ -51,6 +52,21 @@ Deferred work:
 - Keep the scope narrow enough that the next agent can start with one command or one file read.
 - If there is no durable carrier yet and cross-machine use is likely, recommend creating or updating a PR.
 - If no PR exists yet, write a pre-PR handoff and make PR creation or update the next action instead of forcing the output into PR comment form.
+
+## Context-Budget Handoff Contract
+
+This is the contract AGENTS-common refers to when it says to hand off "following the handoff skill contract". Use it whenever the destination is a new session, subagent, or runner on the same machine.
+
+- Destination file: `.context/handoff/<date>-<task>.md` inside the current worktree.
+- Front matter (required): `task`, `phase_or_step`, `created_at`.
+- Body sections (required, in this order):
+  1. `現状`: goal, current Phase / Step, branch or worktree, and what is already done with its artifact paths.
+  2. `未完了`: remaining work packages, blockers, and decisions still open, each with who or what resolves it.
+  3. `次の一手`: the single first action the receiver takes (one command or one file read), followed by the ordered remaining steps.
+  4. `参照 artifact`: paths under `.context/` and committed files the receiver must read, with one line on why each matters.
+- Never include secret values, tokens, `op://...` references, account names, or sensitive manifest rows; describe how to restore them instead (see Redaction Rules).
+- Before writing, verify with `git status --short` and the latest `.context/<task>/` artifacts that `現状` matches the working tree; do not copy earlier session summaries unread.
+- After writing, the parent session stops doing execution work. It may only report the handoff path and, when delegating, pass that path to the receiver.
 
 ## Handoff Content
 
@@ -77,7 +93,7 @@ Use this structure unless the target medium has a stronger local convention:
 # Handoff
 
 ## Destination
-[same worktree | PR | cross-machine via PR | deferred work | other]
+[same worktree | new session (context budget) | PR | cross-machine via PR | deferred work | other]
 
 ## Current State
 [goal, status, branch/PR/workspace]

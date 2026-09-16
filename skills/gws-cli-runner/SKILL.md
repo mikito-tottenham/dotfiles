@@ -1,6 +1,6 @@
 ---
 name: gws-cli-runner
-description: Run Google Workspace CLI (`gws`) through the repository-managed account-scoped wrapper. Use when Claude Code or Codex needs to execute, configure, debug, or propose `gws` commands, especially where OAuth profile selection, credential paths, Personal-owned account mapping, `.env` account cache, 1Password restore, fallback policy, or avoidance of wrong Google principals matters. Also use whenever a `gws` auth error appears — `invalid_rapt`, `invalid_grant`, `403 org_internal`, `token_valid` false, expired or missing credentials — before attempting any manual recovery.
+description: Plan, configure, run, or troubleshoot account-scoped Google Workspace CLI (`gws`) commands through `gws-account`. Use for proposed or executed `gws` commands and for `gws` authentication errors such as `invalid_rapt`, `invalid_grant`, `403 org_internal`, or an invalid token.
 ---
 
 # GWS CLI Runner
@@ -90,6 +90,8 @@ gws-account <profile> auth status
 gws-account <profile> auth login
 gws-account <profile> drive files list --params '{"pageSize": 5}'
 ```
+
+Drive の files / permissions / drives 操作（検索・取得・作成・移動・共有・export・`+upload`）のフラグと代表例は [references/drive.md](references/drive.md) を参照する。
 
 When a command fails, classify the failure before continuing:
 

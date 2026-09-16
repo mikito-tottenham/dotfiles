@@ -3,11 +3,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 import sys
 from pathlib import Path
 
 MAX_SKILL_NAME_LENGTH = 64
+RUNNER_COMMON_RELPATH = Path("references") / "runner-common.md"
 ALLOWED_PROPERTIES = {"name", "description", "license", "allowed-tools", "metadata"}
 
 
@@ -78,6 +80,18 @@ def parse_frontmatter(skill_md: Path) -> tuple[dict[str, str], list[str], str | 
     return frontmatter, warnings, "Invalid frontmatter format"
 
 
+def check_runner_common(skill_path: Path) -> str | None:
+    """Require identical references/runner-common.md copies across sibling *-cli-runner skills."""
+    if not (skill_path / RUNNER_COMMON_RELPATH).is_file():
+        return None
+    copies = sorted(skill_path.resolve().parent.glob(f"*-cli-runner/{RUNNER_COMMON_RELPATH.as_posix()}"))
+    digests = {path: hashlib.md5(path.read_bytes()).hexdigest() for path in copies}
+    if len(set(digests.values())) <= 1:
+        return None
+    detail = ", ".join(f"{path.parent.parent.name}={digest[:8]}" for path, digest in digests.items())
+    return f"{RUNNER_COMMON_RELPATH.as_posix()} differs across cli-runner skills (md5): {detail}"
+
+
 def validate_skill(skill_path: Path) -> tuple[bool, str]:
     skill_md = skill_path / "SKILL.md"
     if not skill_md.exists():
@@ -118,6 +132,10 @@ def validate_skill(skill_path: Path) -> tuple[bool, str]:
 
     if warnings:
         return False, "; ".join(warnings)
+
+    runner_common_error = check_runner_common(skill_path)
+    if runner_common_error:
+        return False, runner_common_error
     return True, "Skill is valid!"
 
 

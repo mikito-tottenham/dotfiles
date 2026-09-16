@@ -4,6 +4,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -249,6 +251,89 @@ def check_registry_health() -> None:
         if installed.get("has_resources") and not resources_path.exists():
             add_check("registry", "fail", "RESOURCES_PATH_MISSING", resources_path, "resources_path missing", name, "global")
     add_pass_if_empty("registry", "registry is healthy", "global", "skill-sources.json")
+
+
+def resolve_source_path() -> tuple[Path | None, str]:
+    """Return the publisher source root for first-party skills and how it was resolved."""
+    override = os.environ.get("SKILL_MANAGER_SOURCE_PATH")
+    if override:
+        return Path(override).expanduser().resolve(), "env:SKILL_MANAGER_SOURCE_PATH"
+    if shutil.which("chezmoi") is None:
+        return None, "chezmoi not found in PATH"
+    try:
+        completed = subprocess.run(
+            ["chezmoi", "source-path"], capture_output=True, text=True, timeout=10, check=False
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return None, f"chezmoi source-path failed: {exc}"
+    if completed.returncode != 0 or not completed.stdout.strip():
+        return None, f"chezmoi source-path exited {completed.returncode}"
+    return Path(completed.stdout.strip()).expanduser().resolve(), "chezmoi source-path"
+
+
+def read_local_path(skill_md: Path) -> str | None:
+    """Return frontmatter `metadata.local-path` using a line scan (no regex backtracking)."""
+    try:
+        text = skill_md.read_text(encoding="utf-8")
+    except OSError as exc:
+        add_error("FILE_READ", skill_md, str(exc))
+        return None
+    if not text.startswith("---\n"):
+        return None
+    in_metadata = False
+    for line in text.splitlines()[1:]:
+        if line.strip() == "---":
+            break
+        if not line.strip():
+            continue
+        if not line.startswith((" ", "\t")):
+            in_metadata = line.strip() == "metadata:"
+            continue
+        if not in_metadata:
+            continue
+        key, sep, value = line.strip().partition(":")
+        if sep and key.strip() == "local-path":
+            value = value.strip()
+            if value[:1] in {'"', "'"} and value[-1:] == value[:1] and len(value) >= 2:
+                value = value[1:-1]
+            return value or None
+    return None
+
+
+def check_first_party_source_drift() -> None:
+    """Detect installs whose `metadata.local-path` points outside the current publisher source."""
+    source_path, how = resolve_source_path()
+    if source_path is None:
+        add_check("source_drift", "warn", "SOURCE_PATH_UNRESOLVED", "", f"publisher source path unresolved ({how}); set SKILL_MANAGER_SOURCE_PATH to enable stale detection", "source-path", "global")
+        return
+    expected_root = (source_path / "skills").resolve()
+    for agent, skills_dir in (("claude-code", CLAUDE_HOME / "skills"), ("codex", CODEX_HOME / "skills")):
+        if not skills_dir.exists():
+            continue
+        for path in sorted(skills_dir.iterdir()):
+            if path.name.startswith(".") or not path.is_dir():
+                continue
+            skill_md = path / "SKILL.md"
+            if not skill_md.exists():
+                continue
+            local_path_raw = read_local_path(skill_md)
+            if local_path_raw is None:
+                continue  # external or manual install; provenance handled elsewhere
+            local_path = Path(local_path_raw).expanduser()
+            subject = f"{agent}:{path.name}"
+            try:
+                local_resolved = local_path.resolve(strict=True)
+            except FileNotFoundError:
+                add_check("source_drift", "fail", "LOCAL_PATH_MISSING", skill_md, f"metadata.local-path does not exist: {local_path}", subject, "global")
+                continue
+            if local_resolved == expected_root / path.name:
+                add_check("source_drift", "pass", "SOURCE_PATH_OK", skill_md, f"metadata.local-path matches {how}", subject, "global")
+                continue
+            if expected_root in local_resolved.parents:
+                add_check("source_drift", "warn", "SOURCE_PATH_RENAMED", skill_md, f"metadata.local-path is under the publisher source but not at skills/{path.name}: {local_path}", subject, "global")
+                continue
+            add_check("source_drift", "warn", "SOURCE_PATH_STALE", skill_md, f"metadata.local-path {local_path} is outside {expected_root} ({how}); reinstall from the publisher source with gh skill install --from-local", subject, "global")
+    add_pass_if_empty("source_drift", "no first-party installs with metadata.local-path found", "global", "source-path")
 
 
 def check_deprecated_commands() -> None:
@@ -629,6 +714,7 @@ def main() -> None:
     check_marketplace_plugins()
     check_codex_plugins()
     check_registry_health()
+    check_first_party_source_drift()
     check_deprecated_commands()
     check_skill_collisions()
     check_codex_presence()

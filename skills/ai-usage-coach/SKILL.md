@@ -1,6 +1,6 @@
 ---
 name: ai-usage-coach
-description: "Evaluate and coach how a human delegates work to AI: prompts, context scoping, skill/tool/subagent selection, verification, waste recovery, and routing observed AI failures into prompt, docs, orchestration, or workflow improvements. Use when asked to review Claude/Codex usage, prompt habits, AI session logs, repeated AI mistakes, or 'how should I use AI better'. Not for HR/personnel evaluation, personality assessment, or ranking people."
+description: "Coach how a human delegates work to AI using session or period evidence. Use for prompt habits, context, skill/tool/subagent routing, verification, repeated AI failures, or AI usage logs; not personnel, personality, or repository-quality evaluation."
 ---
 
 # AI Usage Coach

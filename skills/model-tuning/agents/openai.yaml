@@ -1,0 +1,6 @@
+interface:
+  display_name: "Model Tuning"
+  short_description: "Audit docs/skills/prompts for a current LLM generation"
+  default_prompt: "Use $model-tuning to audit this repo's docs, skills, prompts, and agent rules for the target model's readiness and propose replacements."
+policy:
+  allow_implicit_invocation: false

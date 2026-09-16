@@ -9,6 +9,7 @@ set -euo pipefail
 #   3. 配布スキルを再インストール
 #        - first-party (repo skills/): 必須。欠落・検証失敗があれば最後に exit 1。
 #        - third-party (公開 GitHub): best-effort。取得失敗は skip し、集計して継続する。
+#          2026-09-15 時点で manifest 上の third-party は全て撤去済みのため取得対象なし。
 #   4. runner CLI と共通ツールを best-effort で用意 (jq/rg/codex/gemini/ghq/gh/gws/copilot)。認証は env / 1Password
 #      由来 (GH_TOKEN・GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE・COPILOT_GITHUB_TOKEN 等、未設定なら warn)。
 #      grok は xAI OAuth、soundcore は対話ブラウザのため対象外。
@@ -18,7 +19,7 @@ set -euo pipefail
 #      ローカルアプリ依存 (pencil) と対話 OAuth 必須 (slack-twin / claude.ai コネクタ) は対象外。
 #
 # 再現対象は「web で復元可能なサブセット」であり、manifest 全体ではない。
-# empirical-prompt-tuning は upstream 不在 (404) のため対象外。
+# empirical-prompt-tuning は upstream 不在 (404)、gws-* / grill-me は撤去済みのため対象外。
 #
 # OP_SERVICE_ACCOUNT_TOKEN が無い / op を導入できない (network policy 遮断) 場合、step 5 は
 # skip され、1Password 由来の secret・secret-backed file・private subagent は復元されない。
@@ -102,17 +103,17 @@ record_mcp_skipped() { mcp_skipped+=("$1: $2"); }
 # Claude Code には codex-cli-runner、Codex には claude-cli-runner を入れる差分に注意。
 claude_skills=(
   skill-manager docs-entrypoint-check docs-evaluator grok-cli-runner code-evaluator
-  opus-4-8-tuning gpt-5-5-tuning codex-cli-runner gemini-cli-runner
+  model-tuning codex-cli-runner gemini-cli-runner
   copilot-cli-runner agent-orchestration-evaluator ai-usage-coach soundcore-minutes
   ghq-repo-placement op-cli-runner onepassword-secret-materialize handoff git-branch-review
-  dads-design gws-cli-runner agent-orchestrator
+  dads-design gws-cli-runner agent-orchestrator external-report
 )
 codex_skills=(
   skill-manager docs-entrypoint-check docs-evaluator grok-cli-runner code-evaluator
-  opus-4-8-tuning gpt-5-5-tuning claude-cli-runner gemini-cli-runner
+  model-tuning claude-cli-runner gemini-cli-runner
   copilot-cli-runner agent-orchestration-evaluator ai-usage-coach soundcore-minutes
   ghq-repo-placement op-cli-runner onepassword-secret-materialize handoff git-branch-review
-  dads-design gws-cli-runner agent-orchestrator
+  dads-design gws-cli-runner agent-orchestrator external-report
 )
 
 # 単純な文字列を JSON 文字列にする (\ と " をエスケープ)。制御文字は対象外。
@@ -213,45 +214,16 @@ install_first_party() {
 }
 
 install_third_party() {
-  info "third-party skill を公開 GitHub から取得中 (best-effort)..."
-  make_tmp
-  local tmp="$TMP_LAST"
-
-  info "  [1/2] googleworkspace/cli@v0.22.5 を clone (gws-shared/drive/drive-upload)..."
-  if git clone --depth 1 --branch v0.22.5 https://github.com/googleworkspace/cli.git "$tmp/gws" >/dev/null 2>&1; then
-    local s
-    for s in gws-shared gws-drive gws-drive-upload; do
-      if [ -d "$tmp/gws/skills/$s" ]; then
-        if install_external_skill "$tmp/gws/skills/$s" "$s"; then
-          third_party_installed+=("$s"); info "    installed: $s"
-        else
-          record_tp_skipped "$s" "install verify failed"; warn "    install 検証失敗: $s"
-        fi
-      else
-        record_tp_skipped "$s" "missing in upstream"; warn "    upstream に欠落: $s"
-      fi
-    done
-  else
-    local s
-    for s in gws-shared gws-drive gws-drive-upload; do record_tp_skipped "$s" "clone failed"; done
-    warn "  googleworkspace/cli の clone に失敗 (gws-* を skip)"
-  fi
-
-  info "  [2/2] mattpocock/skills を clone (grill-me)..."
-  if git clone --depth 1 https://github.com/mattpocock/skills.git "$tmp/mp" >/dev/null 2>&1; then
-    if [ -d "$tmp/mp/skills/productivity/grill-me" ]; then
-      if install_external_skill "$tmp/mp/skills/productivity/grill-me" grill-me; then
-        third_party_installed+=("grill-me"); info "    installed: grill-me"
-      else
-        record_tp_skipped "grill-me" "install verify failed"; warn "    install 検証失敗: grill-me"
-      fi
-    else
-      record_tp_skipped "grill-me" "missing in upstream"; warn "    grill-me が upstream で見つからない"
-    fi
-  else
-    record_tp_skipped "grill-me" "clone failed"; warn "  mattpocock/skills の clone に失敗 (grill-me を skip)"
-  fi
-
+  # 2026-09-15: third-party skill は全て manifest 上で撤去済み (docs/skills-install-manifest.md)。
+  #   gws-shared / gws-drive / gws-drive-upload → gws-cli-runner に吸収
+  #   grill-me → Claude は built-in anthropic-skills:grill-me、Codex は代替なし
+  #   empirical-prompt-tuning → upstream 不在 (404)
+  # 取得対象が無いため何もせず、skip 記録だけ残す。再導入時は manifest の third-party 節を正本に戻すこと。
+  info "third-party skill: manifest 上の取得対象なし (gws-* / grill-me は撤去済み)"
+  record_tp_skipped "gws-shared" "retired: absorbed into gws-cli-runner"
+  record_tp_skipped "gws-drive" "retired: absorbed into gws-cli-runner"
+  record_tp_skipped "gws-drive-upload" "retired: absorbed into gws-cli-runner"
+  record_tp_skipped "grill-me" "retired: Claude uses built-in anthropic-skills:grill-me; no Codex replacement"
   info "third-party skill 完了 (installed:${#third_party_installed[@]} / skipped:${#third_party_skipped[@]})"
 }
 

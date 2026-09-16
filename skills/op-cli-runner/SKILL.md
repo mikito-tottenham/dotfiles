@@ -23,10 +23,10 @@ If `op whoami`, `op vault list`, or `opmaterialize diff` fails with `account is 
 
 ## Wrapper
 
-Use the bundled wrapper instead of raw `op` for non-trivial work:
+Use the bundled wrapper instead of raw `op` for non-trivial work. Resolve `<skill-dir>` from the location of this `SKILL.md` (the installed skill directory, for example `~/.claude/skills/op-cli-runner` or `~/.codex/skills/op-cli-runner`):
 
 ```bash
-python3 skills/op-cli-runner/scripts/run_op_cli.py \
+python3 <skill-dir>/scripts/run_op_cli.py \
   --output-dir .context/<task>/op \
   --cwd /path/to/repo \
   -- opmaterialize diff
@@ -53,7 +53,7 @@ For rejection tests, passing a blocked `op` command to the wrapper is allowed be
 Use the wrapper for direct execution:
 
 ```bash
-python3 skills/op-cli-runner/scripts/run_op_cli.py \
+python3 <skill-dir>/scripts/run_op_cli.py \
   --output-dir .context/<task>/op-whoami \
   -- op whoami --account my.1password.com
 ```
@@ -70,9 +70,9 @@ For 1Password-backed dotfiles:
 2. Use this skill's wrapper for execution:
 
    ```bash
-   python3 skills/op-cli-runner/scripts/run_op_cli.py \
+   python3 <skill-dir>/scripts/run_op_cli.py \
      --output-dir .context/<task>/op-diff \
-     --cwd /Users/rmanzoku/.local/share/chezmoi \
+     --cwd "$(chezmoi source-path)" \
      --timeout-seconds 900 \
      -- opmaterialize diff
    ```
@@ -80,9 +80,9 @@ For 1Password-backed dotfiles:
 3. If `diff` exits `1`, that means missing or changed files exist. Run restore:
 
    ```bash
-   python3 skills/op-cli-runner/scripts/run_op_cli.py \
+   python3 <skill-dir>/scripts/run_op_cli.py \
      --output-dir .context/<task>/op-restore \
-     --cwd /Users/rmanzoku/.local/share/chezmoi \
+     --cwd "$(chezmoi source-path)" \
      --timeout-seconds 900 \
      -- opmaterialize restore
    ```
@@ -92,12 +92,12 @@ For 1Password-backed dotfiles:
 
 ## Wrapper Availability
 
-Treat a missing `opmaterialize` wrapper separately from 1Password authentication failures. If `opmaterialize` is not found or exits 127 before contacting 1Password, use the bundled script path from the installed skill:
+Treat a missing `opmaterialize` wrapper separately from 1Password authentication failures. If `opmaterialize` is not found or exits 127 before contacting 1Password, use the bundled script from the installed `onepassword-secret-materialize` skill, which lives next to this skill under the same skills root (`<skill-dir>/..`, for example `~/.claude/skills` or `~/.codex/skills`):
 
 ```bash
 OP_ACCOUNT=my.1password.com \
 OP_DOTFILES_MATERIALIZE_VAULT="Dotfiles Secrets" \
-sh ~/.codex/skills/onepassword-secret-materialize/scripts/opmaterialize diff
+sh <skill-dir>/../onepassword-secret-materialize/scripts/opmaterialize diff
 ```
 
 Use this only for wrapper availability. Do not use it as an authentication fallback.
@@ -126,7 +126,7 @@ If `op` starts failing immediately with `no active session` or `not currently si
 After changing this skill, run:
 
 ```bash
-python3 skills/op-cli-runner/scripts/run_op_cli.py --help
-python3 -m py_compile skills/op-cli-runner/scripts/run_op_cli.py
-scripts/skill-quick-validate skills/op-cli-runner
+python3 <skill-dir>/scripts/run_op_cli.py --help
+python3 -m py_compile <skill-dir>/scripts/run_op_cli.py
+scripts/skill-quick-validate skills/op-cli-runner   # from the dotfiles repo root
 ```

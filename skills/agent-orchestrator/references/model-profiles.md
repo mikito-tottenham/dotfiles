@@ -1,6 +1,6 @@
 ---
 title: "Model Profiles — worker tier ladder の判断補助"
-updated_at: 2026-07-28
+updated_at: 2026-09-15
 ---
 
 # Model Profiles
@@ -29,20 +29,29 @@ cli_runner になる。
 
 ## モデル別プロファイル
 
-### gpt-5.6-sol(Codex 列 S/A/B、effort がダイヤル)
+### gpt-6-astra(Codex 列 S/A、effort がダイヤル)
 
-- OpenAI の最上位 agentic coding モデル("Latest frontier agentic coding model")。
-  context 272k。effort は low〜ultra まで(xhigh 超は runner の extra-arg 経由)。
-- 得意: 長時間の自律コーディング、大規模実装、リポジトリ横断作業、Web 調査込みの実調査。
-- 留意: effort を上げるほど実行時間が伸びる。600 秒 timeout を超えそうな契約では
-  runner の timeout override を検討。
+- Codex の現行最上位モデルで、`~/.codex/config.toml` の親既定(effort `ultra`)と同一。
+  effort は low / medium / high / xhigh / max / ultra(`~/.codex/models_cache.json`、2026-09-15)。
+  runner の `--effort` は registry の値をそのまま透過する。
+- 得意: 設計判断を含む実装、複数ファイルにまたがる変更、本格的な調査・執筆、
+  相反する制約の裁定。
+- 留意: effort を上げるほど実行時間が伸びる。timeout を置く契約では runner の
+  timeout override を検討。`ultra` は自動委譲を伴うため worker 用途では原則 xhigh まで。
+
+### gpt-5.6-sol(Codex 列 B)
+
+- 前世代の frontier agentic coding モデル("Latest frontier agentic coding model" 世代)。
+  context 272k。effort は low〜ultra。
+- 得意: 仕様が明確な定型実装・修正・調査、長時間の自律コーディング。
+- 留意: astra 登場後は B tier(定型実装)の既定。判断を伴う設計は A 以上へ。
 
 ### gpt-5.6-luna(Codex 列 C)
 
 - 高速・低コスト("Fast and affordable")。機械的な変換・整形・抽出向け。
 - 留意: 判断を要する作業を任せない。仕様が完全に確定してから渡す。
 
-### fable / Claude Fable 5(Claude 列 S)
+### fable / Claude Fable 5.1(Claude 列 S)
 
 - Mythos クラス。この構成で最も賢く、最も高価。親(司令塔)と同一モデル。
 - 得意: 曖昧さの裁定、相反する制約の統合、最高難度の設計・レビュー。
@@ -70,13 +79,13 @@ cli_runner になる。
 - 大量・長時間・並列の実装/調査 → Codex 列(クレジット余剰。Claude 親からは cli_runner の観測可能な artifact も利点)
 - 親の MCP・ブラウザ・ローカル権限・セッション文脈が要る → 親と同 provider の列(agent_tool)
 - 日本語の対外文書・ニュアンス重視の執筆 → Claude 列
-- agentic coding の一点突破 → Codex 列(sol)
+- agentic coding の一点突破 → Codex 列(astra / sol)
 - クロスモデルレビュー(worker と別 provider による品質検証) → 親と異なる
   provider の列を明示選択する(registry の目安からの逸脱として理由を記録)
 
 ## 実測メモ
 
-- 2026-07-25 sol/high(cli_runner): dot_claude/CLAUDE.md 追記委譲。245 秒。
+- 2026-07-25 sol/high(cli_runner、当時の A tier): dot_claude/CLAUDE.md 追記委譲。245 秒。
   指示逐語遵守・検証まで完璧。lock 競合を恒久対策レビュー付きで報告する品質。
 - 2026-07-25 sol/low(cli_runner): 1 行修正委譲。108 秒。正確。
   仕様確定済みの小変更なら low で十分。

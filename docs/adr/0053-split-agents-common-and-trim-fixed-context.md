@@ -3,6 +3,10 @@ title: "AGENTS.md の共通/Codex 固有分割と固定コンテキストの削�
 status: accepted
 date: 2026-07-29
 agent_model: "Claude Fable 5 (claude-fable-5)"
+updated_at: 2026-09-15
+agent_model_history:
+  - {date: 2026-07-29, model: "Claude Fable 5 (claude-fable-5)"}
+  - {date: 2026-09-15, model: "GPT-6 Astra (parent); GPT-5.6 Sol (editing worker)"}
 ---
 
 # 0053: AGENTS.md の共通/Codex 固有分割と固定コンテキストの削減
@@ -14,6 +18,7 @@ Claude Code の毎セッション固定コンテキストを実測したとこ�
 - `~/.claude/CLAUDE.md` が `~/.codex/AGENTS.md` 全体(19.4KB)を import しており、うち `# Codex 固有ルール` 5.1KB は「適用しない」と宣言した上で毎回読み込まれていた
 - ローカル Skill 26 個の description 合計が 13.2KB(500B 超が 12 個)。SKILL.md 本文は呼び出し時のみ読まれるが、description は全数が毎セッション載る
 - `opus-4-7-tuning` は `opus-4-8-tuning` に実質置き換えられており、配備し続ける必要がなかった
+- 2026-09-15の精密化は、[Rethinking skills and prompts for GPT-6 Astra](https://developers.openai.com/blog/rethinking-skills-and-prompts-for-gpt-6-astra)のtrigger精度・progressive disclosure・過剰scaffolding削減を一次根拠とする
 
 ## 決定
 
@@ -24,6 +29,8 @@ Claude Code の毎セッション固定コンテキストを実測したとこ�
 2. **Skill description の圧縮**: 500B 前後を超える 14 skill の description を、トリガーキーワードと否定スコープを維持したまま約半分に圧縮(合計 −3.5KB)。正本は repo `skills/`、`gh skill install --from-local` で claude-code / codex 両方へ再配備
 3. **opus-4-7-tuning の退役**: `docs/skills-install-manifest.md` と `scripts/bootstrap-web` から除外し、ローカル配備(`~/.claude/skills/`, `~/.codex/skills/`)を削除。repo `skills/opus-4-7-tuning/` は履歴として残す
 4. **共通ルール本文の重複統合**: 意味を変えずに近接する重複バレット(保存先ルール 7→3、スクリプトログ 3→1、恒久対策レビュー 2→1、artifact gate 3→1、ADR 2→1)を統合(−543B)。規範的な語句は削っていない
+5. **2026-09-15 Skill 精密化**: 個人管理18 Skillを対象に、descriptionを実際のworkflowへ限定し、複数modeの詳細は必要時だけ読むconditional referenceへ移す。移動前後の原文一致と現実的なpositive/near-negative requestで検証する
+6. 認証・secret、git/GitHub状態変更、provider/model/effort registry、timeout、観測ログ、失敗・停止条件の既存契約は維持する。unknown body driftの配備コピーは上書きしない
 
 ## 削減効果(実測)
 
@@ -35,6 +42,7 @@ Claude Code の毎セッション固定コンテキストを実測したとこ�
 - 分割直後の `chezmoi cat ~/.codex/AGENTS.md` は分割前の配備ファイルとバイト一致を確認(純粋な構造変更)
 - 全 SKILL.md front matter を yaml.safe_load でパース検証
 - 再配備 27 install 全成功、`~/.claude/skills` の description 合計 13,162B → 9,663B
+- 2026-09-15変更の削減量は、変更前後のUTF-8 byte数で比較する。token削減量とは扱わない
 
 ## 注意
 

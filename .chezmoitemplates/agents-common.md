@@ -10,7 +10,8 @@
 - secret 実値は 1Password に保存し、CLI では `op run --env-file` / `op read` と `op://...` secret reference 経由で受け渡すこと
 - **認証は例外なく 1Password 経由とすること**。ツール独自の認証ストアへ実値を保存する経路（`gh auth login` の keyring、平文の token file、1Password 管理外の SSH 秘密鍵など）は、1Password が使えないときの代替経路としても採用しないこと。SSH が要る場合は 1Password の SSH agent を使う
 - 認証が通らない場合の一次切り分けは 1Password 側（アプリのロック解除、CLI 統合の有効化、`op whoami` の確認）とし、別ストアへ実値を置く回避策で復旧させないこと
-- 1Password への依存は認証が必要な操作だけに限定すること。読み取り専用のローカル操作（`git status` / `git log` 等）まで `op run` を経由させると、1Password のロック中や非対話セッションで作業全体が停止する（例: `alias git='oprun git'` ではなく、git credential helper 側で `oprun` を噛ませる。→ dotfiles ADR-0055）
+- 1Password への依存は認証が必要な操作だけに限定すること。読み取り専用のローカル操作まで `op run` を経由させると 1Password のロック中や非対話セッションで作業全体が停止する（構成例は dotfiles ADR-0055）
+- Claude Code / Codex の非対話 shell では `~/.zshrc` の `alias gh='oprun gh'` が効かないため、`gh` は必ず `oprun gh ...` と明示して呼ぶこと。素の `gh` は keyring 側の token に落ちる（2026-09-15 実測）
 - `~/.config/op/dotfiles.env` は管理外の secret reference 置き場とし、実値を書かないこと
 - `~/.zshenv.local` は secret の置き場ではなく、マシン固有の非 secret local override に限定すること
 - 永続的に参照すべき指示や、worktree / セッションをまたいで再現が必要な情報は Memory ではなく git 管理ファイル（作業リポジトリの `docs/`・`.agents/`、またはグローバル dotfiles 例: `~/.codex/AGENTS.md`）に保存し、恒久性のあるユーザー指示・再発しやすい運用判断・複数回参照しそうな手順は原則その作業ターン内で反映すること
@@ -23,7 +24,7 @@
 - AI が作る script / skill では、特に外部接続を伴う処理について、主経路の失敗原因を隠す暗黙 fallback を追加しないこと。代替経路が必要な場合は、目的、発動条件、観測ログ、冪等性、再実行時の挙動、検証欠落、恒久対策レビューの要否を明示し、安定した代替経路は fallback ではなく主経路へ昇格すること。同じデータに対する複数 RPC / mirror / replica のように同等性と選択条件が明示された冗長 provider は、この禁止の例外として扱うこと
 - アーカイブ・削除・公開設定・権限・リネームなど外部サービスやリポジトリの状態変更は、ユーザーが明示的に指示した操作だけを実行すること。マージ完了・タスク完了・作業終了後の後片付け（リポジトリ・ブランチ・セッション・ドキュメント等のアーカイブや削除）も同様に、明示指示がない限り実行しないこと。指示された操作が権限・スコープ・環境制約で失敗しても、アーカイブなど別の状態変更を独断で代替実行せず、失敗理由と実行可能な代替案を提示して停止し、ユーザーの選択を待つこと
 - `git commit`・`git push`・PR 作成・マージ・ブランチ作成/削除・タグ・force push など、git および GitHub の状態を変更する操作は、ユーザーがその操作をチャットで明示的に承認・指示した場合だけ実行すること（2026-09-09 ユーザー指示。コミットもプッシュも例外にしない）。承認は操作ごと・セッションごとに必要で、過去の承認を別の操作や次回作業へ一般化しないこと。承認前は作業ツリーへの変更と差分・コミットメッセージ案の提示までに留め、ユーザーが承認したら該当コマンドだけを単独で実行すること
-- ユーザーが明示的に指示したマージなどの状態変更コマンド（`gh pr merge`、`git merge` 等）は、`&&`・`;`・パイプで他コマンドと連結せず単独のコマンドとして実行すること。複合コマンドはサブコマンドごとに許可判定されるため、連結すると permission allow ルールのプレフィックス一致が全体に効かず、auto mode の classifier にブロックされる（2026-08-19 に `gh pr merge ... && gh pr view ...` で実測）。実行結果の確認（`gh pr view` 等）は後続の別コマンドとして実行すること
+- ユーザーが明示的に指示したマージなどの状態変更コマンド（`gh pr merge`、`git merge` 等）は、`&&`・`;`・パイプで他コマンドと連結せず単独のコマンドとして実行すること。連結すると permission allow ルールが効かず auto mode の classifier にブロックされる（2026-08-19 実測、dotfiles ADR-0062）。実行結果の確認は後続の別コマンドとして実行すること
 - 汎用 CLI / tool error は、失敗扱いする前に意味で分類すること。`rg` の exit code 1 は原則「検索一致なし」として検索仮説・検索範囲・次に広げる範囲を見直し、`apply_patch` の context mismatch は対象範囲を再読してから最小差分を作り直し、`sed` / `rg` の missing path は `rg --files` 等で実在 path を確認し、`git` の conflict / dirty state はユーザー変更保護を優先し、format / typecheck / test failure は対象 file・error shape・再実行 command を固定してから続行すること
 - コマンド、ツール、環境、権限、依存関係、検証でエラーが出た場合は、一時的な迂回で作業継続してよいが、同種エラーの再発、検証省略、環境・設定・権限・依存関係の不備、再現性低下、次回も必要になりそうな手順がある場合は恒久対策レビューの対象として扱い、レビューではエラー原因、一時迂回、恒久対策候補、git 管理へ反映すべき設定・文書・hook・Skill、machine-local に留める state、検証方法を分けて整理すること
 - サブエージェントや runner を使える環境では、恒久対策レビューを必要に応じて別 agent / reviewer / evaluator に委譲してよいが、親 Agent は提案をそのまま採用せず、既存実装・設定・文書・テストへ戻って妥当性を確認すること
@@ -51,13 +52,8 @@
 # Google Workspace (gws) アカウント運用
 
 - gws は常に `gws-account <profile> ...` で実行し、素の `gws`（デフォルト認証状態）はアカウント境界のある作業で使わないこと（ADR-0048）
-- この環境の gws プロファイル対応は、`gws-account taskell` = taskell.ai の組織アカウント（Taskell Management 共有ドライブ含む）、`gws-account ges-claude` = yoake-entertainment.jp の組織アカウント、`gws-account twinplanet` = twinplanet.co.jp の組織アカウント（TWIN PLANET 作業）、`gws-account amicitia` = amicitia.jp の組織アカウントとすること
 - gws アカウントの実メールアドレスは git 管理下の文書やコミットメッセージに書かず、必要なときは `gws-account <profile> auth status` の `user` フィールドで実行時に確認すること
-- 個人 Gmail アカウントには専用の gws プロファイルが無いが、`gws-account amicitia` がそのカレンダーに owner 権限を持つため、個人カレンダーの操作は amicitia プロファイル経由で行うこと（2026-09-09 実測）
-- 各プロファイルの OAuth クライアントは所属組織の internal 設定のため、別組織のアカウントを選ぶと `403 org_internal` になる。他環境（Manzoku）の作業アカウントはこの環境のブラウザでは選択できない。リポジトリ文書に記載された作業アカウント名を、この環境の再ログイン先としてそのまま案内しないこと
-- gws の再認証をユーザーへ依頼する前に、`gws-account <profile> auth status` で有効な別プロファイル（token_valid）による代替可否を確認すること。1 プロファイルの失効は全プロファイルの失効ではない。ただし別アカウントへの自動切り替えを復旧経路にしないこと
-- 再認証を依頼するときは、対象プロファイル（`gws-account <profile> auth login` の形まで）と、ブラウザのアカウント選択画面で選ぶべきメールアドレスを明示すること
-- カレンダーの共有権限は `calendar-acl plan` で差分を確認してから `calendar-acl apply` で変更し、`gws calendar acl` の直接実行や Web UI での個別変更を混ぜないこと。ポリシー実値は 1Password 管理で `opmaterialize restore` で復元する（ADR-0059）
+- プロファイル対応、再認証の切り分けと依頼の仕方、カレンダー共有 ACL の手順は gws-cli-runner skill の `references/account-profiles.md` を正本とし、ここには再掲しないこと
 
 # Plan 共通ルール
 

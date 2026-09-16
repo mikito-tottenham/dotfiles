@@ -408,7 +408,7 @@ ls ~/.config/gws/accounts/*/credentials.json 2>/dev/null | wc -l    # gws プロ
 | codex-cli-runner | codex | `CODEX_AUTH_JSON` → `~/.codex/auth.json`（+ openai-codex companion runtime） | スコープ内・認証済。素のコンテナ egress では openai 不達だが、openai-codex プラグイン proxy 経由なら実行可（ADR-0045） |
 | op-cli-runner | op | `OP_SERVICE_ACCOUNT_TOKEN` | スコープ内・認証済 |
 | onepassword-secret-materialize | opmaterialize + op + jq | 上記 op に依存（field 方式は `jq` 必須） | スコープ内・認証済 |
-| gws-cli-runner / gws-drive / -upload / -shared | gws (+ gws-account) | `~/.config/gws/accounts/<profile>/`（restore 後） | スコープ内・restore 後に有効 |
+| gws-cli-runner | gws (+ gws-account) | `~/.config/gws/accounts/<profile>/`（restore 後） | スコープ内・restore 後に有効 |
 | ghq-repo-placement | ghq | 不要 | スコープ内・常時可 |
 | skill-manager | gh（`gh skill`） | `GH_TOKEN` / `GITHUB_TOKEN`（web では未設定） | 下記参照 |
 | gemini-cli-runner | gemini | `GEMINI_API_KEY` | 任意（導入のみ・使う時に認証） |

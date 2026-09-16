@@ -1,9 +1,6 @@
 ---
 name: dads-design
-description: >-
-  デジタル庁デザインシステム（DADS, β版）準拠のデザイントークン（配色・タイポグラフィ・余白・角丸・エレベーション）・設計原則・コンポーネント・アクセシビリティ要件・ライセンス情報。
-  Webページ、レポート、スライド等の見た目を作る・整えるとき、アクセシブル（JIS X 8341-3:2016 AA / コントラスト4.5:1）な配色が必要なとき、「DADS」「デジタル庁デザインシステム」「デザイントークン」「行政っぽい信頼感のあるデザイン」に言及されたら参照すること。
-  DADSと無関係な一般的フロントエンド実装やアプリのロジックには使わない。
+description: Apply the Digital Agency Design System (DADS) to visual deliverables. Use when DADS is requested or when choosing an accessible design system for Japanese public-sector styling; covers tokens, components, accessibility, and licensing. Use when asked for デジタル庁デザインシステム, デザイントークン, アクセシブルな配色, or 行政っぽい信頼感のあるデザイン.
 ---
 
 # DADS デザイン適用スキル（dads-design）
@@ -23,18 +20,9 @@ DADSと無関係な汎用UIライブラリの実装やアプリのビジネス�
 2. **8pxグリッド＋限定スケール**。余白は8の倍数、フォントサイズ・行間・角丸・影は決められたスケールから選ぶ（恣意的な数値を作らない）。
 3. **スタイルガイドとして再定義する前提**。DADSは汎用プラットフォーム。各組織が自ブランドに合わせ色（キーカラー）等を差し替えて「スタイルガイド」を作る、という思想。だからキーカラーは Blue 固定ではなく**差し替え可能**な変数。
 
-## 主要トークン（クイック参照）
-完全な数値は `references/design-tokens.md`、実装用CSS変数は `assets/dads-tokens.css`（MIT, `var(--token-name)` で参照）。
+## 主要トークン
 
-- **キーカラー（プライマリ）= Blue系**。標準 `--color-key-700` #264af4 / 濃 `--color-key-800` #0031d8 / 淡背景 `--color-key-50` #e8f1fe。（ブランド色に差し替え可）
-- **セマンティック**: success #259d63（green-600）/ error #ec0000（red-800）/ warning #fb5b01（orange-600）or #b78f00（yellow-700）。
-- **ニュートラル**: 本文 `solid-gray-900` #1a1a1a、薄い文字の下限 `solid-gray-536` #767676（白黒双方に4.5:1）、罫線 `solid-gray-420` #949494（白に3:1）。白 #ffffff / 黒 #000000。
-- **フォント**: `'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif`（本文・見出し共通）/ コードは `'Noto Sans Mono'`。ウェイトは 400 / 700 のみ。
-- **本文の既定**: 16px / line-height 1.7（`Std-16N-170`）。見出しは Bold + line-height 1.4〜1.5、サイズは 20/24/32/45px 等のスケールから。
-- **フォントサイズ**: 14,16,17,18,20,22,24,26,28,32,36,45,48,57,64（px）。
-- **角丸**: 8（小・ボタン/入力）/ 12〜16（カード）/ 32（大）/ full（ピル）。
-- **エレベーション**: `--elevation-1`〜`8`（2層シャドウ）。重なる要素は2段階以上差をつける。
-- **ブレークポイント**: 768px の1点。グリッド12カラム。
+具体値が必要なときだけ `references/design-tokens.md` を読み、実装では `assets/dads-tokens.css` の CSS 変数を使う。
 
 ## 適用ワークフロー
 成果物に DADS を適用するときの手順。
@@ -48,11 +36,7 @@ DADSと無関係な汎用UIライブラリの実装やアプリのビジネス�
 5. **クレジット**: 加工してUIに組み込む利用は出典明記不要だが、フッター等に「デジタル庁デザインシステム（DADS, β版）を参考に構築」と中立記載を推奨。**「デジタル庁が作成/公認」と誤認させない**。詳細 `references/licensing.md`。
 
 ### デザインの質を上げるとき
-配色・レイアウトの審美性を高めたい場合は、本スキル（トークン・制約・a11y）と `frontend-design` スキルを併用する。DADSはトークンと原則を与え、frontend-design は構図・余白リズム・タイポ階層の練り込みを助ける。
-
-## 既存導入例（DADS Mode B）
-- 元の導入元である `rmanzoku/consulting-gates` では **DADS Mode B** として、構造・原則は DADS 厳守、キーカラーのみ GATESブルー（`--brand-deep #000071` / `--brand #00118f` / `--key #264af4`）へ差し替えている。
-- 同様にブランド色を差し替える場合も、8pxグリッド、タイプスケール、角丸/影スケール、AAコントラスト、色以外の手掛かりは維持する。
+配色・レイアウトの審美性を高める必要があり、`frontend-design` スキルが利用可能な場合は任意で併用する。DADSはトークン・制約・a11yを担い、frontend-design は構図・余白リズム・タイポ階層の検討を補助する。
 
 ## ライセンス（要点）
 - コードスニペット・デザイントークン = **MIT**、Figma = **CC BY 4.0**、Material Symbols = **Apache 2.0**。**商用・改変・再配布いずれも可**。
