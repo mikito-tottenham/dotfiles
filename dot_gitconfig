@@ -3,15 +3,14 @@
 [user]
 	email = 32815656+mikito-tottenham@users.noreply.github.com
 	name = Mikito Ebishima
-# gh は GH_TOKEN を 1Password から受け取るため、helper 側で oprun を噛ませる。
-# これにより 1Password の認可が要るのは GitHub への通信時だけになり、
-# status / log / diff / commit などのローカル操作は 1Password がロック中でも動く。
-# OPRUN_NO_MASKING=1 は必須。無いと op run が出力中のトークンを
-# "<concealed by 1Password>" に置換し、git が 24 文字のプレースホルダで
-# 認証しようとして "Invalid username or token" で失敗する（→ ADR-0055）。
+# gh は GH_TOKEN を受け取る必要があるため、helper 側で ghrun を噛ませる。
+# ghrun は 1Password から materialize した ~/.config/op/injected/github.env を
+# 読むだけで op を呼ばないので、push / fetch のたびに Touch ID を求められない。
+# status / log / diff / commit などのローカル操作は従来どおり token に触れない。
+# ファイルが無いときは ghrun が `ghrun --refresh` を案内して失敗する（→ ADR-0063）。
 [credential "https://github.com"]
 	helper =
-	helper = !OPRUN_NO_MASKING=1 oprun gh auth git-credential
+	helper = !ghrun gh auth git-credential
 [credential "https://gist.github.com"]
 	helper =
-	helper = !OPRUN_NO_MASKING=1 oprun gh auth git-credential
+	helper = !ghrun gh auth git-credential

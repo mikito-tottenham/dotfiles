@@ -3,9 +3,12 @@ title: "Use 1Password For Secret Handoff"
 date: 2026-05-20
 agent: "Codex GPT-5"
 status: "accepted"
-updated_at: 2026-08-16
-updated_by_agent_model: "Codex GPT-5"
+superseded_in_part_by: "ADR 0063"
+updated_at: 2026-09-21
+updated_by_agent_model: "Claude Opus 5 (claude-opus-5)"
 ---
+
+> Partially superseded by [ADR 0063](./0063-materialize-github-token-to-stop-biometric-prompts.md): `gh` and the Git credential helper now read the GitHub token from a 1Password-materialized file through `ghrun` instead of `oprun`. The rest of this ADR still applies.
 
 # Context
 

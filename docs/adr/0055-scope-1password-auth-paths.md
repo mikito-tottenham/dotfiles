@@ -3,9 +3,14 @@ title: "1Password 認証経路の適用範囲（oprun のスコープと SSH age
 date: 2026-09-03
 agent_model: "Claude Opus 5 (claude-opus-5)"
 status: accepted
+superseded_in_part_by: "ADR 0063"
+updated_at: 2026-09-21
+updated_by_agent_model: "Claude Opus 5 (claude-opus-5)"
 ---
 
 # ADR 0055: 1Password 認証経路の適用範囲（oprun のスコープと SSH agent）
+
+> `gh` と git credential helper の token 経路（`oprun gh` / `!oprun gh auth git-credential`）は [ADR 0063](./0063-materialize-github-token-to-stop-biometric-prompts.md) で `ghrun` に置き換えた。`git` を包まない方針と SSH agent の決定は引き続き有効。
 
 ## Context
 

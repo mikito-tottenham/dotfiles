@@ -1,0 +1,104 @@
+#!/bin/sh
+set -eu
+
+# GitHub 用の token を 1Password から materialize したファイルから読み、環境変数に
+# 載せてコマンドを実行する。
+#
+# 背景: 1Password CLI の認可は tty 単位のセッションで、10 分無操作で失効し、
+# アプリがロックすると即失効する（1Password の固定仕様。設定では変更できない）。
+# `oprun gh` と git credential helper は呼ばれるたびにこの認可を要求するため、
+# 作業のたびに Touch ID を求められていた。GitHub の token だけを materialize して
+# op の呼び出しから外す（→ ADR-0063）。
+#
+# 正本は 1Password のまま。このファイルは `ghrun --refresh` で何度でも再生成できる
+# 派生物であり、gws の credentials.json と同じ扱い（opmaterialize と同じ思想）。
+
+env_file="${GH_TOKEN_ENV_FILE:-$HOME/.config/op/injected/github.env}"
+
+usage() {
+  printf '%s\n' "usage: ghrun <command> [args...]" >&2
+  printf '%s\n' "       ghrun --refresh   1Password から $env_file を再生成する" >&2
+  printf '%s\n' "" >&2
+  printf '%s\n' "token をローテートしたあと gh / git push が 401 になったら --refresh する" >&2
+}
+
+# GitHub の token は英数字と _ だけで構成される。それ以外を含む値は
+# シングルクォートで安全に source できない可能性があるため弾く。
+check_token() {
+  case "$2" in
+    '' | *[!A-Za-z0-9_]*)
+      printf '%s\n' "ghrun: $1 が空か、想定外の文字を含んでいます" >&2
+      exit 65
+      ;;
+  esac
+}
+
+# --refresh が oprun 配下で自分自身を呼ぶための内部サブコマンド。
+# oprun が GH_TOKEN / GITHUB_TOKEN を env に注入した状態で呼ばれる。
+emit() {
+  if [ -t 1 ]; then
+    printf '%s\n' "ghrun: token を端末へは出力しません（--refresh を使ってください）" >&2
+    exit 64
+  fi
+  : "${GH_TOKEN:?GH_TOKEN が ~/.config/op/dotfiles.env に定義されていません}"
+  : "${GITHUB_TOKEN:=$GH_TOKEN}"
+  check_token GH_TOKEN "$GH_TOKEN"
+  check_token GITHUB_TOKEN "$GITHUB_TOKEN"
+  printf "GH_TOKEN='%s'\n" "$GH_TOKEN"
+  printf "GITHUB_TOKEN='%s'\n" "$GITHUB_TOKEN"
+}
+
+refresh() {
+  if ! command -v oprun >/dev/null 2>&1; then
+    printf '%s\n' "ghrun: oprun が PATH にありません" >&2
+    exit 127
+  fi
+
+  mkdir -p "$(dirname "$env_file")"
+  tmp="$env_file.tmp.$$"
+  trap 'rm -f "$tmp"' EXIT INT TERM
+  umask 077
+
+  printf '%s\n' "ghrun: 1Password から $env_file を生成します（Touch ID を 1 回求められます）" >&2
+
+  # op run は既定で子プロセスの出力中の secret を伏せ字にするため、token 自体を
+  # 書き出すこの用途では OPRUN_NO_MASKING=1 が必須（oprun のコメント参照）。
+  OPRUN_NO_MASKING=1 oprun "$0" --emit >"$tmp"
+
+  chmod 600 "$tmp"
+  mv "$tmp" "$env_file"
+  trap - EXIT INT TERM
+  printf '%s\n' "ghrun: 生成しました: $env_file" >&2
+}
+
+if [ "$#" -eq 0 ]; then
+  usage
+  exit 64
+fi
+
+case "$1" in
+  --refresh)
+    refresh
+    exit 0
+    ;;
+  --emit)
+    emit
+    exit 0
+    ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+esac
+
+if [ ! -r "$env_file" ]; then
+  printf '%s\n' "ghrun: $env_file がありません" >&2
+  printf '%s\n' "ghrun: 'ghrun --refresh' で 1Password から生成してください" >&2
+  exit 66
+fi
+
+# shellcheck source=/dev/null
+. "$env_file"
+export GH_TOKEN GITHUB_TOKEN
+
+exec "$@"

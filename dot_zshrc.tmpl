@@ -17,10 +17,15 @@ export PATH="$JAVA_HOME/bin:$PATH"
 export PATH=$PATH:$HOME/.maestro/bin
 
 # Entire CLI shell completion
-autoload -Uz compinit && compinit && source <(entire completion zsh)
+# entire が未インストールのマシンでは補完の読み込みを飛ばす（無いとシェル起動ごとにエラー）
+autoload -Uz compinit && compinit
+if command -v entire >/dev/null 2>&1; then
+  source <(entire completion zsh)
+fi
 
-alias gh='oprun gh'
-# git は oprun で包まない。包むと status / log / diff などのローカル操作まで
-# 1Password の認可待ちになり、ロック中や非対話セッションで全て失敗するため。
-# GitHub への通信に要る GH_TOKEN は ~/.gitconfig の credential helper
-# (!oprun gh auth git-credential) が必要なときだけ取りに行く。
+alias gh='ghrun gh'
+# gh は 1Password から materialize した GH_TOKEN を ghrun 経由で受け取る。
+# oprun gh だと呼ぶたびに 1Password の認可（10 分無操作で失効）を求められ、
+# 作業のたびに Touch ID が必要だったため（→ ADR-0063）。再生成は `ghrun --refresh`。
+# git は包まない。GitHub への通信に要る GH_TOKEN は ~/.gitconfig の
+# credential helper (!ghrun gh auth git-credential) が必要なときだけ読む。

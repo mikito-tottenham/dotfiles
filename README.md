@@ -54,6 +54,9 @@ brew bundle --file="$HOME/.local/share/chezmoi/Brewfile"
 # 1Password にサインイン後、secret-backed file を復元
 opmaterialize restore
 
+# GitHub 用 token を materialize（gh / git push が Touch ID なしで動く。ADR-0063）
+ghrun --refresh
+
 # project に依存しない workspace repo を clone / pull
 "$HOME/.local/share/chezmoi/scripts/bootstrap-workspace"
 ```
@@ -147,6 +150,7 @@ Conductor などのツールが git worktree を立ち上げて dotfiles を編�
 | `.config/op/dotfiles.env.example` | 1Password secret reference 用 dotenv 例 |
 | `.local/bin/env` | PATH 設定スクリプト |
 | `.local/bin/oprun` | `op run --env-file` 用ラッパー |
+| `.local/bin/ghrun` | materialize 済み GitHub token で `gh` / git credential helper を実行するラッパー（`--refresh` で 1Password から再生成） |
 | `.local/bin/opmaterialize` | `onepassword-secret-materialize` skill 同梱 script を呼び出すラッパー |
 | `.local/bin/slack-fetch-message` | Slack の message permalink を Web API で読み Markdown / JSON 出力する read-only CLI |
 | `.claude/CLAUDE.md` | Claude Code グローバル設定 |
@@ -176,6 +180,7 @@ Conductor などのツールが git worktree を立ち上げて dotfiles を編�
 | `.codex/config.toml` | `dot_codex/private_config.toml.tmpl` |
 | `.config/op/dotfiles.env.example` | `dot_config/private_op/dotfiles.env.example` |
 | `.local/bin/oprun` | `dot_local/bin/executable_oprun` |
+| `.local/bin/ghrun` | `dot_local/bin/executable_ghrun` |
 | `.local/bin/opmaterialize` | `dot_local/bin/executable_opmaterialize` |
 | `.local/bin/slack-fetch-message` | `dot_local/bin/executable_slack-fetch-message` |
 | `.qwen/QWEN.md` | `dot_qwen/QWEN.md` |
