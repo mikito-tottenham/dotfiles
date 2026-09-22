@@ -14,6 +14,12 @@
       "Bash(git merge *)"
     ]
   },
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Read-only git inspection is allowed: `git status`, `git log`, `git diff`, `git show`, `git branch --show-current`, `git rev-parse`, and `git ls-files`, including the `git -C <path> <subcommand>` form and pipes into read-only filters such as `head`, `grep`, `sed -n`, `wc`, or `cut`. These only read repository state and do not change refs, the index, the working tree, config, or remotes. The allowance does not cover commands that set git config or environment on the fly (`-c`, `--config-env`, `GIT_*=` prefixes), write files (`--output`), or run external programs (`--ext-diff`), nor any subcommand that changes state."
+    ]
+  },
   "enabledPlugins": {
     "document-skills@anthropic-agent-skills": true,
     "skill-creator@claude-plugins-official": true,
