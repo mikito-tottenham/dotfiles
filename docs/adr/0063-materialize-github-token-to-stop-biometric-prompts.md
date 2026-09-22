@@ -4,6 +4,8 @@ date: 2026-09-21
 agent_model: "Claude Opus 5 (claude-opus-5)"
 status: accepted
 supersedes_in_part: ["ADR 0036", "ADR 0055"]
+updated_at: 2026-09-22
+updated_by_agent_model: "Claude Opus 5 (claude-opus-5)"
 ---
 
 # ADR 0063: GitHub token を materialize して Touch ID の連続要求を止める（ghrun）
@@ -31,8 +33,9 @@ ADR-0036 / ADR-0055 により、`gh` は `alias gh='oprun gh'`、git の HTTPS �
   体感はこれと一致する。
 
 1Password 側の設定変更では解決しない。自動ロック（当時 60 分）を緩めても 10 分ルールは残る。
-生体認証を完全に外す公式経路の Service Account は Teams / Business 限定で、この環境の `op` に
-登録されているのは個人アカウント（`my.1password.com`）だけのため使えない。
+生体認証を完全に外す公式経路は Service Account トークン（`OP_SERVICE_ACCOUNT_TOKEN`）で、クラウド環境では
+すでに使っている（ADR-0045）。ただしローカルで使うには、vault 全体を読めるトークンを 1Password の外
+（ファイルや Keychain）に常駐させる必要がある。
 
 一方、「1Password を正本とし、実値は再生成可能な派生物としてローカルに置く」運用はすでに確立していた。
 
@@ -62,6 +65,8 @@ ADR-0036 / ADR-0055 により、`gh` は `alias gh='oprun gh'`、git の HTTPS �
   1Password 側の手作業が要る。さらに `dotfiles.env` の `op://` reference と値が二重管理になり、
   ローテーション時に更新漏れが起きる。`ghrun --refresh` なら正本は 1 箇所のまま、新しいマシンでも
   コマンド 1 つで再現できる。
+- **ローカルでも Service Account トークンを使う**: Touch ID は完全になくなるが、`Dotfiles Secrets` vault
+  全体を読めるトークンをディスクに常駐させることになり、GitHub token 1 本を置くより影響範囲が広い。
 - **git-credential-cache（メモリに 12 時間）**: ディスクに書かない点は優れるが、Touch ID は
   ゼロにならず、Agent の `gh` 直叩き（別プロセス）は救えない。
 - **`oprun` 自体を全 secret のキャッシュにする**: 影響は最大だが、Slack / Gemini / Copilot の token
@@ -77,6 +82,10 @@ ADR-0036 / ADR-0055 により、`gh` は `alias gh='oprun gh'`、git の HTTPS �
   そのときはユーザーが通常のターミナルで `ghrun --refresh` を実行する。Agent からは実行しない
   （tty が無いと認可できず、繰り返しの承認要求は安定した復旧経路にならない）。
 - 新しいマシンでは `opmaterialize restore` の後に `ghrun --refresh` を 1 回実行する（README に追記）。
+- クラウドでも `bootstrap-web` の `chezmoi apply --force` で `~/.gitconfig` が `ghrun` を使う helper に揃う。
+  そこで `opmaterialize restore` の直後に `ghrun --refresh` を実行して `github.env` を生成する（service account
+  認証なので Touch ID は不要）。失敗したら status を `restored-without-github-token: ...` にして警告する。
+  セッション repo の git は harness の proxy 経由なので影響しない。`verify-cloud-parity` の対象 CLI に `ghrun` を加える。
 - `COPILOT_GITHUB_TOKEN`、Slack、Gemini は引き続き `oprun` 経由のため、それらを使う操作では
   Touch ID が残る。
 
@@ -97,3 +106,6 @@ ADR-0036 / ADR-0055 により、`gh` は `alias gh='oprun gh'`、git の HTTPS �
   `chezmoi apply ~/.zshrc` した（`entire` 未インストールのマシンでシェル起動ごとにエラーになるのを避けるため）。
   新しい対話 zsh が rc=0・stderr 空で起動し、`type gh` が `ghrun gh` の alias、`gh auth status` の
   active が `GH_TOKEN` になることを確認した。
+- クラウド: `bootstrap-web` から `ensure_onepassword` を抜き出し、偽の `op` / `opmaterialize` / `oprun` で実行した。
+  restore と refresh が成功すると status は `restored` で `github.env` が 0600 で生成され、refresh が失敗すると
+  status が `restored-without-github-token: ghrun --refresh 失敗` になり警告が出た（2026-09-22）。

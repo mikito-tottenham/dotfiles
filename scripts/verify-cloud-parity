@@ -49,7 +49,7 @@ THIRD_PARTY_SKILLS=""  # 2026-09-15: gws-* は gws-cli-runner に吸収、grill-
 # bootstrap-web が導入する CLI (同期対象)
 CLI_BOOTSTRAP="jq rg codex gemini ghq gh gws copilot op"
 # chezmoi / opmaterialize 経由で入る、または実行前提の CLI
-CLI_BASE="git python3 chezmoi opmaterialize oprun gws-account"
+CLI_BASE="git python3 chezmoi opmaterialize oprun ghrun gws-account"
 # ローカル (macOS) 専用。クラウドでは N/A
 CLI_LOCAL_ONLY="brew mas hermes"
 

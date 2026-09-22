@@ -15,6 +15,7 @@ set -euo pipefail
 #      grok は xAI OAuth、soundcore は対話ブラウザのため対象外。
 #   5. フル 1Password 化: OP_SERVICE_ACCOUNT_TOKEN があれば op を導入し opmaterialize restore を
 #      実行し、dotfiles.env (op:// 参照)・secret-backed file・private subagent を一括復元する。
+#      続けて ghrun --refresh で git の https / gh 用の GitHub token を materialize する (ADR-0063)。
 #   6. headless 再現できる MCP サーバーを user scope に登録する (best-effort)。
 #      ローカルアプリ依存 (pencil) と対話 OAuth 必須 (slack-twin / claude.ai コネクタ) は対象外。
 #
@@ -499,6 +500,14 @@ ensure_onepassword() {
   if command -v opmaterialize >/dev/null 2>&1 && opmaterialize restore >/dev/null 2>&1; then
     onepassword_status="restored"
     info "  opmaterialize restore 完了 (dotfiles.env / secret-backed file / private subagent を復元)"
+    # ~/.gitconfig の credential helper と gh は ghrun 経由で materialize 済み token を読む (ADR-0063)。
+    # service account 認証なので Touch ID なしで生成できる。
+    if command -v ghrun >/dev/null 2>&1 && ghrun --refresh >/dev/null 2>&1; then
+      info "  ghrun --refresh 完了 (~/.config/op/injected/github.env を生成)"
+    else
+      onepassword_status="restored-without-github-token: ghrun --refresh 失敗"
+      warn "  ghrun --refresh 失敗: git の https と gh が認証できない。dotfiles.env の GH_TOKEN 参照と vault アクセスを確認すること"
+    fi
   else
     onepassword_status="skipped: opmaterialize restore 失敗"
     warn "  opmaterialize restore 失敗: Secrets Manifest / vault アクセスを確認すること"
@@ -622,6 +631,8 @@ main() {
   case "$onepassword_status" in
     restored)
       info "完了。1Password 由来の secret / secret-backed file / private subagent は opmaterialize restore で復元済み。" ;;
+    restored-without-github-token:*)
+      info "完了。opmaterialize restore は済んだが GitHub token を生成できなかった ($onepassword_status)。token の見えるセッションで 'ghrun --refresh' を実行すること。" ;;
     op-installed:*)
       info "完了。op は導入済みだが restore は未実行 ($onepassword_status)。token の見えるセッションで 'opmaterialize restore' を実行すれば secret / secret-backed file / private subagent を復元できる。" ;;
     *)
