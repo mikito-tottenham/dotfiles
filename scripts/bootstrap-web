@@ -9,7 +9,7 @@ set -euo pipefail
 #   3. 配布スキルを再インストール
 #        - first-party (repo skills/): 必須。欠落・検証失敗があれば最後に exit 1。
 #        - third-party (公開 GitHub): best-effort。取得失敗は skip し、集計して継続する。
-#          2026-09-15 時点で manifest 上の third-party は全て撤去済みのため取得対象なし。
+#          2026-09-23 時点の取得対象は natural-japanese / japanese-business-writing (commit SHA pin)。
 #   4. runner CLI と共通ツールを best-effort で用意 (jq/rg/codex/gemini/ghq/gh/gws/copilot)。認証は env / 1Password
 #      由来 (GH_TOKEN・GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE・COPILOT_GITHUB_TOKEN 等、未設定なら warn)。
 #      grok は xAI OAuth、soundcore は対話ブラウザのため対象外。
@@ -214,13 +214,42 @@ install_first_party() {
   info "first-party skill 完了 (失敗 ${#first_party_failed[@]} 件)"
 }
 
+fetch_pinned_repo() { # $1=https url $2=commit sha $3=dest dir -> 0 ok / 1 失敗
+  local url="$1" sha="$2" dest="$3"
+  git init -q "$dest" \
+    && git -C "$dest" fetch -q --depth 1 "$url" "$sha" \
+    && git -C "$dest" -c advice.detachedHead=false checkout -q FETCH_HEAD
+}
+
+install_pinned_third_party() { # $1=表示番号 $2=repo(owner/name) $3=sha $4=skill path $5=skill name
+  local label="$1" repo="$2" sha="$3" path="$4" name="$5"
+  make_tmp
+  local tmp="$TMP_LAST"
+  info "  [$label] $repo@${sha:0:7} を取得 ($name)..."
+  if ! fetch_pinned_repo "https://github.com/$repo.git" "$sha" "$tmp/src" >/dev/null 2>&1; then
+    record_tp_skipped "$name" "fetch failed"; warn "  $repo の取得に失敗 ($name を skip)"
+    return 0
+  fi
+  if [ ! -f "$tmp/src/$path/SKILL.md" ]; then
+    record_tp_skipped "$name" "missing in upstream"; warn "    $name が upstream で見つからない"
+    return 0
+  fi
+  if install_external_skill "$tmp/src/$path" "$name"; then
+    third_party_installed+=("$name"); info "    installed: $name"
+  else
+    record_tp_skipped "$name" "install verify failed"; warn "    install 検証失敗: $name"
+  fi
+}
+
 install_third_party() {
-  # 2026-09-15: third-party skill は全て manifest 上で撤去済み (docs/skills-install-manifest.md)。
-  #   gws-shared / gws-drive / gws-drive-upload → gws-cli-runner に吸収
-  #   grill-me → Claude は built-in anthropic-skills:grill-me、Codex は代替なし
-  #   empirical-prompt-tuning → upstream 不在 (404)
-  # 取得対象が無いため何もせず、skip 記録だけ残す。再導入時は manifest の third-party 節を正本に戻すこと。
-  info "third-party skill: manifest 上の取得対象なし (gws-* / grill-me は撤去済み)"
+  # 取得対象は docs/skills-install-manifest.md の Third-party 節と同期させる (pin も manifest と一致させること)。
+  # 撤去済み: gws-shared / gws-drive / gws-drive-upload → gws-cli-runner に吸収、
+  #   grill-me → Claude は built-in anthropic-skills:grill-me、empirical-prompt-tuning → upstream 不在 (404)
+  info "third-party skill を公開 GitHub から取得中 (best-effort)..."
+  install_pinned_third_party "1/2" coji/natural-japanese \
+    9a78a42964096da509b8f3e011f0085a5f080151 skills/natural-japanese natural-japanese
+  install_pinned_third_party "2/2" RobTar97/japanese-writing-skills \
+    e4b1700464219c60da786f005a061bccffbbd4e3 skills/japanese-business-writing japanese-business-writing
   record_tp_skipped "gws-shared" "retired: absorbed into gws-cli-runner"
   record_tp_skipped "gws-drive" "retired: absorbed into gws-cli-runner"
   record_tp_skipped "gws-drive-upload" "retired: absorbed into gws-cli-runner"

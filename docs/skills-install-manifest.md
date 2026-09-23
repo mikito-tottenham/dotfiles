@@ -1,6 +1,6 @@
 ---
 title: "Skill Install Manifest"
-updated_at: 2026-09-15
+updated_at: 2026-09-23
 ---
 
 # Skill Install Manifest
@@ -12,7 +12,7 @@ updated_at: 2026-09-15
 当面は script を作らず、docs-only の install manifest として維持する。
 将来 `gh` 側に manifest 機能が入ったら、そちらへ移行を検討する。
 
-Claude Code on the web の ephemeral 環境に限り、`scripts/bootstrap-web`（SessionStart hook 経由）が **web で復元可能なサブセット**を自動再インストールする（ADR-0045）。サブセットは「first-party 全部（必須）＋ 公開 third-party のうち取得できたもの（best-effort）」で、manifest 全体とは一致しない。first-party の欠落は bootstrap を失敗させ、third-party の取得失敗は skip して継続する。2026-09-15 時点で third-party は全て撤去済みのため、bootstrap-web の取得対象は first-party のみ。スキルを追加・削除したときは、この manifest と `scripts/bootstrap-web` のリストを同期すること。
+Claude Code on the web の ephemeral 環境に限り、`scripts/bootstrap-web`（SessionStart hook 経由）が **web で復元可能なサブセット**を自動再インストールする（ADR-0045）。サブセットは「first-party 全部（必須）＋ 公開 third-party のうち取得できたもの（best-effort）」で、manifest 全体とは一致しない。first-party の欠落は bootstrap を失敗させ、third-party の取得失敗は skip して継続する。2026-09-23 時点の third-party 取得対象は `natural-japanese` と `japanese-business-writing`（いずれも commit SHA で pin）。スキルを追加・削除したときは、この manifest と `scripts/bootstrap-web` のリストを同期すること。
 
 ## First-party publisher skills
 
@@ -81,7 +81,40 @@ gh skill install . external-report --from-local --agent codex --scope user
 
 ## Third-party external skills
 
-third-party external skill はここへ追加で列挙する。2026-09-15 時点では有効な third-party skill は無く、以下は撤去記録と再導入条件として残す。撤去済み skill がまだ `~/.claude/skills` / `~/.codex/skills` に残っている場合は `gh skill remove <name> --agent <agent> --scope user` で外す。
+third-party external skill はここへ追加で列挙する。有効な skill は先頭に、撤去済み skill は撤去記録と再導入条件として後ろに残す。撤去済み skill がまだ `~/.claude/skills` / `~/.codex/skills` に残っている場合は `gh skill remove <name> --agent <agent> --scope user` で外す。
+
+### `natural-japanese`
+
+- upstream: [coji/natural-japanese `skills/natural-japanese`](https://github.com/coji/natural-japanese/tree/main/skills/natural-japanese)（MIT）
+- pin: `9a78a42964096da509b8f3e011f0085a5f080151`（main HEAD, 2026-09-04。v1.5.0 以降の「読者層の特定」step を含む）
+- status: 有効（2026-09-23 導入、ADR-0066）。Claude Code / Codex の user scope
+- reason: 対外文書（提案書・報告書・スライド）の構成・読みやすさ・AI 臭と翻訳調の除去。国内の公開 skill で設計の質が最も高く、書き換えすぎと捏造の歯止めを持つ
+- 注意:
+  - メールの型と敬語は扱わない。そこは `japanese-business-writing` が担う
+  - lint 系 scripts は `uv run`（PEP 723、`sudachipy` を初回に PyPI から取得）が前提。`uv` の無い環境では skill の規定どおり `references/manual-checklist.md` で代替される
+  - `scripts/semantic.py` は `sentence-transformers` / `torch` と約 1GB のモデル取得、`trust_remote_code=True` を伴う。opt-in のため既定では動かないが、実行させないこと
+  - 中間ファイルを scratchpad / `mktemp -d` に置いて完了時に削除する指示は、共通ルール（`.context/` 利用・artifact 保持）が下限として優先される
+
+### `japanese-business-writing`
+
+- upstream: [RobTar97/japanese-writing-skills `skills/japanese-business-writing`](https://github.com/RobTar97/japanese-writing-skills/tree/main/skills/japanese-business-writing)（MIT）
+- pin: `e4b1700464219c60da786f005a061bccffbbd4e3`（main HEAD, 2026-08-06）
+- status: 有効（2026-09-23 導入、ADR-0066）。Claude Code / Codex の user scope
+- reason: 社外メール・チャットの作法、敬語（尊敬語・謙譲語Ⅰ/Ⅱ・丁寧語）と内/外の切り替え、丁寧さの 3 段階、事実・約束を捏造しない truth ledger。`natural-japanese` が扱わない対外連絡を補う
+- 注意: ★0 の新しい repo のため、pin 更新時は SKILL.md と `references/` を全文レビューしてから上げる。同 repo の `natural-japanese-writing` / `japanese-product-localization` は重複・用途外のため入れない
+
+#### Claude Code / Codex install（`natural-japanese` / `japanese-business-writing` 共通）
+
+```bash
+gh skill install coji/natural-japanese skills/natural-japanese --pin 9a78a42964096da509b8f3e011f0085a5f080151 --agent claude-code --scope user
+gh skill install coji/natural-japanese skills/natural-japanese --pin 9a78a42964096da509b8f3e011f0085a5f080151 --agent codex --scope user
+gh skill install RobTar97/japanese-writing-skills skills/japanese-business-writing --pin e4b1700464219c60da786f005a061bccffbbd4e3 --agent claude-code --scope user
+gh skill install RobTar97/japanese-writing-skills skills/japanese-business-writing --pin e4b1700464219c60da786f005a061bccffbbd4e3 --agent codex --scope user
+rsync -a --delete ~/.agents/skills/natural-japanese/ ~/.codex/skills/natural-japanese/
+rsync -a --delete ~/.agents/skills/japanese-business-writing/ ~/.codex/skills/japanese-business-writing/
+```
+
+pin を上げるときは、この節と `scripts/bootstrap-web` の `install_third_party()` を同時に更新する。skill を追加・削除するときは `scripts/verify-cloud-parity` の `THIRD_PARTY_SKILLS` も更新する。
 
 ### `gws-*`（撤去済み）
 
