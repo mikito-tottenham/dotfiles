@@ -2,6 +2,8 @@
 title: "Continuously Sync Push-Permitted Repositories via launchd repo-sync"
 date: 2026-07-25
 agent_model: "Claude Code (Claude Fable 5)"
+updated_at: 2026-08-14
+updated_by: "Codex (GPT-5)"
 status: accepted
 ---
 
@@ -9,7 +11,7 @@ status: accepted
 
 ## Context
 
-ローカルには複数ルート（`~/ghq`、`~/Claude`、`~/.local/share/chezmoi`）に
+ローカルには複数ルート（`ghq root`、`~/Claude`）に
 GitHub リポジトリの checkout が分散しており、リモートとの追従は手動だった。
 ユーザー要求は「push 権限があり自分がコミット/push するリポジトリは、
 当面継続的に最新版へ追従させ続けること」。
@@ -18,6 +20,12 @@ GitHub リポジトリの checkout が分散しており、リモートとの追
 オフライン時間帯に空振りするため、「インターネットに接続された時点で
 同期する」トリガーが必要になった。運用方針は「自動実行を土台に、
 作業直前だけ手動 `repo-sync` を併用する」で合意している。
+
+初期実装は `~/Claude` を `find -maxdepth 4` で走査していたが、
+`~/Claude/ghq/github.com/<owner>/<repo>/.git` は深さ 5 となるため、
+`ghq root` 配下の checkout を検出できなかった。その結果、同じ slug の repository を
+既定の別 root へ二重 clone した。内容一致かつ clean な重複 checkout は解消し、
+固有作業が残る checkout は自動操作の対象外として保持した。
 
 ## Decision
 
@@ -41,7 +49,10 @@ GitHub リポジトリの checkout が分散しており、リモートとの追
   - ahead / diverged / dirty / upstream なしは自動操作せず ATTENTION として
     ログ + macOS 通知
   - ローカルに存在しない `mikito-tottenham` 名義のリポジトリ（archived 除く）は
-    `ghq get` で `~/ghq` に clone する（既存の `~/Claude` 配下の配置は移動しない）
+    `ghq get` で `ghq root` に clone する（既存の `~/Claude` 配下の配置は移動しない）
+- 走査 root は実行時の `ghq root` と `~/Claude` とする。
+  `node_modules` と `.claude/worktrees` は探索から除外し、同じ origin slug が
+  複数 path で見つかった場合は最初の checkout だけを同期して残りを明示的に SKIP する
 - ログは `~/.local/state/repo-sync/` に出力し、lock・ログ・state は
   machine-local として dotfiles 管理外とする（既存の automation state 方針と同じ）
 

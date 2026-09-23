@@ -16,7 +16,6 @@
 set -u -o pipefail
 
 GITHUB_USER="mikito-tottenham"
-SCAN_ROOTS=("$HOME/ghq/github.com" "$HOME/Claude" "$HOME/.local/share/chezmoi")
 STATE_DIR="$HOME/.local/state/repo-sync"
 LOCK_DIR="$STATE_DIR/lock"
 LAST_SUCCESS_FILE="$STATE_DIR/last-success"
@@ -86,6 +85,15 @@ if ! command -v gh >/dev/null 2>&1; then
     log "ERROR gh が見つかりません（PATH=$PATH）"
     exit 1
 fi
+if ! command -v ghq >/dev/null 2>&1; then
+    log "ERROR ghq が見つかりません（PATH=$PATH）"
+    exit 1
+fi
+if ! GHQ_ROOT=$(ghq root 2>/dev/null) || [ -z "$GHQ_ROOT" ]; then
+    log "ERROR ghq root を解決できません"
+    exit 1
+fi
+SCAN_ROOTS=("$GHQ_ROOT" "$HOME/Claude")
 
 # --- ローカル checkout の走査と同期 -----------------------------------------
 repo_dirs=""
@@ -94,7 +102,9 @@ for root in "${SCAN_ROOTS[@]}"; do
     while IFS= read -r gitdir; do
         repo_dirs="${repo_dirs}$(dirname "$gitdir")
 "
-    done < <(find "$root" -maxdepth 4 -type d -name .git 2>/dev/null)
+    done < <(find "$root" -maxdepth 4 \
+        \( -path '*/node_modules' -o -path '*/.claude/worktrees' \) -prune -o \
+        -type d -name .git -print 2>/dev/null)
 done
 
 total_planned=$(printf '%s' "$repo_dirs" | grep -c . || true)
@@ -113,7 +123,12 @@ while IFS= read -r repo; do
         *) log "SKIP [$idx/$total_planned] $repo GitHub 以外 ($url)"; continue ;;
     esac
     slug=$(printf '%s' "$url" | sed -E 's#^(ssh://)?git@github\.com[:/]##; s#^https://github\.com/##; s#\.git$##; s#/$##')
+    if grep -qxF "$slug" "$tmp_slugs"; then
+        log "SKIP [$idx/$total_planned] $slug 重複 checkout ($repo)"
+        continue
+    fi
     printf '%s\n' "$slug" >>"$tmp_slugs"
+    log "REPO [$idx/$total_planned] $slug ($repo)"
     count_total=$((count_total + 1))
 
     push=$(gh api "repos/$slug" --jq '.permissions.push' 2>/dev/null || echo "unknown")

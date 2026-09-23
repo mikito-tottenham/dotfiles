@@ -15,7 +15,7 @@ project trust は machine-local な利用履歴になりやすい。グローバ
 
 - Codex config の chezmoi source を通常の private template から `create_` 属性付き private template へ変更する。
 - source は、target が存在しない新規環境でだけ secret-free な初期設定を作成する。
-- 初期設定では `gpt-5.6-sol`、default service tier、既存の基本設定と feature flags、Pencil MCP、Money Forward Cloud Accounting MCP を宣言する。
+- 初期設定では `gpt-5.6-sol`、default service tier、既存の基本設定と feature flags、Money Forward Cloud Accounting MCP を宣言する。
 - Codex Desktop が管理・更新する node REPL とその内部環境、computer-use、plugin enable 状態、`[desktop]`、`[marketplaces.*]` は source に固定しない。
 - `[projects.*]` は初期設定に固定しない。将来 project-scoped Codex config が必要になった場合だけ、対象 path を個別に再評価する。
 - 既存 target は chezmoi で書き換えない。実機にある稼働中の MCP、trust、Desktop/plugin state はそのまま保持する。

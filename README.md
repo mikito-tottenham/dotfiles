@@ -22,11 +22,13 @@ else
   exit 1
 fi && \
 brew install git chezmoi && \
-mkdir -p "$HOME/.local/share" && \
-git clone https://github.com/mikito-tottenham/dotfiles.git "$HOME/.local/share/chezmoi" && \
+DOTFILES_SOURCE="$HOME/Claude/ghq/github.com/mikito-tottenham/dotfiles" && \
+mkdir -p "$(dirname "$DOTFILES_SOURCE")" "$HOME/.config/chezmoi" && \
+git clone https://github.com/mikito-tottenham/dotfiles.git "$DOTFILES_SOURCE" && \
+printf 'sourceDir = "%s"\n' "$DOTFILES_SOURCE" >"$HOME/.config/chezmoi/chezmoi.toml" && \
 chezmoi apply && \
-brew bundle --file="$HOME/.local/share/chezmoi/Brewfile" && \
-"$HOME/.local/share/chezmoi/scripts/bootstrap-workspace"
+brew bundle --file="$DOTFILES_SOURCE/Brewfile" && \
+"$DOTFILES_SOURCE/scripts/bootstrap-workspace"
 ```
 
 既に Homebrew が入っている場合は、以下だけで復元できます。
@@ -35,9 +37,11 @@ brew bundle --file="$HOME/.local/share/chezmoi/Brewfile" && \
 # git と chezmoi をインストール
 brew install git chezmoi
 
-# dotfiles repo を chezmoi の標準 source path に clone
-mkdir -p "$HOME/.local/share"
-git clone https://github.com/mikito-tottenham/dotfiles.git "$HOME/.local/share/chezmoi"
+# dotfiles repo を ghq checkout の配置へ clone し、chezmoi source として設定
+DOTFILES_SOURCE="$HOME/Claude/ghq/github.com/mikito-tottenham/dotfiles"
+mkdir -p "$(dirname "$DOTFILES_SOURCE")" "$HOME/.config/chezmoi"
+git clone https://github.com/mikito-tottenham/dotfiles.git "$DOTFILES_SOURCE"
+printf 'sourceDir = "%s"\n' "$DOTFILES_SOURCE" >"$HOME/.config/chezmoi/chezmoi.toml"
 
 # dotfiles を適用
 chezmoi apply
@@ -49,7 +53,7 @@ chmod 600 ~/.config/op/dotfiles.env
 $EDITOR ~/.config/op/dotfiles.env
 
 # Homebrew パッケージを復元
-brew bundle --file="$HOME/.local/share/chezmoi/Brewfile"
+brew bundle --file="$DOTFILES_SOURCE/Brewfile"
 
 # 1Password にサインイン後、secret-backed file を復元
 opmaterialize restore
@@ -58,7 +62,7 @@ opmaterialize restore
 ghrun --refresh
 
 # project に依存しない workspace repo を clone / pull
-"$HOME/.local/share/chezmoi/scripts/bootstrap-workspace"
+"$DOTFILES_SOURCE/scripts/bootstrap-workspace"
 ```
 
 配布 skill と third-party external skill の復元は script を持たず、[docs/skills-install-manifest.md](docs/skills-install-manifest.md) に記録した `gh skill install` 一覧を使います。

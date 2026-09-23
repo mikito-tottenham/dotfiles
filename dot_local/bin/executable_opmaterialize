@@ -3,13 +3,27 @@ set -eu
 
 for candidate in \
   "$HOME/.codex/skills/onepassword-secret-materialize/scripts/opmaterialize" \
-  "$HOME/.claude/skills/onepassword-secret-materialize/scripts/opmaterialize" \
-  "$HOME/.local/share/chezmoi/skills/onepassword-secret-materialize/scripts/opmaterialize"
+  "$HOME/.claude/skills/onepassword-secret-materialize/scripts/opmaterialize"
 do
   if [ -f "$candidate" ]; then
     exec sh "$candidate" "$@"
   fi
 done
+
+if ! command -v chezmoi >/dev/null 2>&1; then
+  printf '%s\n' "opmaterialize: chezmoi is required to resolve the dotfiles source" >&2
+  exit 127
+fi
+
+if ! source_dir=$(chezmoi source-path 2>/dev/null) || [ -z "$source_dir" ]; then
+  printf '%s\n' "opmaterialize: failed to resolve the dotfiles source with chezmoi source-path" >&2
+  exit 1
+fi
+
+candidate="$source_dir/skills/onepassword-secret-materialize/scripts/opmaterialize"
+if [ -f "$candidate" ]; then
+  exec sh "$candidate" "$@"
+fi
 
 printf '%s\n' "opmaterialize: onepassword-secret-materialize skill script not found" >&2
 printf '%s\n' "install it with: gh skill install <dotfiles-repo> onepassword-secret-materialize --from-local --agent codex --scope user" >&2

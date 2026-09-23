@@ -3,12 +3,25 @@
   "synced_at": "2026-03-10T16:50:24Z",
   "links": [
     {
+      "name": "chezmoi-knowledge",
+      "target": "../../.claude/skills/chezmoi-knowledge",
+      "link": "./chezmoi-knowledge",
+      "source_type": "project_skill",
+      "source_id": null
+    },
+    {
       "name": "dotfile-update",
       "target": "../../.claude/skills/dotfile-update",
       "link": "./dotfile-update",
       "source_type": "project_skill",
       "source_id": null
+    },
+    {
+      "name": "onepassword-secret-materialize",
+      "target": "../../.claude/skills/onepassword-secret-materialize",
+      "link": "./onepassword-secret-materialize",
+      "source_type": "project_skill",
+      "source_id": null
     }
-
   ]
 }

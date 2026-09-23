@@ -1,0 +1,540 @@
+#!/usr/bin/env python3
+"""Slack Web API をプロファイル単位で分離して呼ぶ CLI (gws-account と同型)。
+
+    slack-account <profile> <subcommand> [options]
+
+    slack-account twin auth status
+    slack-account twin read 'https://<ws>.slack.com/archives/C0XXXX/p1788422861861069'
+    slack-account twin users find <query>
+    slack-account twin channels list [--types public_channel,private_channel,im,mpim]
+    slack-account twin dm open --user U0XXXX
+    slack-account twin post --channel C0XXXX --text-file .context/msg.md [--thread-ts <ts>]
+    slack-account twin upload --file ./a.pdf --user U0XXXX [--title t] [--comment-file .context/c.md]
+    slack-account twin api conversations.info --params '{"channel": "C0XXXX"}'
+    slack-account twin api chat.postMessage --params-file .context/params.json
+
+`api <method>` は任意の Web API method を form-encoded POST で呼ぶ汎用経路 (allowlist なし。token の scope が
+唯一の制限)。params は JSON object で、値が dict / list なら JSON 文字列化して渡す (blocks, attachments 等)。
+出力はレスポンス JSON をそのまま stdout に出す (`--json` の有無で変わらない)。
+
+profile: `^[a-z0-9][a-z0-9-]*$`。token は環境変数 `SLACK_<PROFILE>_TOKEN`
+(profile を大文字化、`-` → `_`。例 `SLACK_TWIN_TOKEN`) で供給する。実値は 1Password に置き、
+`~/.config/op/dotfiles.env` に `op://` reference を書いて
+`op run --env-file="$HOME/.config/op/dotfiles.env" -- slack-account <profile> ...` で解決する。
+
+`read` は既存の `slack-fetch-message` を子プロセスとして exec し、`SLACK_API_TOKEN` を子環境にだけ渡す
+(出力・exit code はその CLI のもの)。
+
+出力: 結果は stdout (既定は 1 行/1 件テキスト、`--json` で JSON 1 個)。進捗・エラーは stderr。
+token 値と Authorization ヘッダはどこにも出さない。
+
+exit code: 0 成功 / 1 使い方・設定 (profile, token, 引数) / 2 Slack API `ok:false` / 3 ネットワーク・HTTP
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import shutil
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import datetime
+
+PROG = "slack-account"
+API_BASE = "https://slack.com/api/"
+PAGE_LIMIT = 200
+TIMEOUT = 30
+MAX_429_RETRIES = 3
+DEFAULT_CHANNEL_TYPES = "public_channel,private_channel,im,mpim"
+READ_HELPER = "slack-fetch-message"
+
+EXIT_OK = 0
+EXIT_USAGE = 1
+EXIT_API = 2
+EXIT_NET = 3
+
+_PROFILE_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+_METHOD_RE = re.compile(r"^[a-z][a-zA-Z.]+$")
+
+
+def log(message: str) -> None:
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {message}", file=sys.stderr, flush=True)
+
+
+def err(message: str) -> None:
+    print(f"{PROG}: {message}", file=sys.stderr, flush=True)
+
+
+# ─── errors ──────────────────────────────────────────────────────────────────
+
+class UsageError(Exception):
+    exit_code = EXIT_USAGE
+
+
+class SlackApiError(Exception):
+    """Slack が `ok:false` を返した (exit 2)。"""
+
+    exit_code = EXIT_API
+
+    def __init__(self, method: str, error: str, needed: str | None = None):
+        self.method = method
+        self.error = error
+        self.needed = needed
+        super().__init__(f"{method}: {error}" + (f" (needed scope: {needed})" if needed else ""))
+
+
+class TransportError(Exception):
+    """ネットワーク到達不能・HTTP エラー (exit 3)。"""
+
+    exit_code = EXIT_NET
+
+
+# ─── profile / token ─────────────────────────────────────────────────────────
+
+def validate_profile(profile: str) -> str:
+    if not _PROFILE_RE.match(profile):
+        raise UsageError(f"invalid profile name '{profile}' (allowed: ^[a-z0-9][a-z0-9-]*$)")
+    return profile
+
+
+def token_env_key(profile: str) -> str:
+    return "SLACK_" + profile.upper().replace("-", "_") + "_TOKEN"
+
+
+def load_token(profile: str, argv_hint: list[str]) -> tuple[str, str]:
+    key = token_env_key(profile)
+    token = os.environ.get(key, "").strip()
+    hint = " ".join([PROG, profile] + argv_hint)
+    if not token:
+        raise UsageError(
+            f"environment variable {key} is empty for profile '{profile}'\n"
+            f"put `{key}=op://<vault>/<item>/<field>` in ~/.config/op/dotfiles.env, then\n"
+            f'run: op run --env-file="$HOME/.config/op/dotfiles.env" -- {hint}'
+        )
+    if token.startswith("op://"):
+        raise UsageError(
+            f"{key} is still an op:// reference (unresolved)\n"
+            f'run: op run --env-file="$HOME/.config/op/dotfiles.env" -- {hint}'
+        )
+    if token.startswith("xoxp-"):
+        return token, "user"
+    if token.startswith("xoxb-"):
+        return token, "bot"
+    raise UsageError(f"{key} is not a Slack user (xoxp-) or bot (xoxb-) token")
+
+
+# ─── Slack Web API ───────────────────────────────────────────────────────────
+
+class SlackClient:
+    def __init__(self, token: str):
+        self._token = token
+
+    def call(self, method: str, params: dict[str, object] | None = None) -> dict:
+        """Web API method を form-encoded POST で呼ぶ。429 は Retry-After 秒待って最大 3 回再試行する。"""
+        body = urllib.parse.urlencode({k: v for k, v in (params or {}).items() if v is not None}).encode("utf-8")
+        attempt = 0
+        while True:
+            attempt += 1
+            req = urllib.request.Request(
+                API_BASE + method,
+                data=body,
+                method="POST",
+                headers={
+                    "Authorization": f"Bearer {self._token}",
+                    "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
+                },
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+                    payload = json.loads(resp.read().decode("utf-8"))
+            except urllib.error.HTTPError as e:
+                if e.code == 429 and attempt <= MAX_429_RETRIES:
+                    wait = _retry_after(e.headers.get("Retry-After"))
+                    log(f"api: {method} HTTP 429 rate limited; retry {attempt}/{MAX_429_RETRIES} after {wait}s")
+                    time.sleep(wait)
+                    continue
+                log(f"api: {method} HTTP {e.code}")
+                raise TransportError(f"{method}: HTTP {e.code}") from e
+            except urllib.error.URLError as e:
+                log(f"api: {method} network error")
+                raise TransportError(f"{method}: network: {e.reason} — slack.com へ到達できません") from e
+            except (TimeoutError, OSError) as e:
+                log(f"api: {method} network error")
+                raise TransportError(f"{method}: network: {e}") from e
+            if not payload.get("ok"):
+                error = payload.get("error", "unknown")
+                log(f"api: {method} error={error}")
+                raise SlackApiError(method, error, payload.get("needed"))
+            log(f"api: {method} ok")
+            return payload
+
+    def paginate(self, method: str, params: dict[str, object], key: str) -> list[dict]:
+        items: list[dict] = []
+        cursor: str | None = None
+        page = 0
+        while True:
+            page += 1
+            page_params = dict(params, limit=str(PAGE_LIMIT))
+            if cursor:
+                page_params["cursor"] = cursor
+            log(f"{method} page {page}")
+            payload = self.call(method, page_params)
+            items.extend(payload.get(key, []))
+            cursor = (payload.get("response_metadata") or {}).get("next_cursor") or None
+            if not cursor:
+                break
+        log(f"{method}: {len(items)} items")
+        return items
+
+
+def _retry_after(value: str | None) -> int:
+    try:
+        return max(1, int(value)) if value else 1
+    except ValueError:
+        return 1
+
+
+def upload_file_to_url(upload_url: str, path: str, size: int) -> None:
+    """files.getUploadURLExternal の upload_url へ本体を POST する (Content-Length 固定、ストリーム読み)。"""
+    attempt = 0
+    while True:
+        attempt += 1
+        started = time.monotonic()
+        with open(path, "rb") as fh:
+            req = urllib.request.Request(
+                upload_url,
+                data=fh,
+                method="POST",
+                headers={"Content-Type": "application/octet-stream", "Content-Length": str(size)},
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=max(TIMEOUT, 300)) as resp:
+                    resp.read()
+                    status = resp.status
+            except urllib.error.HTTPError as e:
+                if e.code == 429 and attempt <= MAX_429_RETRIES:
+                    wait = _retry_after(e.headers.get("Retry-After"))
+                    log(f"upload: POST HTTP 429 rate limited; retry {attempt}/{MAX_429_RETRIES} after {wait}s")
+                    time.sleep(wait)
+                    continue
+                log(f"upload: POST HTTP {e.code}")
+                raise TransportError(f"upload_url POST: HTTP {e.code}") from e
+            except urllib.error.URLError as e:
+                log("upload: POST network error")
+                raise TransportError(f"upload_url POST: network: {e.reason}") from e
+            except (TimeoutError, OSError) as e:
+                log("upload: POST network error")
+                raise TransportError(f"upload_url POST: network: {e}") from e
+        log(f"upload: POST done (HTTP {status}, {size} bytes, {time.monotonic() - started:.1f}s)")
+        return
+
+
+# ─── output ──────────────────────────────────────────────────────────────────
+
+def emit(as_json: bool, data: object, lines: list[str]) -> None:
+    if as_json:
+        json.dump(data, sys.stdout, ensure_ascii=False, indent=2)
+        sys.stdout.write("\n")
+    else:
+        for line in lines:
+            sys.stdout.write(line + "\n")
+    sys.stdout.flush()
+
+
+def read_text_arg(inline: str | None, path: str | None, label: str) -> str:
+    if inline is not None:
+        return inline
+    if path is None:
+        raise UsageError(f"--{label} or --{label}-file is required")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read().rstrip("\n")
+    except OSError as e:
+        raise UsageError(f"--{label}-file: {e}") from e
+
+
+# ─── subcommands ─────────────────────────────────────────────────────────────
+
+def cmd_auth_status(client: SlackClient, args: argparse.Namespace, token_type: str) -> int:
+    payload = client.call("auth.test")
+    data = {
+        "team": payload.get("team"),
+        "team_id": payload.get("team_id"),
+        "url": payload.get("url"),
+        "user": payload.get("user"),
+        "user_id": payload.get("user_id"),
+        "token_type": token_type,
+    }
+    emit(args.json, data, [" ".join(f"{k}={v}" for k, v in data.items())])
+    return EXIT_OK
+
+
+def cmd_users_find(client: SlackClient, args: argparse.Namespace, _: str) -> int:
+    query = args.query.lower()
+    members = client.paginate("users.list", {}, "members")
+    hits = []
+    for m in members:
+        profile = m.get("profile") or {}
+        fields = [m.get("name"), m.get("real_name"), profile.get("display_name"), profile.get("email")]
+        if any(query in (f or "").lower() for f in fields):
+            hits.append(
+                {
+                    "id": m.get("id"),
+                    "name": m.get("name"),
+                    "real_name": m.get("real_name"),
+                    "email": profile.get("email"),
+                    "deleted": bool(m.get("deleted")),
+                }
+            )
+    log(f"users find: {len(hits)} hit(s) for {args.query!r}")
+    emit(
+        args.json,
+        hits,
+        [f"{h['id']}\t{h['name']}\t{h['real_name'] or ''}\t{h['email'] or ''}\tdeleted={str(h['deleted']).lower()}" for h in hits],
+    )
+    return EXIT_OK
+
+
+def cmd_channels_list(client: SlackClient, args: argparse.Namespace, _: str) -> int:
+    channels = client.paginate("users.conversations", {"types": args.types, "exclude_archived": "false"}, "channels")
+    rows = [
+        {
+            "id": c.get("id"),
+            "name": c.get("name") or c.get("user"),
+            "is_im": bool(c.get("is_im")),
+            "is_mpim": bool(c.get("is_mpim")),
+            "is_archived": bool(c.get("is_archived")),
+        }
+        for c in channels
+    ]
+    emit(
+        args.json,
+        rows,
+        [
+            f"{r['id']}\t{r['name']}\tis_im={str(r['is_im']).lower()}\tis_mpim={str(r['is_mpim']).lower()}\tis_archived={str(r['is_archived']).lower()}"
+            for r in rows
+        ],
+    )
+    return EXIT_OK
+
+
+def open_dm(client: SlackClient, user: str) -> str:
+    payload = client.call("conversations.open", {"users": user})
+    return payload["channel"]["id"]
+
+
+def cmd_dm_open(client: SlackClient, args: argparse.Namespace, _: str) -> int:
+    channel = open_dm(client, args.user)
+    emit(args.json, {"channel": channel}, [channel])
+    return EXIT_OK
+
+
+def cmd_post(client: SlackClient, args: argparse.Namespace, _: str) -> int:
+    text = read_text_arg(args.text, args.text_file, "text")
+    if not text.strip():
+        raise UsageError("message text is empty")
+    channel = args.channel or open_dm(client, args.user)
+    log(f"post: channel={channel} thread_ts={args.thread_ts or '-'} chars={len(text)}")
+    posted = client.call("chat.postMessage", {"channel": channel, "text": text, "thread_ts": args.thread_ts})
+    ts = posted["ts"]
+    channel = posted.get("channel", channel)
+    permalink = client.call("chat.getPermalink", {"channel": channel, "message_ts": ts}).get("permalink")
+    data = {"channel": channel, "ts": ts, "permalink": permalink}
+    emit(args.json, data, [f"channel={channel} ts={ts} permalink={permalink}"])
+    return EXIT_OK
+
+
+def cmd_upload(client: SlackClient, args: argparse.Namespace, _: str) -> int:
+    path = args.file
+    if not os.path.isfile(path):
+        raise UsageError(f"--file: not a file: {path}")
+    size = os.path.getsize(path)
+    filename = os.path.basename(path)
+    title = args.title or filename
+    comment = None
+    if args.comment is not None or args.comment_file is not None:
+        comment = read_text_arg(args.comment, args.comment_file, "comment")
+    channel = args.channel or open_dm(client, args.user)
+
+    log(f"upload: start path={path} bytes={size} channel={channel}")
+    urlinfo = client.call("files.getUploadURLExternal", {"filename": filename, "length": str(size)})
+    upload_url, file_id = urlinfo["upload_url"], urlinfo["file_id"]
+    log(f"upload: got upload_url file_id={file_id}")
+    upload_file_to_url(upload_url, path, size)
+    done = client.call(
+        "files.completeUploadExternal",
+        {
+            "files": json.dumps([{"id": file_id, "title": title}]),
+            "channel_id": channel,
+            "initial_comment": comment,
+            "thread_ts": args.thread_ts,
+        },
+    )
+    files = done.get("files") or [{"id": file_id, "title": title}]
+    f = files[0]
+    data = {"id": f.get("id"), "title": f.get("title"), "permalink": f.get("permalink")}
+    log("upload: complete")
+    emit(args.json, data, [f"id={data['id']} title={data['title']} permalink={data['permalink']}"])
+    return EXIT_OK
+
+
+def cmd_api(client: SlackClient, args: argparse.Namespace, _: str) -> int:
+    """任意の Web API method を呼ぶ。params の dict / list 値は JSON 文字列化する。"""
+    method = args.method
+    if not _METHOD_RE.match(method):
+        raise UsageError(f"invalid method name '{method}' (allowed: ^[a-z][a-zA-Z.]+$)")
+    raw = "{}"
+    if args.params is not None or args.params_file is not None:
+        raw = read_text_arg(args.params, args.params_file, "params")
+    try:
+        params = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise UsageError(f"--params: invalid JSON: {e}") from e
+    if not isinstance(params, dict):
+        raise UsageError("--params must be a JSON object")
+    encoded = {k: (v if v is None or isinstance(v, str) else json.dumps(v, ensure_ascii=False)) for k, v in params.items()}
+    log(f"api: {method} params={','.join(sorted(encoded)) or '-'}")
+    payload = client.call(method, encoded)
+    emit(True, payload, [])
+    return EXIT_OK
+
+
+def cmd_read(profile: str, token: str, args: argparse.Namespace) -> int:
+    """slack-fetch-message を exec する。SLACK_API_TOKEN は子環境にだけ渡す。"""
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates = [os.path.join(here, READ_HELPER), os.path.join(here, "executable_" + READ_HELPER)]
+    helper = next((c for c in candidates if os.access(c, os.X_OK)), None) or shutil.which(READ_HELPER)
+    if not helper:
+        raise UsageError(f"{READ_HELPER} not found next to {PROG} or in PATH")
+    env = {k: v for k, v in os.environ.items() if not re.match(r"^SLACK_[A-Z0-9_]+_TOKEN$", k)}
+    env["SLACK_API_TOKEN"] = token
+    argv = [helper, args.permalink] + (["--json"] if args.json else [])
+    log(f"read: exec {helper} (profile={profile})")
+    sys.stderr.flush()
+    os.execve(helper, argv, env)
+    return EXIT_NET  # unreachable
+
+
+# ─── argparse ────────────────────────────────────────────────────────────────
+
+class Parser(argparse.ArgumentParser):
+    """使い方エラーを契約どおり exit 1 にする (argparse 既定は 2)。"""
+
+    def error(self, message: str) -> None:  # type: ignore[override]
+        self.print_usage(sys.stderr)
+        print(f"{self.prog}: error: {message}", file=sys.stderr)
+        sys.exit(EXIT_USAGE)
+
+
+def _add_json(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--json", action="store_true", help="stdout に JSON 1 個を出力する")
+
+
+def build_parser() -> Parser:
+    parser = Parser(prog=PROG, description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("profile", help="profile name (^[a-z0-9][a-z0-9-]*$); token は SLACK_<PROFILE>_TOKEN")
+    sub = parser.add_subparsers(dest="command", metavar="<subcommand>", parser_class=Parser)
+    sub.required = True
+
+    auth = sub.add_parser("auth", help="認証状態 (auth.test)")
+    auth_sub = auth.add_subparsers(dest="auth_command", metavar="status", parser_class=Parser)
+    auth_sub.required = True
+    p = auth_sub.add_parser("status", help="auth.test の結果 (team, team_id, url, user, user_id, token_type)")
+    _add_json(p)
+
+    p = sub.add_parser("read", help=f"permalink を読む ({READ_HELPER} に委譲)")
+    p.add_argument("permalink", help="Slack メッセージの permalink")
+    _add_json(p)
+
+    users = sub.add_parser("users", help="ユーザー検索 (users.list)")
+    users_sub = users.add_subparsers(dest="users_command", metavar="find", parser_class=Parser)
+    users_sub.required = True
+    p = users_sub.add_parser("find", help="name/real_name/display_name/email の部分一致で絞る")
+    p.add_argument("query")
+    _add_json(p)
+
+    channels = sub.add_parser("channels", help="参加中の会話一覧 (users.conversations)")
+    channels_sub = channels.add_subparsers(dest="channels_command", metavar="list", parser_class=Parser)
+    channels_sub.required = True
+    p = channels_sub.add_parser("list", help="id, name(or DM 相手 user id), is_im/is_mpim, is_archived")
+    p.add_argument("--types", default=DEFAULT_CHANNEL_TYPES, help=f"default: {DEFAULT_CHANNEL_TYPES}")
+    _add_json(p)
+
+    dm = sub.add_parser("dm", help="DM を開く (conversations.open)")
+    dm_sub = dm.add_subparsers(dest="dm_command", metavar="open", parser_class=Parser)
+    dm_sub.required = True
+    p = dm_sub.add_parser("open", help="DM channel id (D…) を返す")
+    p.add_argument("--user", required=True, metavar="U…")
+    _add_json(p)
+
+    p = sub.add_parser("post", help="メッセージ投稿 (chat.postMessage)")
+    target = p.add_mutually_exclusive_group(required=True)
+    target.add_argument("--channel", metavar="C/D/G…")
+    target.add_argument("--user", metavar="U…", help="conversations.open で DM を開いてから投稿する")
+    text = p.add_mutually_exclusive_group(required=True)
+    text.add_argument("--text", help="短文用。複数行は --text-file")
+    text.add_argument("--text-file", metavar="PATH", help="本文ファイル (UTF-8)")
+    p.add_argument("--thread-ts", metavar="TS")
+    _add_json(p)
+
+    p = sub.add_parser("upload", help="ファイル送付 (files.getUploadURLExternal → POST → files.completeUploadExternal)")
+    p.add_argument("--file", required=True, metavar="PATH")
+    target = p.add_mutually_exclusive_group(required=True)
+    target.add_argument("--channel", metavar="C/D/G…")
+    target.add_argument("--user", metavar="U…", help="conversations.open で DM を開いてから送付する")
+    p.add_argument("--title", metavar="TITLE")
+    comment = p.add_mutually_exclusive_group()
+    comment.add_argument("--comment", help="短文用。複数行は --comment-file")
+    comment.add_argument("--comment-file", metavar="PATH", help="コメントファイル (UTF-8)")
+    p.add_argument("--thread-ts", metavar="TS")
+    _add_json(p)
+
+    p = sub.add_parser("api", help="任意の Web API method を呼ぶ (allowlist なし。出力はレスポンス JSON)")
+    p.add_argument("method", help="Web API method 名 (^[a-z][a-zA-Z.]+$。例 conversations.info)")
+    params = p.add_mutually_exclusive_group()
+    params.add_argument("--params", metavar="JSON", help="JSON object。値が dict/list なら JSON 文字列化して送る")
+    params.add_argument("--params-file", metavar="PATH", help="JSON object のファイル (UTF-8)")
+    _add_json(p)
+
+    return parser
+
+
+HANDLERS = {
+    ("auth", "status"): cmd_auth_status,
+    ("users", "find"): cmd_users_find,
+    ("channels", "list"): cmd_channels_list,
+    ("dm", "open"): cmd_dm_open,
+    ("post", None): cmd_post,
+    ("upload", None): cmd_upload,
+    ("api", None): cmd_api,
+}
+
+
+def main(argv: list[str]) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        profile = validate_profile(args.profile)
+        token, token_type = load_token(profile, argv[1:])
+        print(f"{PROG}: profile={profile} token_type={token_type}", file=sys.stderr, flush=True)
+
+        if args.command == "read":
+            return cmd_read(profile, token, args)
+
+        second = getattr(args, f"{args.command}_command", None)
+        handler = HANDLERS[(args.command, second)]
+        return handler(SlackClient(token), args, token_type)
+    except (UsageError, SlackApiError, TransportError) as e:
+        err(str(e))
+        return e.exit_code
+    except KeyboardInterrupt:
+        err("interrupted")
+        return 130
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -1,9 +1,12 @@
-# ADR 0006: Gemini CLI の baseline 設定を dotfiles で管理する
+---
+title: "ADR 0006: Gemini CLI の baseline 設定を dotfiles で管理する"
+status: accepted
+date: 2026-03-13
+worked_at: "2026-08-12 16:00 JST"
+agent_model: "GPT-5 Codex"
+---
 
-- Status: Accepted
-- Date: 2026-03-13
-- Worked At: 2026-03-13 14:00 JST
-- Agent Model: GPT-5 Codex
+# ADR 0006: Gemini CLI の baseline 設定を dotfiles で管理する
 
 ## Context
 
@@ -26,7 +29,7 @@ Gemini には `save_memory` と `GEMINI.md` による永続コンテキスト機
   - `context.fileName = ["AGENTS.md", "GEMINI.md"]`
   - `mcpServers.pencil`
   - `security.folderTrust.enabled = true`
-  - 既存実機状態の維持に必要な `security.auth.selectedType = oauth-personal`
+  - `security.auth.selectedType = gemini-api-key`
   - `ui.theme = Default Light`
 - `~/.gemini/` 配下の machine-specific state は原則 `.chezmoiignore` で非管理にする。
   - 例: `oauth_creds.json`, `mcp-oauth-tokens-v2.json`, `trustedFolders.json`, `history/`, `tmp/`, `projects.json`
@@ -34,10 +37,13 @@ Gemini には `save_memory` と `GEMINI.md` による永続コンテキスト機
 - Gemini 固有の skills / extensions / hooks / commands は今回は managed 化せず、baseline config 導入までに留める。
 - `.claude/skills/dotfile-update/SKILL.md` の AI 間対応表に Gemini を追加し、Gemini state を原則 ignore とする運用を明文化する。
 
+2026-08-12 に Gemini CLI 0.46.0 の `oauth-personal` が `UNSUPPORTED_CLIENT` で拒否されることを実測したため、認証方式を `gemini-api-key` へ変更した。API key 実値は設定ファイルへ保存せず、`~/.config/op/dotfiles.env` の 1Password secret reference を `oprun` で解決する。
+
 ## Consequences
 
 - Gemini でも横断運用ルールと baseline settings を再現可能な形で配備できる。
 - 認証トークンや trust 記録など、マシン依存の state を誤ってコミットしにくくなる。
+- Gemini CLI は `oprun gemini ...` で起動し、1Password から実行時に API key を受け取る。
 - `AGENTS.md` を Gemini の正規の repo 指示ファイルとして扱うことで、既存 repo の agent instructions をそのまま再利用でき、repo ごとに `GEMINI.md` を増やさずに済む。
 - `.geminiignore` により、chezmoi source 用ディレクトリが Gemini の project context に混入せず、グローバル `~/.gemini/GEMINI.md` と repo 直下の正規 instruction だけを読み込ませやすくなる。
 - Gemini の拡張機能群は今回は非管理のため、将来的に skills / extensions を本格管理する場合は別 ADR で境界を再定義する必要がある。
