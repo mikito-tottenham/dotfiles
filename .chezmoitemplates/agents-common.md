@@ -56,6 +56,12 @@
 - gws アカウントの実メールアドレスは git 管理下の文書やコミットメッセージに書かず、必要なときは `gws-account <profile> auth status` の `user` フィールドで実行時に確認すること
 - プロファイル対応、再認証の切り分けと依頼の仕方、カレンダー共有 ACL の手順は gws-cli-runner skill の `references/account-profiles.md` を正本とし、ここには再掲しないこと
 
+# 日本語の文章スキル
+
+- 人に読ませる日本語の文章（社内外のメール・チャット、提案書、報告書、議事録、スライドなど）を書く・直すときは、構成と読みやすさを `natural-japanese`、敬語・宛名・事実と約束の確認を `japanese-business-writing` で扱うこと。Agent 自身の返答、コミットメッセージ、ADR、`.context/` の作業メモには使わないこと
+- `natural-japanese` のモードは、SKILL.md の選択規定より次を優先すること: クイックモードを既定とし、フルモードはユーザーが「しっかり」「時間をかけてよい」などと明示した場合だけ使い、対外文書であることを理由に自動でフルへ切り替えない（dotfiles ADR-0066）
+- 敬語・挨拶・クッション言葉（「いかがでしょうか」など）について 2 つのスキルの指摘が食い違う場合は、`japanese-business-writing` の判断を優先すること
+
 # Plan 共通ルール
 
 - Phase を含む Plan では、各 Phase ごとに使用する Skill を明示し、使用しない Phase は `なし` と明記すること
