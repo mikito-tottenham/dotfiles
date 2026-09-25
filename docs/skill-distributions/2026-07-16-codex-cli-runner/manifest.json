@@ -1,0 +1,35 @@
+{
+  "task": "github-output-backup",
+  "phase_or_step": "historical-output-preservation",
+  "created_at": "2026-09-23T04:25:05.625507+00:00",
+  "files": [
+    {
+      "destination": "docs/skill-distributions/2026-07-16-codex-cli-runner/codex-cli-runner.zip",
+      "source_basename": "codex-cli-runner.zip",
+      "sha256": "58aa2455695a5ffa197dc6f6a0fbc0a56af7b82ec281c6bdaa89365fdcaf9210",
+      "git_blob": "7f81bda79efaaa0775a1919dce9e8c7d28f22fd5",
+      "size": 10849,
+      "destination_hashes": {
+        "sha256": "58aa2455695a5ffa197dc6f6a0fbc0a56af7b82ec281c6bdaa89365fdcaf9210",
+        "git_blob": "7f81bda79efaaa0775a1919dce9e8c7d28f22fd5",
+        "size": 10849
+      },
+      "byte_identical": true,
+      "basis": "generic distributable historical skill package; source skill components already in Git history; no internal or credential contents"
+    },
+    {
+      "destination": "docs/skill-distributions/2026-07-16-codex-cli-runner/INSTALL-ORIGINAL.md",
+      "source_basename": "README.md",
+      "sha256": "314b16f665bc01de02b3bfcd6be8010fa2c785cbcae638ba71b33f1d122392e6",
+      "git_blob": "becdd7aa72b501bd9968126410b85bfb0e718263",
+      "size": 1946,
+      "destination_hashes": {
+        "sha256": "314b16f665bc01de02b3bfcd6be8010fa2c785cbcae638ba71b33f1d122392e6",
+        "git_blob": "becdd7aa72b501bd9968126410b85bfb0e718263",
+        "size": 1946
+      },
+      "byte_identical": true,
+      "basis": "generic distributable historical skill package; source skill components already in Git history; no internal or credential contents"
+    }
+  ]
+}
