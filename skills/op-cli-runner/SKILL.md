@@ -13,6 +13,8 @@ Run `op` through one direct wrapper path and let failures remain visible. Do not
 
 If `op whoami`, `op vault list`, or `opmaterialize diff` fails with `account is not signed in`, `promptError`, `authorization prompt dismissed`, `authorization timeout`, or a timeout, stop and report the classified failure from `summary.json`.
 
+With the 1Password desktop app integration, `op whoami` never shows the authorization prompt: it reports `account is not signed in` until another `op` command has been authorized. Do not use `op whoami` alone as the sign-in check in scripts; use a metadata command that triggers the prompt, such as `op vault get <vault>` or `op vault list` (observed 2026-09-25).
+
 ## Safety
 
 - Do not print secret values.
