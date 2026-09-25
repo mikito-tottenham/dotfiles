@@ -153,6 +153,7 @@ Conductor などのツールが git worktree を立ち上げて dotfiles を編�
 | `.local/bin/ghrun` | materialize 済み GitHub token で `gh` / git credential helper を実行するラッパー（`--refresh` で 1Password から再生成） |
 | `.local/bin/opmaterialize` | `onepassword-secret-materialize` skill 同梱 script を呼び出すラッパー |
 | `.local/bin/slack-fetch-message` | Slack の message permalink を Web API で読み Markdown / JSON 出力する read-only CLI |
+| `.local/bin/slack-account` | Slack Web API をプロファイル（ワークスペース）単位で分離して呼ぶ CLI。token は `SLACK_<PROFILE>_TOKEN` を `oprun` で解決（ADR 0061） |
 | `.claude/CLAUDE.md` | Claude Code グローバル設定 |
 | `.claude/settings.json` | Claude Code 設定 |
 | `.codex/AGENTS.md` | Codex エージェント設定 |
@@ -183,6 +184,7 @@ Conductor などのツールが git worktree を立ち上げて dotfiles を編�
 | `.local/bin/ghrun` | `dot_local/bin/executable_ghrun` |
 | `.local/bin/opmaterialize` | `dot_local/bin/executable_opmaterialize` |
 | `.local/bin/slack-fetch-message` | `dot_local/bin/executable_slack-fetch-message` |
+| `.local/bin/slack-account` | `dot_local/bin/executable_slack-account` |
 | `.qwen/QWEN.md` | `dot_qwen/QWEN.md` |
 | `.qwen/settings.json` | `dot_qwen/settings.json` |
 
@@ -206,6 +208,9 @@ oprun gemini --help
 
 # 例: SLACK_API_TOKEN (dotfiles.env に op:// 参照) を必要とする Slack 読み取り CLI
 oprun slack-fetch-message 'https://<ws>.slack.com/archives/<CHANNEL>/p<16桁>'
+
+# 例: Slack ワークスペースをプロファイルで選んで操作 (SLACK_<PROFILE>_TOKEN を dotfiles.env に op:// 参照)
+oprun slack-account taskell auth status
 
 # 直接読む必要がある単発処理
 op read 'op://<vault>/<item>/<field>'
