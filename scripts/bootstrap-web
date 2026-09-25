@@ -17,7 +17,7 @@ set -euo pipefail
 #      実行し、dotfiles.env (op:// 参照)・secret-backed file・private subagent を一括復元する。
 #      続けて ghrun --refresh で git の https / gh 用の GitHub token を materialize する (ADR-0063)。
 #   6. headless 再現できる MCP サーバーを user scope に登録する (best-effort)。
-#      ローカルアプリ依存 (pencil) と対話 OAuth 必須 (slack-twin / claude.ai コネクタ) は対象外。
+#      ローカルアプリ依存 (pencil) と対話 OAuth 必須 (claude.ai コネクタ) は対象外。
 #
 # 再現対象は「web で復元可能なサブセット」であり、manifest 全体ではない。
 # empirical-prompt-tuning は upstream 不在 (404)、gws-* / grill-me は撤去済みのため対象外。
@@ -91,7 +91,7 @@ mcp_skipped=()            # "name: reason"
 onepassword_status="not-run"
 
 # 再現する MCP サーバー ("name|transport|url")。headless で再現できるものだけを載せる。
-# 対象外: pencil (ローカル macOS アプリ依存), slack-twin / claude.ai コネクタ (対話 OAuth 必須)。
+# 対象外: pencil (ローカル macOS アプリ依存), claude.ai コネクタ (対話 OAuth 必須)。
 mcp_servers=(
   "mfc_ca|http|https://alpha.mcp.developers.biz.moneyforward.com/mcp/ca/v3"
 )

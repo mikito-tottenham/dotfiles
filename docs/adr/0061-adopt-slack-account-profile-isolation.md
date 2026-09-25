@@ -86,6 +86,9 @@ CLI を Web API 側に置くのが最も摩擦が小さい。
 - 2026-09-11 の起案後、`slack-account` と本 ADR が git 未追跡のまま `~/.local/bin` へも
   配備されておらず、主経路が実際には使えない状態だった。本更新で追跡対象に入れ、
   `chezmoi apply` で配備した。
+- 1Password を通らない OAuth 経路だった Slack 公式 MCP `slack-twin`（user scope）は削除し、
+  `scripts/bootstrap-web` / `scripts/verify-cloud-parity` の対象外リストからも外した。
+  yoake ワークスペースは slack-account の profile が無いため、当面 claude.ai コネクタのまま残る。
 - taskell-ai/twin repo の ADR（2026-08-19「Slack 複数テナント接続の方針」）は claude.ai
   コネクタを正としており、本 ADR と主経路の判断が逆になっている。twin 側 ADR の更新は
   twin repo で扱う。

@@ -167,7 +167,7 @@ if [ "${#mcp_servers[@]}" -gt 0 ] && have python3; then
     fi
   done
 fi
-record mcp "pencil / slack-twin / claude.ai コネクタ" N/A "ローカルアプリ依存・対話 OAuth のため再現対象外"
+record mcp "pencil / claude.ai コネクタ" N/A "ローカルアプリ依存・対話 OAuth のため再現対象外"
 
 # ---------- 7. plugins ----------
 log "plugin を検査中"
