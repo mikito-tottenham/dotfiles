@@ -3,6 +3,8 @@ title: "Consolidate Claude / Codex Setup and Document the Permission Model"
 date: 2026-09-15
 agent_model: "Claude Code (Claude Fable 5.1)"
 status: proposed
+updated_at: 2026-09-25
+updated_by_agent_model: "Claude Opus 5.5 (claude-opus-5-5)"
 ---
 
 # ADR 0062: Consolidate Claude / Codex Setup and Document the Permission Model
@@ -59,7 +61,10 @@ status: proposed
    classifier にブロックされる実測（2026-08-19）への対策として残す。auto mode の classifier は Claude 自身の
    設定・memory 編集を「自己変更」として拒否するため、それらはユーザーが実行するスクリプトで渡す。
 8. **secret:** chatwork MCP の token は 1Password item へ移し、`~/.claude.json` は `oprun` + `op://` 参照経由に
-   切り替える。実値の移送はユーザー操作。
+   切り替える。実値の移送はユーザー操作。2026-09-25 に実施した。Claude Desktop の
+   `claude_desktop_config.json` にも同じ平文があったため同時に切り替えた。stdio の JSON-RPC を
+   `op run` のマスキング処理に通さないよう `OPRUN_NO_MASKING=1` を付け、Desktop 側は PATH も明示する。
+   MCP の起動ごとに 1Password の承認が要るため、承認が煩わしい場合は ADR 0063 の materialize 方式へ移す。
 
 ## Consequences
 
@@ -79,3 +84,5 @@ status: proposed
   `local_path_current` のみになること
 - `scripts/phase_artifact_hook.py --event pretool` を list 型 JSON を含む `.context` で実行して traceback なし
 - `chezmoi cat ~/.codex/AGENTS-common.md` がレンダリングされ、gws 節が 3 行になっていること
+- 2026-09-25（決定 8）: 移行スクリプトで、1Password から解決した値と旧平文の hash 一致、`oprun` 経由の
+  chatwork MCP で initialize と `get_me` の成功、現行設定 2 ファイルに平文が残っていないことを確認
