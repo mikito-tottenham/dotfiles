@@ -5,7 +5,7 @@ agent_model: "Claude Code (Claude Fable 5)"
 status: accepted
 ---
 
-# ADR 0058: Search Local Repos and GitHub First, Escalate to Google Drive Then Web
+# ADR 0067: Search Local Repos and GitHub First, Escalate to Google Drive Then Web
 
 ## Context
 
