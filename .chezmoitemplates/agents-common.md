@@ -14,6 +14,7 @@
 - 1Password への依存は認証が必要な操作だけに限定すること。読み取り専用のローカル操作まで `op run` を経由させると 1Password のロック中や非対話セッションで作業全体が停止する（構成例は dotfiles ADR-0055）
 - Claude Code / Codex の非対話 shell では `~/.zshrc` の `alias gh='ghrun gh'` が効かないため、`gh` は必ず `ghrun gh ...` と明示して呼ぶこと。素の `gh` は keyring 側の token に落ちる（2026-09-15 実測）。`ghrun` は materialize 済みの token を読むだけで Touch ID を要求しない。token ファイルが無い、または 401 になった場合は Agent から再生成せず、ユーザーに通常のターミナルで `ghrun --refresh` を実行するよう依頼すること（dotfiles ADR-0063）
 - `~/.config/op/dotfiles.env` は管理外の secret reference 置き場とし、実値を書かないこと
+- 1Password に CLI・AI 用の秘密を保存する、または保存方法を案内するときは、dotfiles の `docs/1password-item-conventions.md` の型（保管庫 `Dotfiles Secrets`、種類、英語のタイトル `<サービス> <組織> <用途>`、値は `credential`、識別子は小文字スネークケースの追加欄）に従うこと。参照に使えない文字や重複で ID 形式の参照になる名前を作らないこと
 - `~/.zshenv.local` は secret の置き場ではなく、マシン固有の非 secret local override に限定すること
 - 永続的に参照すべき指示や、worktree / セッションをまたいで再現が必要な情報は Memory ではなく git 管理ファイル（作業リポジトリの `docs/`・`.agents/`、またはグローバル dotfiles 例: `~/.codex/AGENTS.md`）に保存し、恒久性のあるユーザー指示・再発しやすい運用判断・複数回参照しそうな手順は原則その作業ターン内で反映すること
 - 反映先は、運用ルールや判断基準なら現在作業中のリポジトリの正規指示ファイル（通常は `AGENTS.md`。迷う場合もまずここを優先）、AI 固有の挙動だけ AI 別指示ファイル、背景・採用理由・長期判断は `docs/adr/`、反復手順や更新フローは対応 Skill へ分離すること
