@@ -196,6 +196,7 @@ Conductor などのツールが git worktree を立ち上げて dotfiles を編�
 
 API キーなどのシークレット実値は 1Password に保存し、CLI では `op://...` secret reference 経由で受け渡します。
 `~/.config/op/dotfiles.env` は `op run --env-file` 用の管理外 dotenv とし、実値ではなく secret reference だけを書きます。
+1Password に項目を作るときの保管庫・種類・名前・フィールド名の型は [docs/1password-item-conventions.md](docs/1password-item-conventions.md) に従います。
 
 ```bash
 mkdir -p ~/.config/op
