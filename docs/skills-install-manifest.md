@@ -1,6 +1,6 @@
 ---
 title: "Skill Install Manifest"
-updated_at: 2026-09-23
+updated_at: 2026-09-29
 ---
 
 # Skill Install Manifest
@@ -13,6 +13,16 @@ updated_at: 2026-09-23
 将来 `gh` 側に manifest 機能が入ったら、そちらへ移行を検討する。
 
 Claude Code on the web の ephemeral 環境に限り、`scripts/bootstrap-web`（SessionStart hook 経由）が **web で復元可能なサブセット**を自動再インストールする（ADR-0045）。サブセットは「first-party 全部（必須）＋ 公開 third-party のうち取得できたもの（best-effort）」で、manifest 全体とは一致しない。first-party の欠落は bootstrap を失敗させ、third-party の取得失敗は skip して継続する。2026-09-23 時点の third-party 取得対象は `natural-japanese` と `japanese-business-writing`（いずれも commit SHA で pin）。スキルを追加・削除したときは、この manifest と `scripts/bootstrap-web` のリストを同期すること。
+
+## クラウドで再現する CLI と MCP
+
+クラウドでは skill のほかに CLI と MCP も `scripts/bootstrap-web` が再現する。MCP の正本は `bootstrap-web` の `mcp_servers` 配列、CLI の正本は `bootstrap-web` の導入処理で、`scripts/verify-cloud-parity` の `CLI_*` を同期させる。増減したときは、この節も合わせて更新する。
+
+- CLI（`bootstrap-web` が導入）: `jq` `rg` `codex` `gemini` `ghq` `gh` `gws` `copilot` `op`
+- CLI（chezmoi が `dot_local/bin` から配置。`verify-cloud-parity` は有無だけを見る）: `opmaterialize` `oprun` `ghrun` `gws-account` `slack-account` `slack-fetch-message` `calendar-acl`
+- MCP（`claude mcp add --scope user`）: `mfc_ca`（http）、`chatwork`（stdio。`oprun` 経由で起動し、token は `dotfiles.env` の `op://` 参照から解決する。ADR-0062 決定 8）
+- 対象外: `pencil`（ローカルアプリ依存）。claude.ai コネクタはクラウドホストがセッションへ渡すため、script で再現する必要が無い
+- これらが通信するホストの allowlist は `docs/web-session-runner-setup.md` の Network access 節に列挙する（ADR-0068）
 
 ## First-party publisher skills
 

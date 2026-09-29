@@ -141,3 +141,9 @@ source パスはマシンごとに異なり（ローカルは ghq checkout、Cla
 - `~/.config/gws/accounts/yoake/` の 2 ファイルが `missing`。
 - `dotfiles.env` / `taskell/credentials.json` / `gws/client_secret.json` が `changed`
   （ローカルと 1Password が乖離）。
+
+## 追記 (2026-09-29, Claude Code / Claude Opus 5.5)
+
+認証経路の再現（allowlist、chatwork MCP の stdio 登録、`github.env` と gws プロファイルの検査）は
+ADR-0068 で拡張した。上の Decision にある「claude.ai コネクタ = 対話 OAuth のため対象外」は ADR-0068 で
+「クラウドホストが渡すので script の再現対象外」に改めた。

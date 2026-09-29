@@ -16,8 +16,9 @@ set -euo pipefail
 #   5. フル 1Password 化: OP_SERVICE_ACCOUNT_TOKEN があれば op を導入し opmaterialize restore を
 #      実行し、dotfiles.env (op:// 参照)・secret-backed file・private subagent を一括復元する。
 #      続けて ghrun --refresh で git の https / gh 用の GitHub token を materialize する (ADR-0063)。
-#   6. headless 再現できる MCP サーバーを user scope に登録する (best-effort)。
-#      ローカルアプリ依存 (pencil) と対話 OAuth 必須 (claude.ai コネクタ) は対象外。
+#   6. headless 再現できる MCP サーバー (http / stdio) を user scope に登録する (best-effort)。
+#      ローカルアプリ依存 (pencil) は対象外。claude.ai コネクタはクラウドホストがセッションへ渡すため
+#      script で再現する必要が無い。
 #
 # 再現対象は「web で復元可能なサブセット」であり、manifest 全体ではない。
 # empirical-prompt-tuning は upstream 不在 (404)、gws-* / grill-me は撤去済みのため対象外。
@@ -90,10 +91,16 @@ mcp_registered=()
 mcp_skipped=()            # "name: reason"
 onepassword_status="not-run"
 
-# 再現する MCP サーバー ("name|transport|url")。headless で再現できるものだけを載せる。
-# 対象外: pencil (ローカル macOS アプリ依存), claude.ai コネクタ (対話 OAuth 必須)。
+# 再現する MCP サーバー。headless で再現できるものだけを載せる。書式:
+#   "name|http|url"
+#   "name|stdio|command [args...]|KEY=VALUE ..."  (command と env は空白で分割する。env は省略可)
+# 対象外: pencil (ローカル macOS アプリ依存)。claude.ai コネクタはクラウドホストがセッションへ
+# 渡すため、ここで登録する必要が無い (script の再現対象外)。
+# chatwork はローカルの登録 (ADR-0062 決定 8) と同じ形で、oprun が起動時に dotfiles.env の
+# CHATWORK_API_TOKEN (op://) を解決する。restore 前に起動すると失敗するので、restore 後に /mcp で再接続する。
 mcp_servers=(
   "mfc_ca|http|https://alpha.mcp.developers.biz.moneyforward.com/mcp/ca/v3"
+  "chatwork|stdio|$HOME/.local/bin/oprun npx -y @chatwork/mcp-server|OPRUN_NO_MASKING=1"
 )
 
 record_tp_skipped() { third_party_skipped+=("$1: $2"); }
@@ -554,6 +561,21 @@ sys.exit(0 if sys.argv[1] in (d.get("mcpServers") or {}) else 1)
 PYCHK
 }
 
+mcp_add() { # $1=name $2=transport $3=url または command $4=env ("KEY=VALUE ..."、stdio のみ)
+  local name="$1" transport="$2" target="$3" env_spec="${4:-}" kv
+  local -a cmd=() env_kv=() env_args=()
+  if [ "$transport" != stdio ]; then
+    claude mcp add --transport "$transport" --scope user "$name" "$target"
+    return
+  fi
+  # -e は可変長引数なので name の後に置き、command の前を -- で区切る
+  # (claude mcp add <name> -e KEY=VALUE -- <command> [args...])。
+  read -r -a cmd <<< "$target"
+  read -r -a env_kv <<< "$env_spec"
+  for kv in ${env_kv[@]+"${env_kv[@]}"}; do env_args+=(-e "$kv"); done
+  claude mcp add --transport stdio --scope user "$name" ${env_args[@]+"${env_args[@]}"} -- "${cmd[@]}"
+}
+
 # MCP は claude CLI の user scope に登録する (~/.claude.json)。ephemeral なクラウド環境では
 # セッション終了で失われるため毎回登録し、既存があれば何もしない (冪等)。
 ensure_mcp_servers() {
@@ -568,15 +590,15 @@ ensure_mcp_servers() {
     warn "  python3 が無いため MCP 登録を skip"
     return 0
   fi
-  local entry name transport url
+  local entry name transport target env_spec
   for entry in "${mcp_servers[@]}"; do
-    IFS='|' read -r name transport url <<< "$entry"
+    IFS='|' read -r name transport target env_spec <<< "$entry"
     if mcp_exists "$name"; then
       mcp_registered+=("$name (既存)")
       info "  既存: $name"
       continue
     fi
-    if claude mcp add --transport "$transport" --scope user "$name" "$url" >/dev/null 2>&1; then
+    if mcp_add "$name" "$transport" "$target" "$env_spec" >/dev/null 2>&1; then
       mcp_registered+=("$name")
       info "  registered: $name (--scope user)"
     else
@@ -663,7 +685,7 @@ main() {
     restored-without-github-token:*)
       info "完了。opmaterialize restore は済んだが GitHub token を生成できなかった ($onepassword_status)。token の見えるセッションで 'ghrun --refresh' を実行すること。" ;;
     op-installed:*)
-      info "完了。op は導入済みだが restore は未実行 ($onepassword_status)。token の見えるセッションで 'opmaterialize restore' を実行すれば secret / secret-backed file / private subagent を復元できる。" ;;
+      info "完了。op は導入済みだが restore は未実行 ($onepassword_status)。token の見えるセッションで 'opmaterialize restore' と 'ghrun --refresh' を実行すれば secret / secret-backed file / private subagent と GitHub token を復元できる。" ;;
     *)
       info "完了。1Password 連携は未実行 ($onepassword_status)。op が使える環境で 'opmaterialize restore' を手動実行して復元すること。" ;;
   esac

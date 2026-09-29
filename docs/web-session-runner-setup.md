@@ -1,13 +1,13 @@
 ---
 title: "Cloud Session Runner & 1Password Setup Runbook"
-updated_at: 2026-09-02
+updated_at: 2026-09-29
 ---
 
 # Cloud Session Runner & 1Password Setup Runbook
 
 クラウドの ephemeral セッションで、runner CLI（codex / gemini / ghq / gh / gws / copilot /
 jq / rg）と 1Password 由来の secret を再現するための運用手順。対象は
-**Claude Code on the web** と **Codex cloud** の 2 つ。設計判断の正本は ADR-0045 / ADR-0058、
+**Claude Code on the web** と **Codex cloud** の 2 つ。設計判断の正本は ADR-0045 / ADR-0058 / ADR-0068、
 本書はそれを「迷わず実行する」ための手順書。
 
 2 つのクラウドは env / secret の注入タイミングが逆なので、environment 設定は流用せず
@@ -23,7 +23,7 @@ Codex cloud には SessionStart hook 相当が無いため Setup script と on-d
 | :-- | :-- | :-- | :-- | :-- |
 | **Setup script** | 全リポジトリ | される | しない（op 導入まで） | environment UI |
 | **SessionStart hook** | dotfiles セッションのみ | されない | する（token あり） | repo `.claude/settings.json` |
-| **on-demand restore** | 全リポジトリ | — | する（手動 1 コマンド） | セッション内で実行 |
+| **on-demand restore** | 全リポジトリ | — | する（手動: restore → `ghrun --refresh`） | セッション内で実行 |
 
 実ロジックはすべて git 管理の `scripts/bootstrap-web` に集約され、hook / Setup script は
 それを呼ぶ薄いラッパー。
@@ -40,9 +40,10 @@ Codex cloud には SessionStart hook 相当が無いため Setup script と on-d
 - **Setup script はキャッシュ（スナップショット）される。** secret を restore するとスナップ
   ショットに焼き込まれるため、Setup script では `BOOTSTRAP_WEB_SKIP_OP=true` で restore を
   必ず skip する。
-- **キャッシュは Setup script か allowed network hosts を変更したときに再ビルド**される。
-  dotfiles のコードを更新しても、Setup script を編集しない限り古い clone が使われ続ける。
-  新コードを反映したいときは Setup script を一度編集して再ビルドを誘発する。
+- **キャッシュは Setup script か allowed network hosts を変更したとき、または約 7 日で失効
+  したときに再ビルド**される（[Environment caching](https://code.claude.com/docs/en/cloud-environments#environment-caching)、
+  2026-09-29 確認）。dotfiles のコードを更新しても、そのどちらかが起きるまでは古い clone が使われ続ける。
+  新コードをすぐ反映したいときは Setup script を一度編集して再ビルドを誘発する。
 - **GitHub は git（proxy）と MCP ツールですでに触れる。** `gh` CLI（`GH_TOKEN`）は別物で、
   web では基本不要（skill 配置は bootstrap-web がファイルコピー、PR/issue/CI/release は MCP）。
 
@@ -57,18 +58,47 @@ OP_SERVICE_ACCOUNT_TOKEN=ops_xxxxxxxx   # 1Password service account（Dotfiles S
 CODEX_AUTH_JSON={...}                    # Mac の ~/.codex/auth.json の中身（codex 認証）
 ```
 
+> `CODEX_AUTH_JSON` は「認証は 1Password 経由」の共通ルールに対する例外で、2026-09-29 にユーザーが
+> 現状維持を選んだ（ADR-0068）。ChatGPT ログインの refresh token をローカルと共有するため、片方で
+> 更新されるともう片方が失効しうる。失効したら Mac の `~/.codex/auth.json` で入れ直す。
+
 > 平文で保存され environment を編集できる人に見える。権限は最小に絞り、不要時は revoke する。
 > `GEMINI_API_KEY` / `GH_TOKEN` / `COPILOT_GITHUB_TOKEN` は対応 runner を使う場合のみ追加。
 
 ### 2. Network access（Custom）
 
-allowed domains に以下を追加し、「Also include default list of common package managers」も有効化する。
+Network access を `Custom` にし、「Also include default list of common package managers」を
+**必ず有効化**したうえで、allowed domains に以下を追加する。既定リストには gws が使う
+`*.googleapis.com` / `accounts.google.com`、npm / npx の `registry.npmjs.org`、ghq の `proxy.golang.org`、
+`api.github.com` が入っている。チェックを外すと列挙したドメインだけになり、gws の API 呼び出しと
+npm / go 経由の CLI 導入が止まる。
+先頭の `*.` はすべてのサブドメインに一致する（[Allow specific domains](https://code.claude.com/docs/en/cloud-environments#allow-specific-domains)）。
 
 ```
 cache.agilebits.com       # op バイナリ配布
 downloads.1password.com   # op バイナリ配布（手動確認用。現状 install_op は cache.agilebits.com のみ使用）
 *.1password.com           # op 実行時の 1Password API
+slack.com                 # slack-account / slack-fetch-message の Web API（https://slack.com/api/...）
+files.slack.com           # slack-account upload の送信先（files.getUploadURLExternal が返す upload_url）
+api.chatwork.com          # chatwork MCP（@chatwork/mcp-server の API 呼び出し先）
+alpha.mcp.developers.biz.moneyforward.com   # mfc_ca MCP（bootstrap-web の mcp_servers）
+mcp.freee.co.jp           # freee MCP（repo の .mcp.json。認可・token endpoint も同じホスト）
+*.githubcopilot.com       # copilot CLI の Copilot API（下の注を参照）
 ```
+
+> - token を restore しても、ここに無いドメインへは通信できない。Slack / Chatwork / 1Password /
+>   Copilot / freee / Money Forward は既定リストに入っていない（[Default allowed domains](https://code.claude.com/docs/en/cloud-environments#default-allowed-domains)、2026-09-29 確認）。
+>   runner や MCP を増やしたら、この一覧も同時に更新する。
+> - claude.ai コネクタ（Gmail / Drive / Calendar / Slack など）はクラウドホストがセッションへ渡し、
+>   通信も Anthropic のサーバー経由になる。allowlist への追加も script での再現も要らない
+>   （[Network access](https://code.claude.com/docs/en/cloud-environments#network-access) の Note）。
+> - GitHub は専用 proxy を通るため、access level や allowlist に依存しない（同 GitHub proxy 節）。
+> - Copilot: [Copilot allowlist reference](https://docs.github.com/en/copilot/reference/copilot-allowlist-reference)
+>   は Copilot の API として `*.githubcopilot.com` を挙げているが、Copilot CLI だけのホスト一覧は無い。
+>   CLI がこれ以外のホストを使うかは未確認。
+> - mfc_ca の認可サーバーは `api.biz.moneyforward.com`（protected-resource metadata、2026-09-29 取得）。
+>   認可はツール（`mfc_ca_authorize` / `mfc_ca_exchange`）経由のため、VM から直接通信するかは未確認。
+>   認可が通信エラーで失敗したら追加する。
 
 ### 3. Setup script（全リポジトリ対応の正本スニペット）
 
@@ -120,7 +150,7 @@ Claude Code on the web は environment を複数持てる（既定の `Default` 
 | secret 専用枠 | なし（env var のみ） | あり（**setup のみ**・agent phase 開始前に削除） |
 | setup 中の network | allowlist に従う | 常に有効 |
 | agent phase の network | 管理 proxy 経由 | **既定 off**（allowlist で許可） |
-| キャッシュ無効化 | Setup script / allowed hosts の変更 | 12h 経過、または setup / maintenance script・env・secret の変更 |
+| キャッシュ無効化 | Setup script / allowed hosts の変更、約 7 日で失効 | 12h 経過、または setup / maintenance script・env・secret の変更 |
 
 出典: [Cloud environments](https://learn.chatgpt.com/docs/environments/cloud-environment.md)。
 
@@ -150,10 +180,22 @@ UI は 3 つに分かれている。
 | 欄 | 設定値 |
 | :-- | :-- |
 | Domain allowlist | `Common dependencies`（GitHub / npm / Go proxy 等はここに含まれる） |
-| Additional allowed domains | `cache.agilebits.com, downloads.1password.com, *.1password.com` |
+| Additional allowed domains | `cache.agilebits.com, downloads.1password.com, *.1password.com, slack.com, files.slack.com, googleapis.com, githubcopilot.com` |
 | Allowed HTTP Methods | `All methods` |
 
-1Password 系は `Common dependencies` に入らないので Additional 側に足す。カンマ区切り。
+1Password 系、Slack（slack-account）、Google API（gws）、Copilot は `Common dependencies` に入らない
+ので Additional 側に足す。カンマ区切り。`Common dependencies` にある Google 系は `google.com` だけで、
+gws が呼ぶ `googleapis.com` は無い（[Common dependencies](https://learn.chatgpt.com/docs/cloud/internet-access#common-dependencies)、
+2026-09-29 確認）。
+
+- Codex の文書はワイルドカードの書き方を定めていない。preset は `npmjs.org` のような裸のドメインで
+  書かれており、`registry.npmjs.org` などのサブドメインにも効いていると推定されるので、追加分も同じ
+  書き方にしている（未確認。効かなければ `www.googleapis.com` / `oauth2.googleapis.com` や
+  `api.githubcopilot.com` のようにホスト単位で足す）。
+- Codex 側の `~/.codex/config.toml` の mfc_ca は beta URL を持つ。Codex cloud でこの MCP を使うなら
+  `beta.mcp.developers.biz.moneyforward.com` も足す（Codex cloud がこの設定の MCP を読むかは未確認）。
+- chatwork MCP と freee MCP は Claude Code 側の登録（`claude mcp add` / repo の `.mcp.json`）なので、
+  Codex cloud には要らない。
 
 > UI 上に「ELEVATED RISK」の警告が出るとおり、agent internet access を On にすると
 > prompt injection や exfiltration のリスクが上がる。必要なドメインとメソッドだけに絞る。
@@ -190,7 +232,7 @@ agent phase の on-demand 実行に委ねる（上記 1 の方針）。
 
 Codex cloud はコンテナをキャッシュ（最大 12h）し、再開時に maintenance script を走らせる。
 これを設定しないと、dotfiles を更新してもキャッシュ内の古い clone が使われ続ける
-（Claude 側で「Setup script を編集しないと再ビルドされない」のと同じハマりどころ）。
+（Claude 側で「Setup script を編集しない限り、約 7 日の失効まで再ビルドされない」のと同じハマりどころ）。
 
 maintenance script は「キャッシュから再開したコンテナで、ブランチを checkout した後」に走る。
 repo 側は Codex が最新にしてくれるので、bootstrap を再実行するだけでよい。
@@ -234,15 +276,22 @@ BOOTSTRAP_REPO_DIR=/opt/dotfiles /opt/dotfiles/scripts/verify-cloud-parity --qui
 あれば exit 1。secret の実値は出力せず有無だけを見る。
 
 検査対象: skill（claude / codex）、CLI、設定ファイル、private subagent、認証材料
-（`dotfiles.env` / gws プロファイル / `codex auth.json` / `OP_SERVICE_ACCOUNT_TOKEN` の有無）、
-MCP、plugin、`bootstrap-web` の `status.json`。
+（`dotfiles.env` / GitHub token の `~/.config/op/injected/github.env` / `client_secret.json` と
+`credentials.json` がそろった gws プロファイル（名前つき）/ `codex auth.json` / `OP_SERVICE_ACCOUNT_TOKEN`
+の有無）、
+MCP（`bootstrap-web` の `mcp_servers`）、plugin、`bootstrap-web` の `status.json`。
 
 `MISSING` が出たときの復旧:
 
 ```bash
 BOOTSTRAP_REPO_DIR=/opt/dotfiles /opt/dotfiles/scripts/bootstrap-web
 opmaterialize restore
+ghrun --refresh
 ```
+
+restore 後も Slack / Chatwork などの token が解決できないときは、1Password 側の `dotfiles.env` が
+ローカルより古い可能性がある。ローカルのターミナルで `opmaterialize diff` を実行し、`changed` なら
+1Password 側を更新する。
 
 ## セッション内での secret 復元（on-demand）
 
@@ -251,10 +300,19 @@ dotfiles 以外のセッションでは、secret が要るときにセッショ�
 
 ```bash
 opmaterialize restore
+ghrun --refresh                     # GitHub token（~/.config/op/injected/github.env）を生成する
 gws-account <profile> drive files list
 ```
 
-dotfiles リポジトリのセッションは SessionStart hook が自動でフル restore するため、この手順は不要。
+`ghrun --refresh` を省くと GitHub token が生成されない。chezmoi が配る `~/.gitconfig` の credential
+helper と `gh` は `ghrun` 経由で token を読むため（ADR-0063）、session repo 以外の git 操作や `ghrun gh`
+が失敗する。
+
+restore の前に起動した stdio MCP（chatwork）は、token を解決できずに失敗している。restore の後に
+`/mcp` で chatwork を再接続する。
+
+dotfiles リポジトリのセッションは SessionStart hook が自動でフル restore（`ghrun --refresh` まで）
+するため、この手順は不要。
 
 ## gws（Google Workspace）マルチアカウント
 
@@ -348,8 +406,10 @@ dotfiles リポジトリのセッションは SessionStart hook が自動でフ�
 | codex | bootstrap-web | `CODEX_AUTH_JSON`（env）→ `~/.codex/auth.json` | env 登録済み |
 | gws | bootstrap-web | `~/.config/gws/accounts/<profile>/{client_secret,credentials}.json`（1Password） | 上記 gws 手順 |
 | gemini | bootstrap-web | `GEMINI_API_KEY` | 1Password → dotfiles.env 参照 → `oprun gemini` |
-| gh | bootstrap-web | `GH_TOKEN` | web では基本不要（git=proxy / PR 等=MCP）。`gh` 固有コマンドを使う時のみ env 登録 |
+| gh | bootstrap-web | `GH_TOKEN`（dotfiles.env 参照 → `ghrun --refresh` で `~/.config/op/injected/github.env`） | session repo は git=proxy / PR 等=MCP で足りる。`gh` 固有コマンドや session repo 以外の git は restore 後に `ghrun --refresh` |
 | copilot | bootstrap-web | `COPILOT_GITHUB_TOKEN`（+ Copilot 契約） | 1Password → env |
+| slack-account | chezmoi（`~/.local/bin`） | `SLACK_<PROFILE>_TOKEN` | 1Password → dotfiles.env 参照 → `oprun slack-account <profile> ...`（ADR-0061） |
+| chatwork（MCP） | bootstrap-web が `claude mcp add` で登録（実体は `npx`） | `CHATWORK_API_TOKEN` | 1Password → dotfiles.env 参照 → 起動時に `oprun` が解決。restore 後に `/mcp` で再接続 |
 
 API キー系は 1Password に保存し `~/.config/op/dotfiles.env` に `KEY=op://<vault>/<item>/<field>`
 を書き、`oprun <cmd>` で注入する（規約準拠）。secret 実値は git に置かない。
@@ -366,9 +426,12 @@ command -v op gws gws-account codex jq rg      # 導入確認
 
 # secret 復元（dotfiles 以外のセッション）
 opmaterialize restore
+ghrun --refresh                                # GitHub token を生成（verify の github.env 行が OK になる）
 gws-account <profile> drive files list         # Drive 一覧が返れば成功
 codex login status                             # "Logged in" 確認
 ```
+
+restore の後は `/mcp` で chatwork を再接続する（restore 前の起動では token を解決できない）。
 
 `status.json` の `onepassword` が `skipped: op 未導入 (network policy で 1Password 配布が遮断?)`
 の場合は、setup フェーズで 1Password 配布元への network が通っていない。その場合は in-session で
@@ -423,7 +486,7 @@ ls ~/.config/gws/accounts/*/credentials.json 2>/dev/null | wc -l    # gws プロ
 
 `gh`（2.90.0+）には `gh skill` サブコマンドがあり起動自体はできるが、web セッションでは
 gh CLI が未認証（`GH_TOKEN` / `GITHUB_TOKEN` 無し）のため `gh skill search/install/update` の
-ような GitHub 操作はできない。`dot_gitconfig` の credential helper（`!gh auth git-credential`）は
+ような GitHub 操作はできない。`dot_gitconfig` の credential helper（`!ghrun gh auth git-credential`）は
 git 認証用で、gh CLI を `gh skill` 向けに認証するものではない。
 
 これは想定どおりで、**web での skill 配置は bootstrap-web のファイルコピー
@@ -435,6 +498,8 @@ web セッション内で `gh skill` を直接叩きたい場合のみ `GH_TOKEN
 
 - 設計判断: `docs/adr/0045-reproduce-web-session-environment-via-session-start-hook.md`
 - Codex cloud 対応と parity 検証: `docs/adr/0058-extend-cloud-parity-to-codex-cloud.md`
+- 認証経路のクラウド反映（allowlist・chatwork MCP・認証材料の検査）: `docs/adr/0068-extend-cloud-parity-to-local-auth-paths.md`
+- GitHub token の materialize（ghrun）: `docs/adr/0063-materialize-github-token-to-stop-biometric-prompts.md`
 - parity 検証スクリプト: `scripts/verify-cloud-parity`
 - 1Password CLI 認証: `docs/adr/0044-use-op-cli-runner-for-1password-cli-auth.md`
 - field 方式 secret: `docs/adr/0046-support-field-based-secrets-in-opmaterialize.md`
