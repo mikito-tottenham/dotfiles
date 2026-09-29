@@ -100,8 +100,11 @@ ADR-0045 / ADR-0058 で、クラウドの ephemeral セッション（Claude Cod
   書き換えにあたるため auto mode に拒否された（2026-09-29）。ユーザーの判断を待つ。VM 内の
   `~/.claude/settings.json` の hook がクラウドセッションで実際に発火するかも未確認で、発火しない場合は
   on-demand 手順（Decision 1）で補う。
-- 1Password 側の作業（`dotfiles.env` の同期、Secrets Manifest に無い gws プロファイルの登録など）と、
-  environment UI の設定変更。repo からは行えず、ユーザーが行う。
+- 1Password 側の作業（`dotfiles.env` の同期、Secrets Manifest に無い gws プロファイルの登録など）。
+  Agent から `opmaterialize add` を実行すると、ユーザーがチャットで承認していても auto mode classifier に
+  Secret-Store Writes として拒否される（2026-09-29 実測）。1Password への登録・更新はユーザーがローカルの
+  ターミナルで行う。同日の `opmaterialize diff` では、`dotfiles.env` と gws `taskell/credentials.json` が
+  `changed`、`yoake/` の 2 ファイルが `missing`（ローカルは空 dir）、`ges-claude` は manifest に行が無かった。
 
 ## Consequences
 
@@ -152,6 +155,19 @@ ADR-0045 / ADR-0058 で、クラウドの ephemeral セッション（Claude Cod
    裸のドメインがサブドメインに効くかもここで確かめる。
 7. 未検証事項 3: companion runtime（`CODEX_COMPANION_SESSION_ID` が設定されているか）と
    `codex exec` の可否。
+
+## environment UI の反映状況（2026-09-29）
+
+ユーザーの承認を得て、Agent がブラウザで次のとおり変更した。
+
+- Claude Code on the web: `My claude` と `Default` の allowed domains に Decision 2 の 6 件を追加した
+  （既存の OpenAI 系 3 件と 1Password 系 3 件は残した）。どちらも既定リストは有効のまま。`Default` は
+  Environment variables が空なので、`OP_SERVICE_ACCOUNT_TOKEN` を入れるまで restore できない。
+- Codex cloud: `mikito-tottenham/dotfiles` の Additional allowed domains に Decision 2 の 4 件を追加した。
+  この environment は Environment variables と Secrets が空で、`OP_SERVICE_ACCOUNT_TOKEN` が無いため
+  restore できない。`mikito-tottenham/twin` は Agent internet access が Off で Setup script も Automatic の
+  ため変更していない（許可ドメインの追加には internet access を On にする判断が要る）。
+- token の値の入力は Agent が行わない。environment 変数の追加はユーザーが行う。
 
 ## 検証（ローカル, 2026-09-29）
 
