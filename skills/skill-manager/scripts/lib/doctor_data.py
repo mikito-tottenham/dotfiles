@@ -2,10 +2,15 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
+import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
+import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +42,7 @@ ARGS = parse_args()
 GIT_ROOT = Path(ARGS.git_root).resolve() if ARGS.git_root else None
 CLAUDE_HOME = Path(os.environ.get("SKILL_MANAGER_CLAUDE_HOME", "~/.claude")).expanduser()
 CODEX_HOME = Path(os.environ.get("SKILL_MANAGER_CODEX_HOME", "~/.codex")).expanduser()
+AGENTS_HOME = Path(os.environ.get("SKILL_MANAGER_AGENTS_HOME", "~/.agents")).expanduser()
 SKILL_CREATOR_HOME = Path(
     os.environ.get("SKILL_MANAGER_SKILL_CREATOR_HOME", "~/.codex/skills/.system/skill-creator")
 ).expanduser()
@@ -334,6 +340,148 @@ def check_first_party_source_drift() -> None:
                 continue
             add_check("source_drift", "warn", "SOURCE_PATH_STALE", skill_md, f"metadata.local-path {local_path} is outside {expected_root} ({how}); reinstall from the publisher source with gh skill install --from-local", subject, "global")
     add_pass_if_empty("source_drift", "no first-party installs with metadata.local-path found", "global", "source-path")
+
+
+T0 = time.time()
+
+
+def log(message: str) -> None:
+    """Progress log on stderr; stdout stays reserved for the JSON result."""
+    print(f"[doctor +{time.time() - T0:.1f}s] {message}", file=sys.stderr, flush=True)
+
+
+DEPLOY_DIRS = (
+    ("claude-code", CLAUDE_HOME / "skills"),
+    ("agents", AGENTS_HOME / "skills"),
+    ("codex", CODEX_HOME / "skills"),
+)
+RETIRED_HEADING = re.compile(r"^#{2,4}\s+`([^`]+)`\s*[（(]撤去済み")
+INSTALL_LINE = re.compile(r"gh skill install \.\s+([A-Za-z0-9._-]+)\s+--from-local\s+--agent\s+([a-z-]+)")
+
+
+def resolve_manifest(source_path: Path | None) -> Path | None:
+    override = os.environ.get("SKILL_MANAGER_MANIFEST")
+    if override:
+        return Path(override).expanduser()
+    if source_path is None:
+        return None
+    candidate = source_path / "docs" / "skills-install-manifest.md"
+    return candidate if candidate.is_file() else None
+
+
+def parse_manifest(manifest: Path) -> tuple[list[str], dict[str, set[str]]]:
+    """Return (retired name patterns, {agent: expected first-party names}) from a docs-only install manifest."""
+    retired: list[str] = []
+    expected: dict[str, set[str]] = {}
+    for line in manifest.read_text(encoding="utf-8").splitlines():
+        heading = RETIRED_HEADING.match(line)
+        if heading:
+            retired.append(heading.group(1))
+            continue
+        install = INSTALL_LINE.search(line)
+        if install:
+            expected.setdefault(install.group(2), set()).add(install.group(1))
+    return retired, expected
+
+
+def check_retired_skills() -> None:
+    """Cross-check retirement declarations against what is still deployed."""
+    source_path, _ = resolve_source_path()
+    manifest = resolve_manifest(source_path)
+    source_skills = {p.name for p in (source_path / "skills").iterdir() if p.is_dir()} if source_path and (source_path / "skills").is_dir() else set()
+    patterns: list[str] = []
+    if manifest is None:
+        add_check("retired_skills", "warn", "MANIFEST_UNRESOLVED", "", "install manifest not found; set SKILL_MANAGER_MANIFEST to enable retired-skill checks", "manifest", "global")
+    else:
+        patterns, _ = parse_manifest(manifest)
+    log(f"retired_skills: manifest={manifest} retired_patterns={patterns} source_skills={len(source_skills)}")
+    for agent, skills_dir in DEPLOY_DIRS:
+        if not skills_dir.is_dir():
+            continue
+        for path in sorted(skills_dir.iterdir()):
+            if path.name.startswith(".") or not valid_skill_target(path):
+                continue
+            subject = f"{agent}:{path.name}"
+            if path.name in source_skills:
+                continue  # an active first-party skill wins over a retired glob such as `gws-*`
+            hit = next((pat for pat in patterns if fnmatch.fnmatch(path.name, pat)), None)
+            if hit:
+                add_check("retired_skills", "warn", "RETIRED_STILL_DEPLOYED", path, f"manifest declares `{hit}` retired but it is still deployed; move it out (or gh skill remove) after confirming with the user", subject, "global")
+                continue
+            local_path = read_local_path(path / "SKILL.md")
+            if local_path and source_skills and path.name not in source_skills:
+                add_check("retired_skills", "warn", "FIRST_PARTY_NOT_IN_SOURCE", path, f"installed from a local publisher path ({local_path}) but skills/{path.name} no longer exists in the publisher source; likely merged or retired", subject, "global")
+    lock = AGENTS_HOME / ".skill-lock.json"
+    if lock.is_file() and patterns:
+        data = load_optional_json(lock, add_error) or {}
+        for key in sorted((data.get("skills") or {}) if isinstance(data, dict) else {}):
+            bare = key.rsplit("/", 1)[-1]
+            if bare in source_skills:
+                continue
+            hit = next((pat for pat in patterns if fnmatch.fnmatch(bare, pat)), None)
+            if hit:
+                add_check("retired_skills", "warn", "RETIRED_IN_LOCK", lock, f"lock entry `{key}` matches retired `{hit}`; back up the lock file before pruning the entry", key, "global")
+    add_pass_if_empty("retired_skills", "no retired skills deployed", "global", "retired")
+
+
+def skill_fingerprint(skill_dir: Path) -> dict[str, str]:
+    """Hash every file; SKILL.md is reduced to description + body so install-time metadata injection is ignored."""
+    prints: dict[str, str] = {}
+    for path in sorted(skill_dir.rglob("*")):
+        if not path.is_file() or "__pycache__" in path.parts or path.name == ".DS_Store":
+            continue
+        rel = str(path.relative_to(skill_dir))
+        if rel == "SKILL.md":
+            text = path.read_text(encoding="utf-8", errors="replace")
+            frontmatter, _ = parse_frontmatter(path, add_error)
+            end = text.find("\n---", 4) if text.startswith("---\n") else -1
+            body = text[end + 4:].lstrip("\n") if end >= 0 else text
+            payload = (frontmatter.get("description", "") + "\0" + body).encode()
+        else:
+            payload = path.read_bytes()
+        prints[rel] = hashlib.md5(payload).hexdigest()
+    return prints
+
+
+def diff_prints(expected: dict[str, str], actual: dict[str, str]) -> list[str]:
+    return sorted(k for k in set(expected) | set(actual) if expected.get(k) != actual.get(k))
+
+
+def check_first_party_sync() -> None:
+    """Compare deployed first-party copies with the publisher source, and ~/.codex/skills with its ~/.agents/skills mirror."""
+    source_path, how = resolve_source_path()
+    if source_path is None or not (source_path / "skills").is_dir():
+        add_check("first_party_sync", "warn", "SOURCE_PATH_UNRESOLVED", "", f"publisher source unresolved ({how})", "source-path", "global")
+        return
+    manifest = resolve_manifest(source_path)
+    expected_by_agent = parse_manifest(manifest)[1] if manifest else {}
+    source_skills = sorted(p for p in (source_path / "skills").iterdir() if valid_skill_target(p))
+    total = len(source_skills)
+    log(f"first_party_sync: source={source_path} skills={total} manifest={'yes' if manifest else 'no'}")
+    for i, src in enumerate(source_skills, 1):
+        name = src.name
+        src_print = skill_fingerprint(src)
+        stale_agents: list[str] = []
+        for agent, skills_dir in DEPLOY_DIRS:
+            deployed = skills_dir / name
+            subject = f"{agent}:{name}"
+            manifest_agent = "codex" if agent in {"agents", "codex"} else agent
+            expected = name in expected_by_agent.get(manifest_agent, set())
+            if not valid_skill_target(deployed):
+                if expected:
+                    add_check("first_party_sync", "fail", "FIRST_PARTY_MISSING", deployed, f"manifest installs {name} for {manifest_agent} but {deployed} is missing", subject, "global")
+                continue
+            changed = diff_prints(src_print, skill_fingerprint(deployed))
+            if changed:
+                stale_agents.append(agent)
+                add_check("first_party_sync", "warn", "FIRST_PARTY_CONTENT_STALE", deployed, f"differs from publisher source in {', '.join(changed[:8])}{' ...' if len(changed) > 8 else ''}; reinstall from `chezmoi source-path` with --force", subject, "global")
+        mirror_src, mirror_dst = AGENTS_HOME / "skills" / name, CODEX_HOME / "skills" / name
+        if valid_skill_target(mirror_src) and valid_skill_target(mirror_dst):
+            changed = diff_prints(skill_fingerprint(mirror_src), skill_fingerprint(mirror_dst))
+            if changed:
+                add_check("first_party_sync", "warn", "CODEX_MIRROR_STALE", mirror_dst, f"~/.codex/skills/{name} differs from ~/.agents/skills/{name} in {', '.join(changed[:8])}; rerun the manifest rsync step", f"codex:{name}", "global")
+        log(f"first_party_sync: [{i}/{total}] {name} stale={stale_agents or 'none'}")
+    add_pass_if_empty("first_party_sync", "deployed first-party skills match the publisher source", "global", "first-party")
 
 
 def check_deprecated_commands() -> None:
@@ -715,6 +863,8 @@ def main() -> None:
     check_codex_plugins()
     check_registry_health()
     check_first_party_source_drift()
+    check_retired_skills()
+    check_first_party_sync()
     check_deprecated_commands()
     check_skill_collisions()
     check_codex_presence()
