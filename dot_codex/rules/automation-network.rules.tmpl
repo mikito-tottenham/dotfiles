@@ -1,0 +1,48 @@
+# Codex automation 用の execpolicy rules（dotfiles 管理。~/.codex/rules/automation-network.rules）
+#
+# Codex Desktop の automation は workspace-write sandbox（networkAccess: false）で動くため、
+# github.com への fetch や Homebrew の API キャッシュ更新が毎回 sandbox で失敗し、権限昇格の
+# 再実行に頼っていた。decision = "allow" の rule に一致するコマンドは sandbox 外で無確認実行される
+# （https://learn.chatgpt.com/docs/agent-configuration/rules、2026-10-03 確認）。
+# 対象は automation が単独で実行する固定コマンドだけに絞る。default.rules は Codex が TUI 承認時に
+# 書き込むため、このファイルとは分けて管理する。
+# 検証: codex execpolicy check --rules ~/.codex/rules/automation-network.rules -- <command...>
+
+prefix_rule(
+    pattern = ["{{ .chezmoi.homeDir }}/.local/bin/claude-github-daily-sync"],
+    decision = "allow",
+    justification = "claude-github-daily-sync automation: git fetch to github.com and ff-only sync (script is managed in dotfiles)",
+    match = [
+        ["{{ .chezmoi.homeDir }}/.local/bin/claude-github-daily-sync"],
+        ["{{ .chezmoi.homeDir }}/.local/bin/claude-github-daily-sync", "--verify"],
+    ],
+    not_match = [
+        ["claude-github-daily-sync"],
+        ["git", "push"],
+    ],
+)
+
+# daily-ai-brew-upgrade automation: API キャッシュ・lock・Cellar への書込みとネットワークが必要
+prefix_rule(
+    pattern = ["brew", ["update", "outdated", "info", "list", "--version"]],
+    decision = "allow",
+    justification = "daily-ai-brew-upgrade automation: Homebrew metadata refresh and read-only queries",
+    match = [["brew", "outdated", "--json=v2"], ["brew", "update"]],
+    not_match = [["brew", "uninstall", "gh"], ["brew", "cleanup"]],
+)
+
+prefix_rule(
+    pattern = ["brew", "upgrade", ["codex", "claude-code", "gemini-cli", "qwen-code", "copilot-cli", "gh", "hermes-agent"]],
+    decision = "allow",
+    justification = "daily-ai-brew-upgrade automation: upgrade only the listed AI CLI packages",
+    match = [["brew", "upgrade", "gh"], ["brew", "upgrade", "codex"]],
+    not_match = [["brew", "upgrade"], ["brew", "upgrade", "wget"]],
+)
+
+prefix_rule(
+    pattern = ["brew", "upgrade", ["--cask", "--formula"], ["codex", "claude-code", "gemini-cli", "qwen-code", "copilot-cli", "gh", "hermes-agent"]],
+    decision = "allow",
+    justification = "daily-ai-brew-upgrade automation: upgrade only the listed AI CLI packages",
+    match = [["brew", "upgrade", "--cask", "claude-code"], ["brew", "upgrade", "--formula", "gemini-cli"]],
+    not_match = [["brew", "upgrade", "--cask", "slack"]],
+)

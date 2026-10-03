@@ -60,13 +60,16 @@ ghq/**/*.p8
 .codex/automations/*
 !.codex/automations/daily-ai-brew-upgrade
 !.codex/automations/daily-ai-brew-upgrade/automation.toml
+!.codex/automations/claude-github-daily-sync
+!.codex/automations/claude-github-daily-sync/automation.toml
 .codex/automations/*/memory.md
 .codex/archived_sessions
 .codex/history.jsonl
 .codex/log
 .codex/memories
 .codex/models_cache.json
-.codex/rules
+.codex/rules/*
+!.codex/rules/automation-network.rules
 .codex/session_index.jsonl
 .codex/sessions
 .codex/shell_snapshots
