@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""docs/adr/NNNN-*.md の連番重複を検出する。
+
+モード:
+  (引数なし)  作業ツリーの docs/adr を走査し、重複番号をすべて表示する。重複があれば exit 1。
+  --staged    index（ステージ済みの状態）を走査する。今回追加・リネームした ADR が既存番号と
+              重なる場合だけ exit 1。既存の重複は警告として表示するだけで exit 0。
+  --hook      Claude Code / Codex の PreToolUse(Bash) hook。stdin の payload が `git commit` の
+              ときだけ --staged 相当を実行し、新規の重複があれば exit 2 でコミットを止める。
+
+既存の重複はリネームしない（番号の振り直しは人が判断する。AGENTS.md の ADR 番号衝突ルール参照）。
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import shlex
+import subprocess
+import sys
+from collections import defaultdict
+from pathlib import Path
+
+ADR_DIR = "docs/adr"
+ADR_RE = re.compile(r"^docs/adr/(\d{4})-[^/]+\.md$")
+
+
+def git(root: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(root), *args], check=True, capture_output=True, text=True
+    ).stdout
+
+
+def repo_root(start: Path) -> Path:
+    return Path(git(start, "rev-parse", "--show-toplevel").strip())
+
+
+def group(paths: list[str]) -> dict[str, list[str]]:
+    groups: dict[str, list[str]] = defaultdict(list)
+    for path in paths:
+        match = ADR_RE.match(path)
+        if match:
+            groups[match.group(1)].append(path)
+    return {num: sorted(files) for num, files in groups.items() if len(files) > 1}
+
+
+def worktree_paths(root: Path) -> list[str]:
+    adr = root / ADR_DIR
+    if not adr.is_dir():
+        return []
+    return [f"{ADR_DIR}/{p.name}" for p in adr.glob("[0-9][0-9][0-9][0-9]-*.md")]
+
+
+def staged_state(root: Path) -> tuple[list[str], set[str]]:
+    index_paths = git(root, "ls-files", "--cached", "--", ADR_DIR).splitlines()
+    added: set[str] = set()
+    for line in git(root, "diff", "--cached", "--name-status", "--diff-filter=AR", "--", ADR_DIR).splitlines():
+        parts = line.split("\t")
+        if parts:
+            added.add(parts[-1])
+    return index_paths, added
+
+
+def print_groups(title: str, groups: dict[str, list[str]], stream) -> None:
+    print(title, file=stream)
+    for num in sorted(groups):
+        print(f"  {num}: {', '.join(groups[num])}", file=stream)
+
+
+def run_worktree(root: Path) -> int:
+    dups = group(worktree_paths(root))
+    if not dups:
+        print("adr-number-check: 重複なし")
+        return 0
+    print_groups("adr-number-check: ADR 番号の重複を検出しました（既存分はリネームせず報告のみ）", dups, sys.stdout)
+    return 1
+
+
+def run_staged(root: Path, block_code: int) -> int:
+    index_paths, added = staged_state(root)
+    dups = group(index_paths)
+    new = {num: files for num, files in dups.items() if any(f in added for f in files)}
+    old = {num: files for num, files in dups.items() if num not in new}
+    if old:
+        print_groups("adr-number-check: 既存の ADR 番号重複（警告のみ）", old, sys.stderr)
+    if new:
+        print_groups(
+            "adr-number-check: 今回追加した ADR の番号が既存と重なっています。番号を振り直してからコミットしてください",
+            new,
+            sys.stderr,
+        )
+        return block_code
+    return 0
+
+
+def commit_target(command: str) -> Path | None:
+    """`git commit` を含むコマンドなら対象ディレクトリ（`git -C <path>` 対応）を返す。"""
+    try:
+        tokens = shlex.split(command, posix=True)
+    except ValueError:
+        tokens = command.split()
+    for i, tok in enumerate(tokens):
+        if Path(tok).name != "git":
+            continue
+        j = i + 1
+        cwd: Path | None = None
+        while j < len(tokens) and tokens[j].startswith("-"):
+            if tokens[j] == "-C" and j + 1 < len(tokens):
+                cwd = Path(tokens[j + 1]).expanduser()
+                j += 2
+                continue
+            if tokens[j] == "-c" and j + 1 < len(tokens):
+                j += 2
+                continue
+            j += 1
+        if j < len(tokens) and tokens[j] == "commit":
+            return cwd or Path.cwd()
+    return None
+
+
+def run_hook() -> int:
+    raw = sys.stdin.read().strip()
+    try:
+        payload = json.loads(raw) if raw else {}
+    except json.JSONDecodeError:
+        return 0
+    tool_input = payload.get("tool_input") if isinstance(payload, dict) else None
+    command = tool_input.get("command") if isinstance(tool_input, dict) else None
+    if not isinstance(command, str):
+        return 0
+    target = commit_target(command)
+    if target is None:
+        return 0
+    try:
+        root = repo_root(target)
+    except (subprocess.CalledProcessError, FileNotFoundError, NotADirectoryError):
+        return 0
+    if not (root / ADR_DIR).is_dir():
+        return 0
+    return run_staged(root, block_code=2)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--staged", action="store_true")
+    mode.add_argument("--hook", action="store_true")
+    parser.add_argument("--root", type=Path, default=None, help="対象 repo（既定: カレントの git root）")
+    args = parser.parse_args()
+
+    if args.hook:
+        return run_hook()
+    root = repo_root(args.root or Path.cwd())
+    if args.staged:
+        return run_staged(root, block_code=1)
+    return run_worktree(root)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
