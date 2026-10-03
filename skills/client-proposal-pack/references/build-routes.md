@@ -1,7 +1,7 @@
 ---
 title: 書き出し経路と検品
 updated: "2026-10-03"
-source: taskell-management の marp-slides Skill、taskell-advisor-proposals の scripts/build_proposal.py、yoake-finance の scripts/build_pdf.sh、taskell-management（旧 owner 側）の bin/pptx-*
+source: 業務 repo 群の marp-slides Skill・build_proposal.py・build_pdf.sh・bin/pptx-*
 ---
 
 # 書き出し経路と検品

@@ -1,7 +1,7 @@
 ---
 title: 情報源チェックリストと取得レシピ
 updated: "2026-10-03"
-source: yoake-backoffice repo の backoffice-teirei Skill（references/sources.md）を一般化
+source: 業務 repo の定例会議 Skill（references/sources.md）を一般化
 ---
 
 # 情報源チェックリスト

@@ -9,7 +9,7 @@ description: Prepare a pre-meeting brief for a recurring or one-off meeting by c
 
 ## repo ローカル Skill との関係
 
-- 作業 repo に会議専用の Skill（例: yoake-backoffice の `backoffice-teirei`）があれば、そちらを優先する。この Skill はその一般形で、会議ごとの Doc ID・チャンネル・出席者・書き込み先は持たない。
+- 作業 repo に会議専用の Skill（例: 定例会議専用の repo ローカル Skill）があれば、そちらを優先する。この Skill はその一般形で、会議ごとの Doc ID・チャンネル・出席者・書き込み先は持たない。
 - 会議固有の情報（議事録の置き場、アジェンダの正本、見るチャンネル、相手先の呼び方）は作業 repo の README / AGENTS.md / 議事録索引から読む。見つからなければユーザーに聞く。
 - 議事録の作成（会議後）は対象外。文字起こしの取得は `soundcore-minutes` を使う。
 

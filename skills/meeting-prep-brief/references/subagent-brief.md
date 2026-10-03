@@ -1,7 +1,7 @@
 ---
 title: サブエージェントへの委譲ひな形
 updated: "2026-10-03"
-source: yoake-backoffice repo の backoffice-teirei Skill（references/subagent-brief.md）を一般化
+source: 業務 repo の定例会議 Skill（references/subagent-brief.md）を一般化
 ---
 
 # brief.md のひな形

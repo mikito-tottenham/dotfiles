@@ -5,7 +5,7 @@ usage: fetch_gmail.py --profile <gws-profile> --after YYYY/MM/DD --out .context/
 出力: <out>/gmail_meta.json（id, threadId, date, from, to, subject, snippet, labels）
 進捗は標準出力に出す（100 通あたり約 70 秒が目安）。
 
-取り込み元: yoake-backoffice repo の backoffice-teirei Skill（scripts/fetch_gmail.py）。
+取り込み元: 業務 repo の定例会議 Skill（scripts/fetch_gmail.py）。
 プロファイルの既定値は持たない。どのプロファイルを使うかは作業ルートの AGENTS.md のアカウント境界で決める。
 """
 import argparse
