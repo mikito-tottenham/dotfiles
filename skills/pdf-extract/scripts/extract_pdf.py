@@ -186,7 +186,7 @@ def main() -> int:
         }, ensure_ascii=False))
         return 127
     if not RUNNER.is_file():
-        fail(f"codex-cli-runner not found: {RUNNER} (install the codex-cli-runner skill)", 2)
+        fail(f"codex-cli-runner not found: {RUNNER} (install the codex-cli-runner skill; if the parent agent is Codex, do not use this script: see SKILL.md 'Codex 親の場合')", 2)
 
     repo_root = resolve_repo_root(args.repo_root)
     pdf_path = args.pdf.resolve()

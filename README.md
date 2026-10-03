@@ -154,8 +154,11 @@ Conductor などのツールが git worktree を立ち上げて dotfiles を編�
 | `.local/bin/opmaterialize` | `onepassword-secret-materialize` skill 同梱 script を呼び出すラッパー |
 | `.local/bin/slack-fetch-message` | Slack の message permalink を Web API で読み Markdown / JSON 出力する read-only CLI |
 | `.local/bin/slack-account` | Slack Web API をプロファイル（ワークスペース）単位で分離して呼ぶ CLI。token は `SLACK_<PROFILE>_TOKEN` を `oprun` で解決（ADR 0061） |
+| `.local/bin/claude-github-daily-sync` | `~/Claude/repos` の symlink 先を、clean で upstream の祖先のときだけ ff-only で日次同期し、`--verify` で結果を突合する（Codex automation から実行。ADR 0069） |
 | `.claude/CLAUDE.md` | Claude Code グローバル設定 |
 | `.claude/settings.json` | Claude Code 設定 |
+| `.claude/hooks/git_chain_guard.py` | `gh pr merge` / `git merge` / `git push` が他コマンドと連結されていれば警告する PreToolUse hook（ブロックしない。ADR 0069） |
+| `.claude/hooks/phase_artifact_hook.py` | artifact gate。repo ローカルの gate が無い repo では warn で動く（ADR 0016 追補） |
 | `.codex/AGENTS.md` | Codex エージェント設定 |
 | `.codex/config.toml` | Codex モデル・プロジェクト設定 |
 | `.qwen/QWEN.md` | Qwen ユーザー設定 |
@@ -170,6 +173,7 @@ Conductor などのツールが git worktree を立ち上げて dotfiles を編�
 | `skills/` | `gh skill --from-local` で配布する publisher 形式の first-party skill |
 | `docs/` | 運用ルール、ADR、補助ドキュメント |
 | `scripts/` | repo 運用スクリプト |
+| `scripts/adr-number-check` | ADR 番号の重複検査。commit 時は repo ローカルの Claude / Codex hook が新規の衝突だけを止める |
 
 ### chezmoi ソースとの主な対応
 
@@ -185,6 +189,8 @@ Conductor などのツールが git worktree を立ち上げて dotfiles を編�
 | `.local/bin/opmaterialize` | `dot_local/bin/executable_opmaterialize` |
 | `.local/bin/slack-fetch-message` | `dot_local/bin/executable_slack-fetch-message` |
 | `.local/bin/slack-account` | `dot_local/bin/executable_slack-account` |
+| `.local/bin/claude-github-daily-sync` | `dot_local/bin/executable_claude-github-daily-sync` |
+| `.claude/hooks/*.py` | `dot_claude/hooks/executable_*.py` |
 | `.qwen/QWEN.md` | `dot_qwen/QWEN.md` |
 | `.qwen/settings.json` | `dot_qwen/settings.json` |
 

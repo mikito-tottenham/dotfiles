@@ -10,6 +10,7 @@
 - `dot_*` 配下の変更時は必ず `dotfile-update` スキルを使用すること
 - dotfile 変更前に [chezmoi-knowledge/SKILL.md](.claude/skills/chezmoi-knowledge/SKILL.md) と [semantics.md](.claude/skills/chezmoi-knowledge/references/semantics.md) を確認し、source / target / ignore の前提を外さないこと
 - `chezmoi apply` の前とドリフト確認時は `scripts/chezmoi-drift --check-ignore` 相当の `.chezmoiignore` 整合確認を行い、意図せず無効化された source がないことを確認すること
+- ADR を追加・リネームするときは `scripts/adr-number-check --staged` で番号の重複が無いことを確認すること。commit 時は repo ローカルの Claude / Codex hook（`--hook`）が新規の衝突だけを止める。既存の重複（0048）はリネームせず報告に留める（ADR-0069）
 - ファイル探索は `rg --files`、内容検索は `rg` を第一候補とし、`rg` が使えない場合だけ `ag`、最後に `grep` を使うこと
 
 # Desktop 自動実行設定管理

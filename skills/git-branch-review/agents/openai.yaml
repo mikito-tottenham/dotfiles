@@ -1,4 +1,4 @@
 interface:
   display_name: "Git Branch Review"
-  short_description: "Inspect git branches and safe fast-forwards"
-  default_prompt: "Use $git-branch-review to inspect this repository branch state and fast-forward clean branches when safe."
+  short_description: "Inspect, fast-forward, and clean up branches across repos"
+  default_prompt: "Use $git-branch-review to inspect this repository branch state and fast-forward clean branches when safe, or use its fleet mode to inventory and clean up branches, PRs, and worktrees across many repositories with approval before deletion."

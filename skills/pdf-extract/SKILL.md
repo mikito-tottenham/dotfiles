@@ -82,12 +82,21 @@ Codex CLI が無い環境のための代替経路。発動条件・手順・記�
 - frontmatter の `extraction_backend: claude` で経路を記録し、Codex 経路と同じ出口契約を守る
 - 契約書など誤読の影響が大きい文書では、Claude 経路の結果を確定値として扱わずユーザーの目視確認を求める
 
+## Codex 親の場合
+
+親が Codex のときは `scripts/extract_pdf.py` を使わない。この script は codex-cli-runner で Codex CLI を subprocess として起動する経路で、`agent-orchestrator/rules/model_registry.yaml` の `providers.codex.self_elision`（親が Codex なら cli_runner を使わず agent_tool へ委譲する）に反する。Codex の配備一覧（`docs/skills-install-manifest.md` の Codex 節）にも codex-cli-runner は入っていない。
+
+- 経路: Codex の custom agent（agent_tool）へ抽出を委譲する。spawn 時に `tiers.<tier>.codex` の model と effort を明示する（既定 tier は `B`。registry の `harness_notes.codex_custom_agents` のとおり、省略すると tier が適用されない）
+- 手順: [references/claude-path.md](references/claude-path.md) の手順 1〜8 と同じ入口・出口契約で artifact を作る。違いは frontmatter を `extraction_backend: codex`、`backend_model` / `backend_effort` / `backend_tier` を spawn で指定した値にすることと、cache key の backend 部分を `codex` にすることだけ
+- 記録: run dir（`.context/pdf-extract/runs/`）は作られない。最終報告に「Codex 親の agent_tool で抽出した」と書く
+- 誤って script を実行した場合は exit 2（codex-cli-runner が無い）で止まる。この停止を Claude 経路への切り替え条件として扱わず、この節の経路へ移る
+
 ## 依存
 
 - `codex-cli-runner`（兄弟 skill）: Codex の起動・停止検知・失敗 artifact。`<skill-dir>/../codex-cli-runner/scripts/run_codex_cli.py`
 - `agent-orchestrator`（兄弟 skill）: `rules/model_registry.yaml`
 
-どちらかが同じ skills ディレクトリに無いときは exit 2 で止まる。
+どちらかが同じ skills ディレクトリに無いときは exit 2 で止まる。親が Codex の場合は上記「Codex 親の場合」に従い、script 自体を使わない。
 
 ## 検証
 

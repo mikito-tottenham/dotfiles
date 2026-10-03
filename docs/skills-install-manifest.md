@@ -1,6 +1,6 @@
 ---
 title: "Skill Install Manifest"
-updated_at: 2026-09-29
+updated_at: 2026-10-03
 ---
 
 # Skill Install Manifest
@@ -53,6 +53,17 @@ gh skill install . dads-design --from-local --agent claude-code --scope user
 gh skill install . gws-cli-runner --from-local --agent claude-code --scope user
 gh skill install . agent-orchestrator --from-local --agent claude-code --scope user
 gh skill install . external-report --from-local --agent claude-code --scope user
+gh skill install . agent-env-parity --from-local --agent claude-code --scope user
+gh skill install . meeting-minutes-ingest --from-local --agent claude-code --scope user
+gh skill install . doc-grill --from-local --agent claude-code --scope user
+gh skill install . deliverable-closeout --from-local --agent claude-code --scope user
+gh skill install . client-proposal-pack --from-local --agent claude-code --scope user
+gh skill install . meeting-prep-brief --from-local --agent claude-code --scope user
+gh skill install . auth-preflight --from-local --agent claude-code --scope user
+gh skill install . contract-review --from-local --agent claude-code --scope user
+gh skill install . pdf-extract --from-local --agent claude-code --scope user
+gh skill install . expense-to-ledger --from-local --agent claude-code --scope user
+gh skill install . multi-account-scheduling --from-local --agent claude-code --scope user
 ```
 
 ### Codex
@@ -83,15 +94,29 @@ gh skill install . dads-design --from-local --agent codex --scope user
 gh skill install . gws-cli-runner --from-local --agent codex --scope user
 gh skill install . agent-orchestrator --from-local --agent codex --scope user
 gh skill install . external-report --from-local --agent codex --scope user
+gh skill install . agent-env-parity --from-local --agent codex --scope user
+gh skill install . meeting-minutes-ingest --from-local --agent codex --scope user
+gh skill install . doc-grill --from-local --agent codex --scope user
+gh skill install . deliverable-closeout --from-local --agent codex --scope user
+gh skill install . client-proposal-pack --from-local --agent codex --scope user
+gh skill install . meeting-prep-brief --from-local --agent codex --scope user
+gh skill install . auth-preflight --from-local --agent codex --scope user
+gh skill install . contract-review --from-local --agent codex --scope user
+gh skill install . pdf-extract --from-local --agent codex --scope user
+gh skill install . expense-to-ledger --from-local --agent codex --scope user
+gh skill install . multi-account-scheduling --from-local --agent codex --scope user
 ```
 
 ### 変更履歴（first-party）
 
 - 2026-09-15: `opus-4-8-tuning` と `gpt-5-5-tuning` を `model-tuning` 1 本に統合（旧世代の差分は `skills/model-tuning/references/legacy-*.md`）。`opus-4-7-tuning` は ADR-0053 で退役済みのため repo からも削除。`external-report` を登録。
+- 2026-10-03: 2026-10 の Skill 棚卸し（ADR-0069）に基づき 11 本を登録した。`agent-env-parity`（WP1）、`meeting-minutes-ingest` / `doc-grill`（WP2）、`deliverable-closeout`（WP3）、`client-proposal-pack` / `meeting-prep-brief` / `auth-preflight`（WP4）、`contract-review` / `pdf-extract` / `expense-to-ledger` / `multi-account-scheduling`（WP5）。既存では `git-branch-review` に Fleet Mode（`scripts/fleet_*.py`、`references/fleet-cleanup.md`）を追加し、`skill-manager` の `doctor` に `retired_skills` / `first_party_sync` を追加した
+- 2026-10-03: ADR-0062 で撤去済みの 6 skill（`gws-drive` / `gws-drive-upload` / `gws-shared` / `grill-me` / `opus-4-8-tuning` / `gpt-5-5-tuning`）が `~/.claude/skills` / `~/.agents/skills` / `~/.codex/skills` に残っていたため、削除せず `~/.local/share/skill-retired/2026-10-03/` へ退避した（18 件。`~/.agents/.skill-lock.json` の該当 4 エントリも、backup を取ってから外した）。続けて `~/.codex/skills` を上記 Codex 節の手順（install → rsync）で再同期した
+- 2026-10-03: `pdf-extract` の script は兄弟 skill `codex-cli-runner` を呼ぶが、Codex の一覧には `codex-cli-runner` を入れていない。Codex 親では script を使わず自分で抽出する（SKILL.md の「Codex 親の場合」節。model_registry の Self-Elision）
 
 ## Third-party external skills
 
-third-party external skill はここへ追加で列挙する。有効な skill は先頭に、撤去済み skill は撤去記録と再導入条件として後ろに残す。撤去済み skill がまだ `~/.claude/skills` / `~/.codex/skills` に残っている場合は `gh skill remove <name> --agent <agent> --scope user` で外す。
+third-party external skill はここへ追加で列挙する。有効な skill は先頭に、撤去済み skill は撤去記録と再導入条件として後ろに残す。撤去済み skill がまだ `~/.claude/skills` / `~/.codex/skills` に残っている場合は `gh skill remove <name> --agent <agent> --scope user` で外すか、`~/.local/share/skill-retired/<date>/` へ退避（移動）する。
 
 ### `natural-japanese`
 
