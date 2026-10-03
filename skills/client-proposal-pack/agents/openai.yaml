@@ -1,0 +1,4 @@
+interface:
+  display_name: "Client Proposal Pack"
+  short_description: "Build client proposal decks end to end"
+  default_prompt: "Use $client-proposal-pack to build a client-facing proposal from research through review, export, closeout, and a thank-you email draft."
