@@ -45,6 +45,25 @@ Useful options:
 
 The script prints progress before network-sensitive work and emits a Markdown report. It uses only `git`, optional `gh`, and the Python standard library.
 
+## Fleet Mode (many repositories)
+
+Use this mode when the user asks to review or clean up branches, PRs, or worktrees across many repositories (for example 「全部のブランチや PR を整理」「漏れてる PR は」「ブランチを main だけに」). Follow `references/fleet-cleanup.md` and its bundled scripts:
+
+1. `scripts/fleet_scan.py --root <dir> ... --out <.context/...>/01-scan.json` inventories repos read-only. Roots may be a single repo, a ghq root, or a symlink directory; pass both `~/Claude/ghq` and `~/ghq` to cover legacy checkouts.
+2. `scripts/fleet_plan.py` turns the scan into `02-plan.json` / `02-plan.md` with categories (merged local, merged remote, open PRs, numbered-file conflicts, unmerged leftovers, dirty trees, protected items).
+3. Ask the user once which categories to execute. Nothing is deleted before that approval.
+4. `scripts/fleet_delete_local.py` deletes approved local branches (dry-run unless `--execute`) after re-verifying each branch. `scripts/fleet_verify_remote.py` only re-verifies remote branches and prints per-repo delete commands for the user to approve.
+
+Hard rules in this mode:
+
+- Never delete worktrees under `.claude/worktrees/` or branches checked out there; they belong to Claude Desktop sessions.
+- Detect squash merges by matching the branch tip to a merged PR head (or an unchanged tree after merge), not by ancestry alone.
+- Remote branch deletion, PR close, and PR merge require explicit user approval per category or PR; run each such command alone, never chained with `&&`, `;`, or pipes. Do not route around an auto mode classifier denial.
+- Call GitHub only through `ghrun gh`. On 401 or a missing token, ask the user to run `ghrun --refresh` in a normal terminal.
+- Before merging old PRs, check numbered files such as `docs/adr/NNNN-*` for collisions with the default branch.
+
+For onboarding new repositories use `ghq-repo-placement`; routine fast-forward sync of checkouts is handled by the dotfiles-managed `repo-sync` command (see the last section of the reference).
+
 ## Output Contract
 
 Include:
