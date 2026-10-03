@@ -163,6 +163,24 @@ Script-backed checks (`scripts/executable_doctor.sh`) also emit a `source_drift`
 
 Without the script, do the same check by hand: `chezmoi source-path`, then `grep -h 'local-path' ~/.claude/skills/*/SKILL.md ~/.codex/skills/*/SKILL.md` and compare prefixes.
 
+The script also cross-checks retirement declarations and Codex sync across `~/.claude/skills`, `~/.agents/skills`, and `~/.codex/skills`. It reads the install manifest at `<chezmoi source-path>/docs/skills-install-manifest.md` (override with `SKILL_MANAGER_MANIFEST`; `~/.agents` with `SKILL_MANAGER_AGENTS_HOME`) and prints progress lines on stderr:
+
+- `retired_skills`:
+  - `RETIRED_STILL_DEPLOYED` (warn): a deployed skill matches a manifest heading marked `（撤去済み）`, including globs such as `gws-*`. Active first-party skills in the publisher source are never matched by a glob
+  - `FIRST_PARTY_NOT_IN_SOURCE` (warn): the install carries `metadata.local-path` but `skills/<name>` no longer exists in the publisher source (merged or retired first-party skill, e.g. a model-specific tuning skill folded into another)
+  - `RETIRED_IN_LOCK` (warn): `~/.agents/.skill-lock.json` still has an entry for a retired skill
+  - `MANIFEST_UNRESOLVED` (warn): no manifest found, so retirement checks were skipped
+- `first_party_sync`:
+  - `FIRST_PARTY_MISSING` (fail): the manifest installs the skill for an agent (`codex` covers both `~/.agents/skills` and `~/.codex/skills`) but the directory is missing
+  - `FIRST_PARTY_CONTENT_STALE` (warn): the deployed copy differs from the publisher source (description, body, or any bundled file; install-time `metadata` is ignored)
+  - `CODEX_MIRROR_STALE` (warn): `~/.codex/skills/<name>` differs from `~/.agents/skills/<name>`, i.e. the manifest's rsync step was skipped after `gh skill install --agent codex`
+
+Remediation stays user-approved and follows the repository policy, not this skill:
+
+1. Retired skills: move each flagged directory out of all three deployment directories into a dated retire directory (or `gh skill remove <name> --agent <agent> --scope user`). For `RETIRED_IN_LOCK`, back up the lock file first and remove only the matching entries with a JSON-aware tool (`jq` / `python3`), never by text substitution.
+2. Codex sync: from `cd "$(chezmoi source-path)"`, rerun the manifest's Codex block (`gh skill install . <name> --from-local --agent codex --scope user --force`), then `rsync -a --delete ~/.agents/skills/<name>/ ~/.codex/skills/<name>/` per skill. Copy the existing `~/.codex/skills/<name>` aside first if it may hold local edits. Leave Codex-only skills (e.g. bundled ones such as `hatch-pet`) and `.system` untouched.
+3. Rerun `doctor` and confirm `retired_skills` and `first_party_sync` report `NO_ISSUES`.
+
 ### `sync codex`
 
 Compatibility command for repo-managed mirroring into Codex.

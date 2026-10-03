@@ -52,6 +52,7 @@ If both lenses apply, report them separately. Do not let cross-repository patter
    - Score each axis 0-10.
    - Do not calculate a total score.
    - Prefer structured signals over transcript impressions: task outcome, aborted turns, tool errors, patch/apply results, repeated retries, validation commands, missing checks, artifacts created, and explicit user corrections.
+   - For period-level token, tool, and session counts across Claude Code and Codex logs, run the dotfiles repository's `scripts/ai-usage-aggregate.py <out.json>` (output under `.context/`, progress on stdout) instead of writing a new aggregator; its JSON keeps up to 30 prompt excerpts per session, so treat it as `trusted-local` evidence and never copy it into `shareable` or `teacher-pack` reports.
    - Treat keyword counts, prompt length, tool count, and tone as secondary clues only.
    - Do not assign a score without evidence; if evidence is thin, mark confidence as `low` and narrow the recommendation.
    - For `trusted-local` reports, include representative evidence examples when they make the diagnosis more human-readable: repo/workflow label, command class, failure shape, short paraphrased prompt intent, or a short redacted excerpt. Do not rely on aggregate counts alone when the user expects coaching.

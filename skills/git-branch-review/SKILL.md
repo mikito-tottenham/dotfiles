@@ -1,6 +1,6 @@
 ---
 name: git-branch-review
-description: Inspect fresh Git branch state across local machines and collaborators. Use when Codex needs to fetch recent remote refs, decide whether a clean local branch can be fast-forwarded from origin, compare local branches with upstream/default branches, check whether branches are merged, or correlate local branches with GitHub PR state.
+description: "Inspect fresh Git branch state across local machines and collaborators. Use when Claude Code or Codex needs to fetch recent remote refs, decide whether a clean local branch can be fast-forwarded from origin, compare local branches with upstream/default branches, check whether branches are merged, or correlate local branches with GitHub PR state. Use when asked to ブランチの状態を確認, ブランチを最新化, マージ済みか確認, ブランチとPRの対応を確認, or ブランチを棚卸し."
 ---
 
 # Git Branch Review

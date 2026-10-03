@@ -76,6 +76,7 @@ First-party skills (this repository's `skills/`) are installed with `gh skill in
 - Always run the install from the root returned by `chezmoi source-path` (the ghq checkout of the dotfiles repository). Never run it from another clone such as `~/.local/share/chezmoi`, a worktree, or a `.context/` copy; a second clone produces installs whose `metadata.local-path` points at a checkout that drifts from the one being edited.
 - `docs/skills-install-manifest.md` is the list of what to install; its `.` means that root, not the current directory.
 - `doctor` flags installs whose `metadata.local-path` is outside `<chezmoi source-path>/skills` as `SOURCE_PATH_STALE`; fix them by reinstalling from the correct root with `--force`, not by editing the installed copy.
+- `doctor` also cross-checks the install manifest against `~/.claude/skills`, `~/.agents/skills`, and `~/.codex/skills`: skills the manifest marks retired but still deployed (`retired_skills`), and deployed copies that drift from the publisher source or a `~/.codex/skills` mirror that missed the manifest's rsync step (`first_party_sync`). Remediation steps are in `references/commands.md` under `doctor`.
 
 ## Command routing
 
@@ -92,19 +93,19 @@ Parse `$ARGUMENTS` and choose one of the commands below. If the user intent is a
 | `update` | Update external installs | `gh skill update` |
 | `publish` | Publish a skill to GitHub | `gh skill publish` |
 | `adopt <skill>` | Adopt an external skill into a git-managed copy | manual, policy-gated |
-| `doctor` | Detect drift, broken installs, collisions, stale first-party sources | `scripts/executable_doctor.sh` |
+| `doctor` | Detect drift, broken installs, collisions, stale first-party sources, retired skills still deployed, Codex sync gaps | `scripts/executable_doctor.sh` |
 | `sync codex` | Compatibility mirror for skills whose policy is explicitly `mirror` | manual |
 
 ## Scripts
 
-`list` and `doctor` are backed by scripts in this skill's `scripts/` directory (about 57KB of Python; do not read them unless changing them). They need only `python3` and, for `doctor`'s source-drift check, `chezmoi` on `PATH` or `SKILL_MANAGER_SOURCE_PATH`.
+`list` and `doctor` are backed by scripts in this skill's `scripts/` directory (about 69KB of Python; do not read them unless changing them). They need only `python3` and, for `doctor`'s source-drift, retired-skill, and first-party sync checks, `chezmoi` on `PATH` or `SKILL_MANAGER_SOURCE_PATH`.
 
 ```bash
 bash <skill-dir>/scripts/executable_list.sh            # inventory JSON (add --full for plugin payloads)
 bash <skill-dir>/scripts/executable_doctor.sh          # checks JSON with summary/pass/warn/fail
 ```
 
-`<skill-dir>` is `skills/skill-manager` in the publisher source or the installed directory under `~/.claude/skills` / `~/.codex/skills`; the installed copy keeps the `executable_` filename prefix and no execute bit, so invoke through `bash`. Both scripts print JSON to stdout and never modify state. Override home directories with `SKILL_MANAGER_CLAUDE_HOME` / `SKILL_MANAGER_CODEX_HOME` when auditing another user's layout.
+`<skill-dir>` is `skills/skill-manager` in the publisher source or the installed directory under `~/.claude/skills` / `~/.codex/skills`; the installed copy keeps the `executable_` filename prefix and no execute bit, so invoke through `bash`. Both scripts print JSON to stdout and never modify state; `doctor` writes progress lines to stderr. Override home directories with `SKILL_MANAGER_CLAUDE_HOME` / `SKILL_MANAGER_CODEX_HOME` / `SKILL_MANAGER_AGENTS_HOME`, and the install manifest with `SKILL_MANAGER_MANIFEST`, when auditing another layout.
 
 ## Inventory rules
 

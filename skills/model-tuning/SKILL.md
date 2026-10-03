@@ -1,6 +1,6 @@
 ---
 name: model-tuning
-description: "Audit or rewrite AGENTS.md / CLAUDE.md / skill files / prompts / eval harnesses so they fit a specific current LLM generation (Claude Fable 5.1, Claude Opus 5, GPT-6 Astra): effort and thinking settings, tool-use guidance, verbosity, prompt caching, and stale previous-generation patterns. Use for model readiness, migration, or prompt tuning requests such as モデル向けに最適化, Fable向けに調整, Opus 5向けに調整, GPT-6向けに調整, モデル移行の棚卸し; not for SDK or application code changes."
+description: "Audit or rewrite AGENTS.md / CLAUDE.md / skill files / prompts / eval harnesses so they fit a specific current LLM generation (Claude Fable 5.1, Claude Opus 5.5, Claude Opus 5, GPT-6 Astra): effort and thinking settings, tool-use guidance, verbosity, prompt caching, and stale previous-generation patterns. Use for model readiness, migration, or prompt tuning requests such as モデル向けに最適化, Fable向けに調整, Opus 5.5向けに調整, Opus 5向けに調整, GPT-6向けに調整, モデル移行の棚卸し; not for SDK or application code changes."
 ---
 
 # Model Tuning
@@ -16,6 +16,7 @@ API クライアントコードの移行は対象外。SDK や API 呼び出し�
 | 対象 | reference | 状態 |
 |---|---|---|
 | Claude Fable 5.1（alias `fable`） | `references/claude-fable-5-1.md` | 現行。未検証項目あり |
+| Claude Opus 5.5（API ID `claude-opus-5-5`） | `references/claude-opus-5-5.md` | 現行。主要な差分は確認済み、CLI 上の既定と alias 解決は未検証 |
 | Claude Opus 5（alias `opus`） | `references/claude-opus-5.md` | 現行。未検証項目あり |
 | GPT-6 Astra（Codex 側の次世代） | `references/gpt-6-astra.md` | 現行。未検証項目あり |
 | Claude Opus 4.8 | `references/legacy-opus-4-8.md` | 旧世代。移行元の前提確認用 |
