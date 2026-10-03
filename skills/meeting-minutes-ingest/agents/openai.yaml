@@ -1,0 +1,4 @@
+interface:
+  display_name: "Meeting Minutes Ingest"
+  short_description: "Turn transcripts into repo-conformant minutes"
+  default_prompt: "Use $meeting-minutes-ingest to turn a meeting transcript into minutes that follow the target repo's format, update its index, and extract decisions and action items."

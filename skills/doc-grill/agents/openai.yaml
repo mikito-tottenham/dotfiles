@@ -1,0 +1,4 @@
+interface:
+  display_name: "Doc Grill"
+  short_description: "Adversarial document review loop with pre-send gate"
+  default_prompt: "Use $doc-grill to have a different model grill a document, adjudicate every finding, fix and consistency-check it until convergence, and run the pre-send gate for external documents."
