@@ -1,0 +1,4 @@
+interface:
+  display_name: "Auth Preflight"
+  short_description: "Triage auth failures and preflight accounts"
+  default_prompt: "Use $auth-preflight to check authentication and account boundaries read-only before multi-service work, or to triage an auth error."
