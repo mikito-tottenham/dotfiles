@@ -1,0 +1,4 @@
+interface:
+  display_name: "Multi-Account Scheduling"
+  short_description: "Find common free slots across Google accounts"
+  default_prompt: "Use $multi-account-scheduling to compute common free slots across the relevant gws-account profiles, report which calendars were actually read, and draft a reply without sending it."
