@@ -10,7 +10,7 @@
 #   ファイルアクセス許可ダイアログで止まるので使わない（2026-09-11 実測）。
 # - soffice: LibreOffice の headless 変換。日本語フォントが無い環境では代替フォントで描画される。
 #
-# 取り込み元: taskell-management repo の bin/pptx-render-keynote.sh（旧 owner 側 checkout）。
+# 取り込み元: 業務 repo の bin/pptx-render-keynote.sh。
 set -eu
 
 if [ "$#" -lt 1 ]; then

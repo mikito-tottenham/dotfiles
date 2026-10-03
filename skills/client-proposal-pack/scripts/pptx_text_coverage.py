@@ -9,7 +9,7 @@ usage: pptx_text_coverage.py <原稿.md> <pptx のテキスト.md> [--section '#
 分かれる箇所は MISSING と出ることがあるので、内容の欠落だけを見る。
 exit code: 0 = MISSING なし / 1 = MISSING あり / 2 = 使い方エラー
 
-取り込み元: taskell-management repo の bin/pptx-text-coverage.py（旧 owner 側 checkout）。
+取り込み元: 業務 repo の bin/pptx-text-coverage.py。
 """
 import argparse
 import re

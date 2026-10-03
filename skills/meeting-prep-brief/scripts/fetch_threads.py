@@ -6,7 +6,7 @@ usage: fetch_threads.py --profile <gws-profile> --ids ids.txt --out .context/<di
 ids.txt: threadId を空白か改行区切りで列挙
 出力: <out>/threads/<threadId>.md
 
-取り込み元: yoake-backoffice repo の backoffice-teirei Skill（scripts/fetch_threads.py）。
+取り込み元: 業務 repo の定例会議 Skill（scripts/fetch_threads.py）。
 """
 import argparse
 import base64
