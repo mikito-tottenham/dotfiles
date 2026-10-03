@@ -1,0 +1,4 @@
+interface:
+  display_name: "PDF Extract"
+  short_description: "Extract structured Markdown artifacts from PDFs"
+  default_prompt: "Use $pdf-extract to extract the PDF into a cached Markdown artifact with frontmatter, using the repository's prompt template when one exists."

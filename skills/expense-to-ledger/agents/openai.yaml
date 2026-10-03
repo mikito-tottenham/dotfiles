@@ -1,0 +1,4 @@
+interface:
+  display_name: "Expense To Ledger"
+  short_description: "Turn expense receipts into reviewed ledger imports"
+  default_prompt: "Use $expense-to-ledger to collect receipts, file them, and prepare a reviewed MoneyForward or freee import without writing to the ledger until the user approves."

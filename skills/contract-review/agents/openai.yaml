@@ -1,0 +1,4 @@
+interface:
+  display_name: "Contract Review"
+  short_description: "Review contracts by position with a repo profile"
+  default_prompt: "Use $contract-review to review the contract for our position (client or contractor), applying the repository's contract-review profile."
