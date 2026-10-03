@@ -7,6 +7,10 @@
           {
             "type": "command",
             "command": "python3 scripts/phase_artifact_hook.py --event pretool"
+          },
+          {
+            "type": "command",
+            "command": "python3 scripts/adr-number-check --hook"
           }
         ]
       }
