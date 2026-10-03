@@ -2,8 +2,8 @@
 title: "Consolidate Claude / Codex Setup and Document the Permission Model"
 date: 2026-09-15
 agent_model: "Claude Code (Claude Fable 5.1)"
-status: proposed
-updated_at: 2026-09-25
+status: accepted
+updated_at: 2026-10-03
 updated_by_agent_model: "Claude Opus 5.5 (claude-opus-5-5)"
 ---
 
@@ -86,3 +86,10 @@ updated_by_agent_model: "Claude Opus 5.5 (claude-opus-5-5)"
 - `chezmoi cat ~/.codex/AGENTS-common.md` がレンダリングされ、gws 節が 3 行になっていること
 - 2026-09-25（決定 8）: 移行スクリプトで、1Password から解決した値と旧平文の hash 一致、`oprun` 経由の
   chatwork MCP で initialize と `get_me` の成功、現行設定 2 ファイルに平文が残っていないことを確認
+
+## 実施記録（2026-10-03、ADR-0069）
+
+- status を accepted にした。根拠は決定 4（third-party gws-* 3 skill と grill-me の撤去）と決定 3（`opus-4-8-tuning` / `gpt-5-5-tuning` の `model-tuning` への統合）を配備先へ反映し終えたこと
+- 2026-10-02 の棚卸しで、撤去済みの 6 skill（`gws-drive` / `gws-drive-upload` / `gws-shared` / `grill-me` / `opus-4-8-tuning` / `gpt-5-5-tuning`）が `~/.claude/skills` / `~/.agents/skills` / `~/.codex/skills` に残っていることが分かった。repo と manifest だけを直し、配備先の後始末をしていなかった
+- 2026-10-03 に、6 skill を 3 配備先から `~/.local/share/skill-retired/2026-10-03/` へ移した（削除なし、18 件）。`~/.agents/.skill-lock.json` は backup を取ってから該当 4 エントリを外した。続けて `~/.codex/skills` を manifest の Codex 節の手順で再同期した
+- 再発防止として `skill-manager` の `doctor` に `retired_skills` / `first_party_sync` を追加した。退避・再同期後の実行で両カテゴリとも NO_ISSUES

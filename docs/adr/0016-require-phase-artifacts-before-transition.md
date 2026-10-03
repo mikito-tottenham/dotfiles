@@ -4,6 +4,8 @@ status: accepted
 date: 2026-04-05
 worked_at: 2026-04-05 21:05 JST
 agent_model: GPT-5 Codex
+updated_at: 2026-10-03
+updated_by_agent_model: "Claude Opus 5.5 (claude-opus-5-5)"
 ---
 
 # ADR 0016: Phase / Step 遷移前に `.context` artifact を必須化する
@@ -36,3 +38,9 @@ Plan 合意や Skill 定義に明示された Phase / Step が、会話上の合
 - Hook は artifact の有無と最小スキーマだけを検査するため、過度な意味解析による誤判定を避けやすい。
 - 単発作業の例外を明示ファイルに限定することで、バイパス条件を監査可能にできる。
 - 初期導入では「artifact の存在確認」までに留めるため、Phase 完了の意味的妥当性は作業者責任、必要に応じたレビュー、Skill の設計で補完する必要がある。
+
+## 追補（2026-10-03、ADR-0069）
+
+- Claude Code のグローバル settings に artifact gate を追加した。repo に `scripts/phase_artifact_hook.py` があればそれを従来どおり block で実行し、無ければ `~/.claude/hooks/phase_artifact_hook.py --mode warn` を実行する。warn は exit 0 で、`additionalContext` に警告を返すだけ
+- 検査内容（`.context/` の artifact 存在、初期必須キー、単発例外宣言ファイルの妥当性）と gate 対象コマンドは変えていない
+- Codex のグローバル hook には入れない。上記 Decision の「`~/.codex/hooks.json` に repo enforcement は載せない」を維持する
