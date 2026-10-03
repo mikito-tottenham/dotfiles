@@ -1,0 +1,366 @@
+#!/usr/bin/env bash
+# claude-github-daily-sync: ~/Claude/repos の symlink 先と ~/Claude/ai-work-intake を安全に同期する
+#
+# Codex automation `claude-github-daily-sync` の実行本体（dotfiles 管理。旧版は
+# ~/Claude/.context/github-daily-sync/sync_github_repos.sh と verify_last_run.sh）。
+#
+# ポリシー: fetch --prune の後、clean・upstream あり・ローカルが upstream の祖先の場合だけ
+#   merge --ff-only。dirty / detached / upstream なし / ローカル先行 / 分岐 / GitHub 以外 /
+#   fetch 失敗は working tree を変えずに skipped / failed として記録する。
+#   reset / rebase / force / stash / checkout / clean / 削除 / remote URL 変更はしない。
+#
+# 使い方:
+#   claude-github-daily-sync           同期を実行し、結果を $OUTPUT_DIR/last-run-summary.tsv に書く
+#   claude-github-daily-sync --verify  直前の summary を live の git 状態と突合する（不一致で exit 1）
+#
+# 環境変数:
+#   CLAUDE_ROOT                 既定 $HOME/Claude
+#   GITHUB_DAILY_SYNC_DIR       既定 $CLAUDE_ROOT/.context/github-daily-sync（summary の出力先）
+
+set -u
+
+CLAUDE_ROOT="${CLAUDE_ROOT:-$HOME/Claude}"
+OUTPUT_DIR="${GITHUB_DAILY_SYNC_DIR:-$CLAUDE_ROOT/.context/github-daily-sync}"
+REPOS_ROOT="$CLAUDE_ROOT/repos"
+INTAKE_DIR="$CLAUDE_ROOT/ai-work-intake"
+RUN_AT="$(date '+%Y-%m-%dT%H:%M:%S%z')"
+START_EPOCH="$(date +%s)"
+SUMMARY_FILE="${OUTPUT_DIR}/last-run-summary.tsv"
+mkdir -p "$OUTPUT_DIR"
+
+is_github_url() {
+  case "$1" in
+    git@github.com:*|ssh://git@github.com/*|https://github.com/*|http://github.com/*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+elapsed_seconds() {
+  local now
+  now="$(date +%s)"
+  echo $((now - START_EPOCH))
+}
+
+log() {
+  printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
+}
+
+repo_basename() {
+  basename "$1"
+}
+
+git_clean_state() {
+  local repo="$1"
+  local status_output
+  status_output="$(git -C "$repo" status --porcelain --untracked-files=normal 2>/dev/null)" || return 1
+  [[ -z "$status_output" ]]
+}
+
+resolve_fetch_remote() {
+  local repo="$1"
+  local upstream="${2:-}"
+  local remote=""
+  local remote_url=""
+
+  if [[ -n "$upstream" ]]; then
+    remote="${upstream%%/*}"
+    remote_url="$(git -C "$repo" remote get-url "$remote" 2>/dev/null || true)"
+    if [[ -n "$remote_url" ]] && is_github_url "$remote_url"; then
+      printf '%s\t%s\n' "$remote" "$remote_url"
+      return 0
+    fi
+  fi
+
+  if git -C "$repo" remote | grep -qx 'origin'; then
+    remote="origin"
+    remote_url="$(git -C "$repo" remote get-url origin 2>/dev/null || true)"
+    if [[ -n "$remote_url" ]] && is_github_url "$remote_url"; then
+      printf '%s\t%s\n' "$remote" "$remote_url"
+      return 0
+    fi
+  fi
+
+  while IFS= read -r candidate; do
+    [[ -z "$candidate" ]] && continue
+    remote_url="$(git -C "$repo" remote get-url "$candidate" 2>/dev/null || true)"
+    if [[ -n "$remote_url" ]] && is_github_url "$remote_url"; then
+      printf '%s\t%s\n' "$candidate" "$remote_url"
+      return 0
+    fi
+  done < <(git -C "$repo" remote)
+
+  return 1
+}
+
+append_summary() {
+  printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" >>"$SUMMARY_FILE"
+}
+
+discover_targets() {
+  local repos_root="$REPOS_ROOT"
+  local intake="$INTAKE_DIR"
+  local entry
+  local intake_root=""
+  local intake_seen=0
+
+  intake_root="$(git -C "$intake" rev-parse --show-toplevel 2>/dev/null || true)"
+
+  while IFS= read -r entry; do
+    [[ -L "$entry" ]] || continue
+    local target
+    target="$(cd "$(dirname "$entry")" && cd "$(readlink "$entry")" 2>/dev/null && pwd)"
+    [[ -n "$target" ]] || continue
+    git -C "$target" rev-parse --is-inside-work-tree >/dev/null 2>&1 || continue
+    if [[ -n "$intake_root" ]] && [[ "$(git -C "$target" rev-parse --show-toplevel 2>/dev/null || true)" == "$intake_root" ]]; then
+      intake_seen=1
+    fi
+    printf '%s\t%s\n' "$(basename "$entry")" "$target"
+  done < <(find "$repos_root" -mindepth 1 -maxdepth 1 -type l | sort)
+
+  if [[ "$intake_seen" -eq 0 ]] && [[ -n "$intake_root" ]]; then
+    printf '%s\t%s\n' "ai-work-intake" "$intake"
+  fi
+}
+
+run_sync() {
+  : >"$SUMMARY_FILE"
+
+  local -a targets=()
+  local line
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && targets+=("$line")
+  done < <(discover_targets | awk -F '\t' '!seen[$2]++')
+
+  log "start github daily sync run_at=${RUN_AT} targets=${#targets[@]}"
+
+  local updated=0
+  local unchanged=0
+  local skipped=0
+  local failed=0
+  local index=0
+
+  for line in "${targets[@]}"; do
+    index=$((index + 1))
+    local name repo
+    name="${line%%$'\t'*}"
+    repo="${line#*$'\t'}"
+    log "repo=${name} step=${index}/${#targets[@]} phase=begin path=${repo} elapsed=$(elapsed_seconds)s"
+
+    if ! git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      log "repo=${name} result=failed reason=not-a-git-worktree elapsed=$(elapsed_seconds)s"
+      append_summary "$name" "failed" "-" "-" "not-a-git-worktree"
+      failed=$((failed + 1))
+      continue
+    fi
+
+    local branch=""
+    branch="$(git -C "$repo" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+    local upstream=""
+    if ! upstream="$(git -C "$repo" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)"; then
+      upstream=""
+    fi
+
+    local fetch_info=""
+    fetch_info="$(resolve_fetch_remote "$repo" "$upstream" || true)"
+    if [[ -z "$fetch_info" ]]; then
+      log "repo=${name} result=skipped reason=no-github-remote elapsed=$(elapsed_seconds)s"
+      append_summary "$name" "skipped" "-" "-" "no-github-remote"
+      skipped=$((skipped + 1))
+      continue
+    fi
+
+    local fetch_remote fetch_url
+    fetch_remote="${fetch_info%%$'\t'*}"
+    fetch_url="${fetch_info#*$'\t'}"
+    log "repo=${name} phase=fetch remote=${fetch_remote} url=${fetch_url} elapsed=$(elapsed_seconds)s"
+    if ! git -C "$repo" fetch --prune "$fetch_remote"; then
+      log "repo=${name} result=failed reason=fetch-failed remote=${fetch_remote} elapsed=$(elapsed_seconds)s"
+      append_summary "$name" "failed" "-" "-" "fetch-failed:${fetch_remote}"
+      failed=$((failed + 1))
+      continue
+    fi
+
+    if [[ -z "$branch" ]]; then
+      log "repo=${name} result=skipped reason=detached-head elapsed=$(elapsed_seconds)s"
+      append_summary "$name" "skipped" "-" "-" "detached-head"
+      skipped=$((skipped + 1))
+      continue
+    fi
+
+    if [[ -z "$upstream" ]]; then
+      log "repo=${name} result=skipped reason=no-upstream branch=${branch} elapsed=$(elapsed_seconds)s"
+      append_summary "$name" "skipped" "-" "-" "no-upstream"
+      skipped=$((skipped + 1))
+      continue
+    fi
+
+    local upstream_remote="${upstream%%/*}"
+    local upstream_url=""
+    upstream_url="$(git -C "$repo" remote get-url "$upstream_remote" 2>/dev/null || true)"
+    if ! is_github_url "$upstream_url"; then
+      log "repo=${name} result=skipped reason=upstream-not-github upstream=${upstream} elapsed=$(elapsed_seconds)s"
+      append_summary "$name" "skipped" "-" "-" "upstream-not-github:${upstream_remote}"
+      skipped=$((skipped + 1))
+      continue
+    fi
+
+    if ! git -C "$repo" rev-parse --verify --quiet "${upstream}^{commit}" >/dev/null; then
+      log "repo=${name} result=skipped reason=upstream-missing-after-fetch upstream=${upstream} elapsed=$(elapsed_seconds)s"
+      append_summary "$name" "skipped" "-" "-" "upstream-missing-after-fetch:${upstream}"
+      skipped=$((skipped + 1))
+      continue
+    fi
+
+    if ! git_clean_state "$repo"; then
+      log "repo=${name} result=skipped reason=dirty branch=${branch} elapsed=$(elapsed_seconds)s"
+      append_summary "$name" "skipped" "-" "-" "dirty"
+      skipped=$((skipped + 1))
+      continue
+    fi
+
+    local head_sha upstream_sha
+    head_sha="$(git -C "$repo" rev-parse HEAD 2>/dev/null || true)"
+    upstream_sha="$(git -C "$repo" rev-parse "$upstream" 2>/dev/null || true)"
+
+    if [[ "$head_sha" == "$upstream_sha" ]]; then
+      log "repo=${name} result=unchanged branch=${branch} sha=${head_sha} elapsed=$(elapsed_seconds)s"
+      append_summary "$name" "unchanged" "$head_sha" "$upstream_sha" "already-up-to-date"
+      unchanged=$((unchanged + 1))
+      continue
+    fi
+
+    if git -C "$repo" merge-base --is-ancestor "$upstream" HEAD; then
+      log "repo=${name} result=skipped reason=local-ahead branch=${branch} head=${head_sha} upstream=${upstream_sha} elapsed=$(elapsed_seconds)s"
+      append_summary "$name" "skipped" "$head_sha" "$upstream_sha" "local-ahead"
+      skipped=$((skipped + 1))
+      continue
+    fi
+
+    if ! git -C "$repo" merge-base --is-ancestor HEAD "$upstream"; then
+      log "repo=${name} result=skipped reason=diverged branch=${branch} head=${head_sha} upstream=${upstream_sha} elapsed=$(elapsed_seconds)s"
+      append_summary "$name" "skipped" "$head_sha" "$upstream_sha" "diverged"
+      skipped=$((skipped + 1))
+      continue
+    fi
+
+    log "repo=${name} phase=merge branch=${branch} from=${head_sha} to=${upstream_sha} elapsed=$(elapsed_seconds)s"
+    if git -C "$repo" merge --ff-only "$upstream"; then
+      local new_sha
+      new_sha="$(git -C "$repo" rev-parse HEAD 2>/dev/null || true)"
+      log "repo=${name} result=updated branch=${branch} before=${head_sha} after=${new_sha} elapsed=$(elapsed_seconds)s"
+      append_summary "$name" "updated" "$head_sha" "$new_sha" "ff-merged:${upstream}"
+      updated=$((updated + 1))
+    else
+      log "repo=${name} result=failed reason=merge-failed branch=${branch} head=${head_sha} upstream=${upstream_sha} elapsed=$(elapsed_seconds)s"
+      append_summary "$name" "failed" "$head_sha" "$upstream_sha" "merge-failed:${upstream}"
+      failed=$((failed + 1))
+    fi
+  done
+
+  log "complete updated=${updated} unchanged=${unchanged} skipped=${skipped} failed=${failed} elapsed=$(elapsed_seconds)s summary=${SUMMARY_FILE}"
+}
+
+
+repo_path() {
+  local name="$1"
+  local entry="${REPOS_ROOT}/${name}"
+  if [[ "$name" == "ai-work-intake" ]]; then
+    git -C "$INTAKE_DIR" rev-parse --show-toplevel
+  else
+    git -C "$entry" rev-parse --show-toplevel
+  fi
+}
+
+run_verify() {
+  if [[ ! -f "$SUMMARY_FILE" ]]; then
+    log "error summary-not-found path=${SUMMARY_FILE}"
+    return 1
+  fi
+  local total
+  total="$(wc -l <"$SUMMARY_FILE" | tr -d ' ')"
+  local index=0
+  local mismatches=0
+  log "start verification targets=${total}"
+
+  while IFS=$'\t' read -r name status before after reason; do
+    index=$((index + 1))
+    local repo head upstream=""
+    repo="$(repo_path "$name")"
+    head="$(git -C "$repo" rev-parse HEAD)"
+    if ! upstream="$(git -C "$repo" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)"; then
+      upstream=""
+    fi
+    local ok=0
+
+    case "$status" in
+      updated)
+        if [[ -n "$upstream" ]] &&
+          [[ "$head" == "$after" ]] &&
+          [[ "$head" == "$(git -C "$repo" rev-parse "$upstream")" ]] &&
+          git -C "$repo" merge-base --is-ancestor "$before" "$after" &&
+          [[ -z "$(git -C "$repo" status --porcelain --untracked-files=normal)" ]]; then
+          ok=1
+        fi
+        ;;
+      unchanged)
+        if [[ -n "$upstream" ]] &&
+          [[ "$head" == "$before" ]] &&
+          [[ "$head" == "$after" ]] &&
+          [[ "$head" == "$(git -C "$repo" rev-parse "$upstream")" ]] &&
+          [[ -z "$(git -C "$repo" status --porcelain --untracked-files=normal)" ]]; then
+          ok=1
+        fi
+        ;;
+      skipped)
+        case "$reason" in
+          dirty)
+            [[ -n "$(git -C "$repo" status --porcelain --untracked-files=normal)" ]] && ok=1
+            ;;
+          no-upstream)
+            [[ -z "$upstream" ]] && ok=1
+            ;;
+          diverged)
+            if [[ -n "$upstream" ]] &&
+              ! git -C "$repo" merge-base --is-ancestor HEAD "$upstream" &&
+              ! git -C "$repo" merge-base --is-ancestor "$upstream" HEAD; then
+              ok=1
+            fi
+            ;;
+          local-ahead)
+            [[ -n "$upstream" ]] && git -C "$repo" merge-base --is-ancestor "$upstream" HEAD && ok=1
+            ;;
+          detached-head)
+            [[ -z "$(git -C "$repo" symbolic-ref --quiet --short HEAD 2>/dev/null || true)" ]] && ok=1
+            ;;
+          *)
+            log "repo=${name} step=${index}/${total} result=unverified reason=${reason}"
+            ;;
+        esac
+        ;;
+      failed)
+        log "repo=${name} step=${index}/${total} result=unverified reason=failed-status"
+        ;;
+    esac
+
+    if [[ "$ok" -eq 1 ]]; then
+      log "repo=${name} step=${index}/${total} result=verified status=${status}"
+    else
+      log "repo=${name} step=${index}/${total} result=mismatch status=${status} reason=${reason}"
+      mismatches=$((mismatches + 1))
+    fi
+  done <"$SUMMARY_FILE"
+
+  log "complete verified=$((total - mismatches)) mismatches=${mismatches} elapsed=$(( $(date +%s) - START_EPOCH ))s"
+  [[ "$mismatches" -eq 0 ]]
+}
+
+
+case "${1:-}" in
+  "") run_sync ;;
+  --verify) run_verify ;;
+  *) log "error unknown-argument arg=$1"; exit 2 ;;
+esac

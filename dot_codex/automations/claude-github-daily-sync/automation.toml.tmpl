@@ -1,0 +1,14 @@
+version = 1
+id = "claude-github-daily-sync"
+kind = "cron"
+name = "Claude GitHub Daily Sync"
+prompt = "毎日、`{{ .chezmoi.homeDir }}/Claude` の正規 GitHub リポジトリ群を安全に同期してください。対象は `{{ .chezmoi.homeDir }}/Claude/repos` 直下の symlink が指す Git working tree と、Git working tree である場合の `{{ .chezmoi.homeDir }}/Claude/ai-work-intake` です。`{{ .chezmoi.homeDir }}/Claude` 自体は Git リポジトリとして扱わないでください。実行本体は dotfiles 管理の `{{ .chezmoi.homeDir }}/.local/bin/claude-github-daily-sync` で、対象選定、`git fetch --prune`、clean・upstream あり・ローカルが upstream の祖先の場合だけの `git merge --ff-only`、進捗ログ、summary（`{{ .chezmoi.homeDir }}/Claude/.context/github-daily-sync/last-run-summary.tsv`）の出力まで行います。`.context` に同期 script を新規作成・複製・改変しないでください。script の不具合や改善点は、dotfiles への修正案として報告に書くだけにしてください。手順: (1) `{{ .chezmoi.homeDir }}/.local/bin/claude-github-daily-sync` を、他のコマンドと連結せず単独で実行します。github.com への通信が必要で、`~/.codex/rules/automation-network.rules` により sandbox 外で実行される前提です。(2) 続けて `{{ .chezmoi.homeDir }}/.local/bin/claude-github-daily-sync --verify` を単独で実行し、summary と live の git 状態を突合します。fetch が DNS・ネットワーク・権限で失敗した場合は、その失敗を報告に必ず残してください。権限を上げて再実行して成功した場合も、初回の失敗と再実行した事実を書き、rules が効いていない可能性として報告してください。reset、rebase、force、stash、checkout、clean、削除、remote URL の変更は行わないでください。最後に updated、unchanged、skipped、failed の件数と各リポジトリ名、更新した場合は更新前後の commit SHA を inbox に簡潔に報告してください。変更がなく失敗もなければ、その旨だけ簡潔に報告してください。実行メモリ（このオートメーションの memory.md）の上限は 20KB です。追記の前にサイズを確認し、20KB を超えている、または追記で超える場合は、直近 14 回分の実行記録だけを残し、それより古い記録を「対象期間、実行回数、updated / skipped / failed の傾向、恒常的に skip される repo、既知の問題」の要約 1 節（2KB 以内）に置き換えてから追記してください。1 回分の記録は 5 行以内とし、unchanged の repo 名や commit SHA の全列挙はしないでください。"
+status = "ACTIVE"
+rrule = "RRULE:FREQ=DAILY;BYHOUR=5;BYMINUTE=0"
+model = "gpt-5.6-sol"
+reasoning_effort = "medium"
+execution_environment = "local"
+target = { type = "project", project_id = "7ee675e6-892f-46e6-b808-32aa199bb77c" }
+cwds = ["{{ .chezmoi.homeDir }}/Claude"]
+created_at = 1786105316362
+updated_at = 1787571034947
