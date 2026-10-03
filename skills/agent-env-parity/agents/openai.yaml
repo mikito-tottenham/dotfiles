@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Env Parity"
+  short_description: "Check drift across local, Codex, cloud, and skill deployments"
+  default_prompt: "Use $agent-env-parity to check whether local, Codex, cloud, and skill deployments still match the dotfiles source, and report the gaps without changing anything."
