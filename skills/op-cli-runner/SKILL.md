@@ -1,6 +1,6 @@
 ---
 name: op-cli-runner
-description: Run 1Password CLI (`op`) and `opmaterialize` commands through one direct, observable subprocess path with bounded timeouts, redacted command metadata, and failure classification. Use when Codex needs to execute `op` or `opmaterialize`, restore 1Password-backed files, or debug `account is not signed in`, `promptError`, or authorization prompt/timeout errors without silent hangs or alternate fallback paths.
+description: "Run 1Password CLI (`op`) and `opmaterialize` commands through one direct, observable subprocess path with bounded timeouts, redacted command metadata, and failure classification. Use when Claude Code or Codex needs to execute `op` or `opmaterialize`, restore 1Password-backed files, or debug `account is not signed in`, `promptError`, or authorization prompt/timeout errors without silent hangs or alternate fallback paths. Use when asked to opコマンドを実行, 1Passwordから値を読む, 1Passwordの認証エラーを調べる, or opmaterializeで復元."
 ---
 
 # OP CLI Runner

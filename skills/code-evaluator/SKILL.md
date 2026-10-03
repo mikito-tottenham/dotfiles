@@ -1,6 +1,6 @@
 ---
 name: code-evaluator
-description: "Produce a report-only broad evaluation of a repository or subsystem covering architecture, maintainability, tests, dependencies, licensing, security, and AI ergonomics. Use for codebase assessments or dependency/license audits; not ordinary narrow PR review."
+description: "Produce a report-only broad evaluation of a repository or subsystem covering architecture, maintainability, tests, dependencies, licensing, security, and AI ergonomics. Use for codebase assessments or dependency/license audits; not ordinary narrow PR review. Use when asked to コード評価, コードベースを評価, リポジトリ全体を評価, 依存関係を監査, or ライセンス監査."
 ---
 
 # Code Evaluator
