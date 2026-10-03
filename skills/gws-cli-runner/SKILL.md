@@ -1,6 +1,6 @@
 ---
 name: gws-cli-runner
-description: Plan, configure, run, or troubleshoot account-scoped Google Workspace CLI (`gws`) commands through `gws-account`. Use for proposed or executed `gws` commands and for `gws` authentication errors such as `invalid_rapt`, `invalid_grant`, `403 org_internal`, or an invalid token.
+description: "Plan, configure, run, or troubleshoot account-scoped Google Workspace CLI (`gws`) commands through `gws-account`. Use for proposed or executed `gws` commands and for `gws` authentication errors such as `invalid_rapt`, `invalid_grant`, `403 org_internal`, or an invalid token. Use when asked to Driveに保存, Driveから取得, Googleドキュメントを取得, スプレッドシートを読む, カレンダーを共有, Gmailを検索, or gwsの認証エラーを直す."
 ---
 
 # GWS CLI Runner

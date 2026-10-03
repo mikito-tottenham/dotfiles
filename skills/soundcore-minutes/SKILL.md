@@ -1,6 +1,6 @@
 ---
 name: soundcore-minutes
-description: Retrieve transcripts, summaries, and meeting minutes from Anker Soundcore Work or Soundcore AI at ai.soundcore.com using an authenticated browser session. Use when the user mentions Soundcore Work, Soundcore AI, Anker AI voice recorder, ai.soundcore.com, or asks Codex or Claude in Chrome to collect minutes from the Soundcore web UI where no external API is available.
+description: "Retrieve transcripts, summaries, and meeting minutes from Anker Soundcore Work or Soundcore AI at ai.soundcore.com using an authenticated browser session. Use when the user mentions Soundcore Work, Soundcore AI, Anker AI voice recorder, ai.soundcore.com, or asks Codex or Claude in Chrome to collect minutes from the Soundcore web UI where no external API is available. Use when asked to Soundcoreから議事録を取得, 録音の文字起こしを取得, Soundcoreの要約を取得, or Soundcore Workの議事録."
 ---
 
 # Soundcore Minutes
