@@ -1,0 +1,4 @@
+interface:
+  display_name: "Meeting Prep Brief"
+  short_description: "Prepare a meeting brief from fixed sources"
+  default_prompt: "Use $meeting-prep-brief to collect calendar, past minutes, Slack, Gmail, and Chatwork context and draft the agenda, open action items, and questions for a meeting."
