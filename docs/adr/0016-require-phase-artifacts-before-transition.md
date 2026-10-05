@@ -4,7 +4,7 @@ status: accepted
 date: 2026-04-05
 worked_at: 2026-04-05 21:05 JST
 agent_model: GPT-5 Codex
-updated_at: 2026-10-03
+updated_at: 2026-10-05
 updated_by_agent_model: "Claude Opus 5.5 (claude-opus-5-5)"
 ---
 
@@ -44,3 +44,18 @@ Plan 合意や Skill 定義に明示された Phase / Step が、会話上の合
 - Claude Code のグローバル settings に artifact gate を追加した。repo に `scripts/phase_artifact_hook.py` があればそれを従来どおり block で実行し、無ければ `~/.claude/hooks/phase_artifact_hook.py --mode warn` を実行する。warn は exit 0 で、`additionalContext` に警告を返すだけ
 - 検査内容（`.context/` の artifact 存在、初期必須キー、単発例外宣言ファイルの妥当性）と gate 対象コマンドは変えていない
 - Codex のグローバル hook には入れない。上記 Decision の「`~/.codex/hooks.json` に repo enforcement は載せない」を維持する
+
+## 追補（2026-10-05、未配備時の無言の素通りをやめる）
+
+- 2026-10-04 の観測: 上記 2026-10-03 の変更が `chezmoi apply` されておらず、`~/.claude/settings.json` は旧コマンドのまま、
+  `~/.claude/hooks/phase_artifact_hook.py` も未配備だった。repo ローカルの gate が無い repo（例: taskell-management）では
+  gate が警告も出さずに素通りしていた。旧コマンドも 2026-10-03 版も、実行するスクリプトが見つからないと `exit 0` で何も出さない
+- 決定: 実行するスクリプトが見つからない場合も `exit 0` のまま止めないが、`systemMessage`（ユーザー向け）と
+  `additionalContext`（Claude 向け）で未配備を知らせる。未配備のまま全 Bash を止めないため block にはしない
+- `scripts/verify-cloud-parity` の設定ファイル検査に `~/.claude/hooks/phase_artifact_hook.py` と `git_chain_guard.py` を加え、
+  未配備を `agent-env-parity` で検知できるようにする
+- hook コマンドは `${mode:+--mode "$mode"}` を POSIX sh の単語分割に頼っている。Claude Code は shell form の hook を macOS / Linux で
+  `sh -c` で実行するため動くが、zsh で手で実行すると `--mode warn` が 1 語で渡って exit 2 になる。手で再現するときは `sh -c` を使う
+- 検証: sandbox の repo / HOME で `sh -c` と `bash -c` から hook コマンドを実行し、block（artifact 無しの `git commit` で exit 2、
+  artifact あり・有効な単発例外で通過、gate 対象外のコマンドは通過）、warn（artifact 無しで警告して通過）、未配備（警告して通過。
+  修正前のコマンドは無言で通過）を確認した

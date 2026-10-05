@@ -67,7 +67,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "root=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; script=\"$root/scripts/phase_artifact_hook.py\"; [ -f \"$script\" ] || { script=\"$HOME/.claude/hooks/phase_artifact_hook.py\"; mode=warn; }; [ -f \"$script\" ] || exit 0; python3 \"$script\" --event pretool ${mode:+--mode \"$mode\"}",
+            "command": "root=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; script=\"$root/scripts/phase_artifact_hook.py\"; [ -f \"$script\" ] || { script=\"$HOME/.claude/hooks/phase_artifact_hook.py\"; mode=warn; }; [ -f \"$script\" ] || { m=\"[artifact-gate] $script が見つからないため artifact gate を実行していません。dotfiles から chezmoi apply で配備してください\"; printf '{\"systemMessage\":\"%s\",\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"%s\"}}\\n' \"$m\" \"$m\"; exit 0; }; python3 \"$script\" --event pretool ${mode:+--mode \"$mode\"}",
             "timeout": 10
           },
           {
