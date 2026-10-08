@@ -48,6 +48,14 @@ Observed on the Soundcore Online Hub (`https://ai.soundcore.com/home`) with Clau
 - Do not pass text to the local side through `navigator.clipboard.writeText` or `document.execCommand('copy')`: without a user gesture the write fails and the user's clipboard stays unchanged.
 - When the user asked for a file artifact (for example a TSV of speaker, time, and text) and needs a verbatim guarantee, compute per segment the UTF-16 code unit count and the sum of code units mod 9973 from the saved file, embed that checksum list in the JS you run, compare it against the DOM in the browser, and return only the mismatching indexes so the result stays short enough not to be truncated. 186/186 segments matched in the observed run.
 
+Bulk retrieval, observed on 2026-10-08 (99 recordings fetched in about 70 seconds):
+
+- For many recordings, call the web app's own API from the page instead of opening each recording. The app sends `POST` XHRs to `https://anka-api-*.soundcore.com`: `/app/audio/note/list` (body `{page, page_size, sort_by, order, is_recycled}`; `page_size: 200` returned all 99), `/app/audio/note/query_summary` and `/app/audio/note/query_trans` (body `{note_id}`). Transcript segments carry `speaker_label`, `start_time` and `end_time` in milliseconds, and `content`.
+- Reuse the auth headers by wrapping `XMLHttpRequest.prototype.setRequestHeader` and keeping the values in a page variable while you click one recording. Never return those values from `javascript_tool` or write them to a file, and close the tab when done.
+- In the list, `app_note_id` is the recording start as epoch seconds (it matches the `YYYY-MM-DD HH:MM:SS` shown in the UI); `created_at` is the upload time; `audio_duration` is in milliseconds. A recording opens at `https://ai.soundcore.com/file/<note_id>`; cite that URL or `note_id` as the source so later runs can detect duplicates.
+- To move the result to the local side, build one JSON Blob in the page and download it. Ask the user first with the file name, source and size, then move the file into the work repo's `.context/` right away.
+- The recorder's clock can be wrong: some recordings show dates such as 2025-01-01. Confirm the real date from the transcript and existing minutes.
+
 ## Output
 
 For normal meeting minutes, use the concise Japanese format in [references/output-formats.md](references/output-formats.md). Load that reference when writing final minutes, creating a reusable template, or deciding how to handle missing fields.
