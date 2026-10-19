@@ -59,7 +59,7 @@ description: Produce a client-facing proposal deck or document end to end, for e
 
 ### Phase 7 締め → `07-closeout.md`
 
-`deliverable-closeout` Skill で commit → PR 本文案 → 組織別の Drive 保存（承認前はドラフト表示の接頭辞）→ repo 索引へのリンク追記 → URL 一覧を行う。push・PR・Drive への保存はその Skill の承認手順に従う。
+`deliverable-closeout` Skill で commit → PR 本文案 → 組織別の Drive 保存（承認前はドラフト表示の接頭辞）→ repo 索引へのリンク追記 → URL 一覧を行う。push・PR・マージ・Drive への保存はその Skill の手順に従う。
 
 ### Phase 8 お礼メール → `08-thank-you-email.md`
 
