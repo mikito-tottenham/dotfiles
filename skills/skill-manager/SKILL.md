@@ -98,7 +98,7 @@ Parse `$ARGUMENTS` and choose one of the commands below. If the user intent is a
 
 ## Scripts
 
-`list` and `doctor` are backed by scripts in this skill's `scripts/` directory (about 69KB of Python; do not read them unless changing them). They need only `python3` and, for `doctor`'s source-drift, retired-skill, and first-party sync checks, `chezmoi` on `PATH` or `SKILL_MANAGER_SOURCE_PATH`.
+`list` and `doctor` are backed by scripts in this skill's `scripts/` directory (about 69KB of Python; do not read them unless changing them). They need only `python3` (`doctor` needs 3.11+ and picks the first such interpreter among `python3`, `python3.14` … `python3.11` on `PATH`) and, for `doctor`'s source-drift, retired-skill, and first-party sync checks, `chezmoi` on `PATH` or `SKILL_MANAGER_SOURCE_PATH`.
 
 ```bash
 bash <skill-dir>/scripts/executable_list.sh            # inventory JSON (add --full for plugin payloads)
