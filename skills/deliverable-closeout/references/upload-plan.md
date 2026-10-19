@@ -38,7 +38,7 @@ source: ~/Claude/.context/2026-09-24-drive-output-links の upload.py / 05-uploa
 
 | status | 意味 | 次の動き |
 |---|---|---|
-| `dry-run` | 保存先に同名が無く、アップロード予定 | 承認バンドルに載せる |
+| `dry-run` | 保存先に同名が無く、アップロード予定 | Drive 保存の承認に載せる |
 | `exists-same` | 保存先フォルダに同名・同 md5 がある | 既存リンクを使う |
 | `exists-elsewhere` | `--index` の一覧に同 md5 が別名・別フォルダである | 既存リンクを使う（再アップロードしない） |
 | `uploaded` | アップロード済みで md5 一致 | リンクを索引へ |

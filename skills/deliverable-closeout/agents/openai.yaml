@@ -1,4 +1,4 @@
 interface:
   display_name: "Deliverable Closeout"
-  short_description: "Commit, PR, Drive save, index links in one approval"
-  default_prompt: "Use $deliverable-closeout to wrap up this work: commit, ask once for push/PR/Drive approval, save outputs to Drive, link them in the repo index, and list the URLs."
+  short_description: "Commit, PR, merge, and one Drive approval"
+  default_prompt: "Use $deliverable-closeout to wrap up this work: commit, push, open and merge the PR once checks pass, ask once for Drive approval, save outputs to Drive, link them in the repo index, and list the URLs."

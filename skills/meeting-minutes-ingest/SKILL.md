@@ -79,7 +79,7 @@ description: "Turn a meeting transcript into repo-conformant minutes: map speake
 - repo の機密規約に反する情報（規約で除外すべき実名・金額・連絡先・secret）が git 管理下のファイルに入っていないこと
 - `git diff` で、この会議の議事録・索引・辞書以外の変更を含めていないこと
 
-検証が済んだら、グローバルルールに従ってその repo でコミットする。push と PR はユーザーの承認を待つ。
+検証が済んだら、グローバルルールに従ってその repo でコミットし、push・PR 作成・マージまで進める。
 
 ## 最終報告
 
