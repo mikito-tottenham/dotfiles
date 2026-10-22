@@ -26,9 +26,10 @@ description: Produce a client-facing proposal deck or document end to end, for e
 
 ### Phase 2 骨格 → `02-skeleton.md`
 
-1. [references/skeleton-templates.md](references/skeleton-templates.md) の共通骨格に、規模別テンプレート（A / B / C）の差分を当てる。
-2. スライドごとに「主張（タイトル）・中身・素材の出典」を表で書く。数値には出典を付け、目標値と実績値を分ける。
-3. 骨格の段階でユーザーに見せ、方向を確認してから本文に進む。
+1. 先に [references/skeleton-templates.md](references/skeleton-templates.md) の「書く前に決める 2 項目」（提案の 1 文、決めてもらうこと 3 つ）を `02-skeleton.md` の冒頭に書く。
+2. 共通骨格に、規模別テンプレート（A / B / C）の差分を当てる。
+3. スライドごとに「主張（タイトル）・中身・素材の出典」を表で書く。数値には出典を付け、目標値と実績値を分ける。2 枚目は提案の 1 文から、12 枚目は決めてもらうこと 3 つから引く。
+4. 骨格の段階でユーザーに見せ、2 項目と方向を確認してから本文に進む。
 
 ### Phase 3 本文 → `03-draft.md`（または repo の `deck.md`）
 
@@ -68,6 +69,7 @@ description: Produce a client-facing proposal deck or document end to end, for e
 ## 完了チェック
 
 - [ ] `01`〜`08` の artifact がそろっている（使わなかった Phase は理由を書く）
+- [ ] `02-skeleton.md` の冒頭に提案の 1 文と決めてもらうこと 3 つがあり、2 枚目・12 枚目がそこから引かれている
 - [ ] 数値・料金・事例に出典があり、掲載の承認が確認できる
 - [ ] doc-grill の採否表と送付前検品の結果がある
 - [ ] 全ページの描画、フォント埋め込み、本文照合を確かめた
