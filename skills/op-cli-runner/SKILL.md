@@ -1,11 +1,11 @@
 ---
 name: op-cli-runner
-description: "Run 1Password CLI (`op`) and `opmaterialize` commands through one direct, observable subprocess path with bounded timeouts, redacted command metadata, and failure classification. Use when Claude Code or Codex needs to execute `op` or `opmaterialize`, restore 1Password-backed files, or debug `account is not signed in`, `promptError`, or authorization prompt/timeout errors without silent hangs or alternate fallback paths. Use when asked to opコマンドを実行, 1Passwordから値を読む, 1Passwordの認証エラーを調べる, or opmaterializeで復元."
+description: "Run 1Password CLI (`op`) and `opmaterialize` through one observable wrapper with timeouts and failure classification, plus a read-only auth preflight and triage for `op`/`oprun`, `ghrun gh`, `gws-account`, `slack-account`, and MCP connectors. Use on `account is not signed in`, `401`, `invalid_grant`, `not_authed`, or before multi-service work. Use when asked to opコマンドを実行, 1Passwordから値を読む, opmaterializeで復元, 認証を確認して, 認証が切れた, gh が 401, gws が invalid_grant, Slack が繋がらない, MF の MCP が切れた, or 作業前に接続確認."
 ---
 
 # OP CLI Runner
 
-Use this skill for the execution mechanics of 1Password CLI commands. Keep higher-level secret workflows in their owning skill, for example `$onepassword-secret-materialize` for `Secrets Manifest` and file restore policy.
+Use this skill for the execution mechanics of 1Password CLI commands and for the read-only authentication preflight that precedes multi-service work. Keep higher-level secret workflows in their owning skill, for example `$onepassword-secret-materialize` for `Secrets Manifest` and file restore policy.
 
 ## Core Rule
 
@@ -63,6 +63,16 @@ python3 <skill-dir>/scripts/run_op_cli.py \
 If the wrapper returns `auth_required`, `prompt_error`, `authorization_dismissed`, `auth_timeout`, or `timeout`, do not retry the same command repeatedly. Preserve the artifacts and fix the underlying 1Password CLI/session/app-integration issue outside this skill.
 
 When the command is `op signin`, the wrapper verifies success with `op whoami --account <account>`. Treat `op signin` exit 0 as insufficient unless `whoami` confirms the session.
+
+## Auth Preflight
+
+Before work that depends on several authenticated routes (1Password, `ghrun gh`, `gws-account`, `slack-account`, MCP connectors), or when triaging an authentication error from any of them, follow `references/preflight.md`. It holds the procedure, the MCP connector identity checks, and the symptom table for gws / Slack / Chatwork / MoneyForward; `op` and `gh` symptoms stay in the global auth rules and in Failure Handling below.
+
+```bash
+python3 <skill-dir>/scripts/auth_preflight.py --json-out .context/<task>/auth-preflight.json
+```
+
+The script is read-only and, by default, never triggers a 1Password authorization prompt: `op whoami` and `oprun slack-account <profile> auth status` run only with `--with-op`, and `--offline` also skips the network checks (`ghrun gh api user`, `gws-account <profile> auth status`). Output carries status, domain, and workspace names only; tokens, `op://` references, and e-mail addresses are redacted. Exit 1 means at least one FAIL. MCP connectors cannot be checked from the script; use the read-only identity calls listed in the reference.
 
 ## Restore Pattern
 
@@ -129,6 +139,7 @@ After changing this skill, run:
 
 ```bash
 python3 <skill-dir>/scripts/run_op_cli.py --help
-python3 -m py_compile <skill-dir>/scripts/run_op_cli.py
+python3 -m py_compile <skill-dir>/scripts/run_op_cli.py <skill-dir>/scripts/auth_preflight.py
+python3 <skill-dir>/scripts/auth_preflight.py --offline   # exit 0 or 1; no e-mail, token, or op:// values in the output
 scripts/skill-quick-validate skills/op-cli-runner   # from the dotfiles repo root
 ```

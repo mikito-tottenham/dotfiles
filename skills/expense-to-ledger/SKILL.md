@@ -1,6 +1,6 @@
 ---
 name: expense-to-ledger
-description: Turn expense evidence (emailed receipts, paper receipt photos, local PDFs) into filed Drive evidence and a reviewed MoneyForward Cloud Accounting or freee import — collect, name, file by usage date, audit for gaps, build journal data with explicit assumptions, run a dry-run validation gate, and write to the ledger only after explicit user approval. Company-specific values (Drive folder IDs, fiscal year, account codes, gws profile) live in the repository profile. Use when asked to 領収書を取り込んで, 経費をまとめて, 領収書をDriveに入れて, 経費を仕訳にして, MFに取り込むCSVを作って, freeeに経費を登録, 証憑に漏れがないか確認, or 会計に反映して.
+description: Turn expense evidence (emailed receipts, receipt photos, local PDFs) into filed Drive evidence and a reviewed MoneyForward Cloud Accounting or freee import: collect, name, file by usage date, audit gaps, build journal data with explicit assumptions, dry-run validate, and write to the ledger only after explicit user approval. Company values live in the repository profile. Use when asked to 領収書を取り込んで, 経費をまとめて, 領収書をDriveに入れて, 経費を仕訳にして, MFに取り込むCSVを作って, freeeに経費を登録, 証憑に漏れがないか確認, or 会計に反映して.
 ---
 
 # expense-to-ledger

@@ -11,7 +11,7 @@ source: 業務 repo の定例会議 Skill（references/sources.md）を一般化
 | # | 情報源 | 主な経路 | 収集期間・対象 |
 |---|---|---|---|
 | 1 | カレンダー | `gws-account <profile> calendar events list` / Calendar コネクタ | 当日の開催時刻・出席者・添付。前回開催日 |
-| 2 | 過去議事録 | repo の議事録ディレクトリ → 未マージブランチ → 会議メモの Doc → メールで届いた会議メモ → 録音（`soundcore-minutes`） | 前回分（必要なら前々回） |
+| 2 | 過去議事録 | repo の議事録ディレクトリ → 未マージブランチ → 会議メモの Doc → メールで届いた会議メモ → 録音（`meeting-minutes` の Soundcore 取得手順） | 前回分（必要なら前々回） |
 | 3 | Slack | `oprun slack-account <profile> api search.messages ...` / Slack コネクタ | 前回開催日の前日以降 |
 | 4 | Gmail | 同梱 `scripts/fetch_gmail.py` → `scripts/fetch_threads.py` / Gmail コネクタ | 同上 |
 | 5 | Chatwork | Chatwork MCP の room 一覧 → メッセージ読み取り | 同上（相手先とのルームがあるとき） |
@@ -33,7 +33,7 @@ gws-account <profile> calendar events list --params '{"calendarId":"primary","ti
 2. `git fetch origin` の後、議事録を含む未マージブランチを探す: `git log --oneline main..origin/<branch>`、`git diff --stat main origin/<branch> -- <議事録 dir>`。取り出しは `git show origin/<branch>:<path>`。
 3. 会議メモの Doc（カレンダー添付や自動生成メモ）。`drive files get` が 404 でも `drive files export`（`text/plain`）は通ることがある。
 4. メールで届いた会議メモ（会議ツールの自動要約など）。
-5. 録音サービス（`soundcore-minutes`）。同日に複数録音があることがある。
+5. 録音サービス（`meeting-minutes` の `references/soundcore-retrieval.md`）。同日に複数録音があることがある。
 
 決定事項と宿題（アクションアイテム）を優先して読む。50KB を超える議事録は親で読まず、サブエージェントに要約させる。
 

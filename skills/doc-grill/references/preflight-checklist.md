@@ -26,14 +26,15 @@ source_of_truth: <正本の path と commit / 更新時刻>
 - 最新の正本から生成している。正本の更新時刻・commit と派生物の生成時刻を比べる
 - ファイル名が repo や組織の規約に沿っている（下書きに付ける接頭辞の要否など）
 - 開ける。ページ数・スライド数が想定どおり
-- 正本の本文が派生物に欠けずに入っている。派生物をテキスト化（markitdown など）して正本と照合する。見出しと本文が別のテキストボックスに分かれると欠落に見えるので、内容の欠落だけを見る
+- 正本の本文が派生物に欠けずに入っている。PPTX は `markitdown deck.pptx > .context/<task>/deck.md` のあと `scripts/pptx_text_coverage.py <原稿.md> .context/<task>/deck.md --section '## 本文'` で照合する（exit 1 = MISSING あり）。見出しと本文が別のテキストボックスに分かれると欠落に見えるので、内容の欠落だけを見る
+- ページ数・文字数: `pypdf` でページ数とテキスト抽出を確かめ、はみ出し（ページ数の想定外の増加）を見つける
 
 ## 2. 日本語フォント
 
 - PDF: `pdffonts <file>.pdf` で、日本語フォントが埋め込まれている（`emb` が yes）ことと、意図しない代替フォントが無いことを確かめる
 - 画像にして目で見る: `pdftoppm -jpeg -r 110 <file>.pdf <outdir>/page` で各ページを画像にし、文字化け（豆腐）、代替フォントへの置き換え、はみ出し、改行位置の崩れを確かめる
-- pptx / docx は PDF に書き出してから上の 2 つを行う。macOS で PowerPoint を AppleScript から開くと、ファイルアクセス許可のダイアログで止まることがある。Keynote で開く場合は、Keynote のコンテナ（`~/Library/Containers/com.apple.iWork.Keynote/Data/tmp/`）にコピーしてから開くと書き出せた（2026-09-11 観測）。Keynote の描画は書体・行送りが近似なので、余白に 1 割ほどの余裕を見る
-- repo に描画用の script があれば、それを使う
+- pptx / docx は PDF に書き出してから上の 2 つを行う。PPTX は同梱の `scripts/render_pptx.sh <deck.pptx> [keynote|soffice]` で `render/deck.pdf` と `render/slide-NN.jpg` を作れる（macOS の既定は Keynote、それ以外は LibreOffice）。macOS で PowerPoint を AppleScript から開くと、ファイルアクセス許可のダイアログで止まることがある。Keynote で開く場合は、Keynote のコンテナ（`~/Library/Containers/com.apple.iWork.Keynote/Data/tmp/`）にコピーしてから開くと書き出せた（2026-09-11 観測、script はこれを行う）。Keynote の描画は書体・行送りが近似なので、余白に 1 割ほどの余裕を見る
+- repo に描画用の script があれば、そちらを優先する
 
 ## 3. 顧客に出せない文言
 

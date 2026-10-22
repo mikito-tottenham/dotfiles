@@ -1,6 +1,6 @@
 # Runner Common Contract
 
-Shared contract for the `codex-cli-runner`, `claude-cli-runner`, `gemini-cli-runner`, and `copilot-cli-runner` skills. Each skill ships an identical copy of this file so it stays usable when installed alone; `scripts/skill-quick-validate` in the dotfiles repo checks that the copies match. Provider-specific behavior (CLI flags, stream formats, watchdogs, cwd handling, extra failure signals) stays in each skill's `SKILL.md`.
+Shared contract for the `codex-cli-runner` and `claude-cli-runner` skills. Each skill ships an identical copy of this file so it stays usable when installed alone; `scripts/skill-quick-validate` in the dotfiles repo checks that the copies match. Provider-specific behavior (CLI flags, stream formats, watchdogs, cwd handling, extra failure signals) stays in each skill's `SKILL.md`.
 
 Read this file once per delegation session; the `SKILL.md` of each runner assumes it.
 

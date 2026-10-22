@@ -1,6 +1,6 @@
 ---
 name: contract-review
-description: Review a contract (NDA, service agreement, outsourcing, license, memorandum) from our position as client (甲・委託側) or contractor (乙・受託側), using a shared checklist, position-based stances, optional independent multi-reviewer runs, and a repository profile for ledgers, escalation thresholds, and house rules. Advisory only, never legal advice or signing. Use when asked to 契約書をレビューして, この契約を確認して, NDAをチェックして, 業務委託契約を見て, 受注契約・発注契約を確認, or when a contract PDF or an e-contract notice (CloudSign, DocuSign, GMOサイン) arrives — before giving any opinion on it.
+description: Review a contract (NDA, service agreement, outsourcing, license, memorandum) as client (甲・委託側) or contractor (乙・受託側) with a shared checklist, position-based stances, optional multi-reviewer runs, and a repository profile for ledgers, thresholds, and house rules. Advisory only, never legal advice or signing. Use when asked to 契約書をレビューして, この契約を確認して, NDAをチェックして, 業務委託契約を見て, 受注契約・発注契約を確認, or when a contract PDF or e-contract notice (CloudSign, DocuSign, GMOサイン) arrives.
 ---
 
 # contract-review

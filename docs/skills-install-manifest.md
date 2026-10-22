@@ -1,6 +1,6 @@
 ---
 title: "Skill Install Manifest"
-updated_at: 2026-10-03
+updated_at: 2026-10-23
 ---
 
 # Skill Install Manifest
@@ -32,38 +32,26 @@ Claude Code on the web の ephemeral 環境に限り、`scripts/bootstrap-web`�
 
 ```bash
 cd "$(chezmoi source-path)"
-gh skill install . skill-manager --from-local --agent claude-code --scope user
-gh skill install . docs-entrypoint-check --from-local --agent claude-code --scope user
-gh skill install . docs-evaluator --from-local --agent claude-code --scope user
-gh skill install . grok-cli-runner --from-local --agent claude-code --scope user
-gh skill install . code-evaluator --from-local --agent claude-code --scope user
-gh skill install . model-tuning --from-local --agent claude-code --scope user
 gh skill install . codex-cli-runner --from-local --agent claude-code --scope user
-gh skill install . gemini-cli-runner --from-local --agent claude-code --scope user
-gh skill install . copilot-cli-runner --from-local --agent claude-code --scope user
-gh skill install . agent-orchestration-evaluator --from-local --agent claude-code --scope user
-gh skill install . ai-usage-coach --from-local --agent claude-code --scope user
-gh skill install . soundcore-minutes --from-local --agent claude-code --scope user
-gh skill install . ghq-repo-placement --from-local --agent claude-code --scope user
+gh skill install . grok-cli-runner --from-local --agent claude-code --scope user
+gh skill install . agent-orchestrator --from-local --agent claude-code --scope user
+gh skill install . skill-manager --from-local --agent claude-code --scope user
+gh skill install . handoff --from-local --agent claude-code --scope user
+gh skill install . dads-design --from-local --agent claude-code --scope user
+gh skill install . repo-evaluator --from-local --agent claude-code --scope user
 gh skill install . op-cli-runner --from-local --agent claude-code --scope user
 gh skill install . onepassword-secret-materialize --from-local --agent claude-code --scope user
-gh skill install . handoff --from-local --agent claude-code --scope user
-gh skill install . git-branch-review --from-local --agent claude-code --scope user
-gh skill install . dads-design --from-local --agent claude-code --scope user
 gh skill install . gws-cli-runner --from-local --agent claude-code --scope user
-gh skill install . agent-orchestrator --from-local --agent claude-code --scope user
-gh skill install . external-report --from-local --agent claude-code --scope user
-gh skill install . agent-env-parity --from-local --agent claude-code --scope user
-gh skill install . meeting-minutes-ingest --from-local --agent claude-code --scope user
-gh skill install . doc-grill --from-local --agent claude-code --scope user
-gh skill install . deliverable-closeout --from-local --agent claude-code --scope user
-gh skill install . client-proposal-pack --from-local --agent claude-code --scope user
+gh skill install . meeting-minutes --from-local --agent claude-code --scope user
 gh skill install . meeting-prep-brief --from-local --agent claude-code --scope user
-gh skill install . auth-preflight --from-local --agent claude-code --scope user
-gh skill install . contract-review --from-local --agent claude-code --scope user
+gh skill install . doc-grill --from-local --agent claude-code --scope user
+gh skill install . client-proposal-pack --from-local --agent claude-code --scope user
+gh skill install . deliverable-closeout --from-local --agent claude-code --scope user
+gh skill install . git-branch-review --from-local --agent claude-code --scope user
 gh skill install . pdf-extract --from-local --agent claude-code --scope user
+gh skill install . contract-review --from-local --agent claude-code --scope user
 gh skill install . expense-to-ledger --from-local --agent claude-code --scope user
-gh skill install . multi-account-scheduling --from-local --agent claude-code --scope user
+gh skill install . task-sweep --from-local --agent claude-code --scope user
 ```
 
 ### Codex
@@ -73,38 +61,26 @@ gh skill install . multi-account-scheduling --from-local --agent claude-code --s
 
 ```bash
 cd "$(chezmoi source-path)"
-gh skill install . skill-manager --from-local --agent codex --scope user
-gh skill install . docs-entrypoint-check --from-local --agent codex --scope user
-gh skill install . docs-evaluator --from-local --agent codex --scope user
-gh skill install . grok-cli-runner --from-local --agent codex --scope user
-gh skill install . code-evaluator --from-local --agent codex --scope user
-gh skill install . model-tuning --from-local --agent codex --scope user
 gh skill install . claude-cli-runner --from-local --agent codex --scope user
-gh skill install . gemini-cli-runner --from-local --agent codex --scope user
-gh skill install . copilot-cli-runner --from-local --agent codex --scope user
-gh skill install . agent-orchestration-evaluator --from-local --agent codex --scope user
-gh skill install . ai-usage-coach --from-local --agent codex --scope user
-gh skill install . soundcore-minutes --from-local --agent codex --scope user
-gh skill install . ghq-repo-placement --from-local --agent codex --scope user
+gh skill install . grok-cli-runner --from-local --agent codex --scope user
+gh skill install . agent-orchestrator --from-local --agent codex --scope user
+gh skill install . skill-manager --from-local --agent codex --scope user
+gh skill install . handoff --from-local --agent codex --scope user
+gh skill install . dads-design --from-local --agent codex --scope user
+gh skill install . repo-evaluator --from-local --agent codex --scope user
 gh skill install . op-cli-runner --from-local --agent codex --scope user
 gh skill install . onepassword-secret-materialize --from-local --agent codex --scope user
-gh skill install . handoff --from-local --agent codex --scope user
-gh skill install . git-branch-review --from-local --agent codex --scope user
-gh skill install . dads-design --from-local --agent codex --scope user
 gh skill install . gws-cli-runner --from-local --agent codex --scope user
-gh skill install . agent-orchestrator --from-local --agent codex --scope user
-gh skill install . external-report --from-local --agent codex --scope user
-gh skill install . agent-env-parity --from-local --agent codex --scope user
-gh skill install . meeting-minutes-ingest --from-local --agent codex --scope user
-gh skill install . doc-grill --from-local --agent codex --scope user
-gh skill install . deliverable-closeout --from-local --agent codex --scope user
-gh skill install . client-proposal-pack --from-local --agent codex --scope user
+gh skill install . meeting-minutes --from-local --agent codex --scope user
 gh skill install . meeting-prep-brief --from-local --agent codex --scope user
-gh skill install . auth-preflight --from-local --agent codex --scope user
-gh skill install . contract-review --from-local --agent codex --scope user
+gh skill install . doc-grill --from-local --agent codex --scope user
+gh skill install . client-proposal-pack --from-local --agent codex --scope user
+gh skill install . deliverable-closeout --from-local --agent codex --scope user
+gh skill install . git-branch-review --from-local --agent codex --scope user
 gh skill install . pdf-extract --from-local --agent codex --scope user
+gh skill install . contract-review --from-local --agent codex --scope user
 gh skill install . expense-to-ledger --from-local --agent codex --scope user
-gh skill install . multi-account-scheduling --from-local --agent codex --scope user
+gh skill install . task-sweep --from-local --agent codex --scope user
 ```
 
 ### 変更履歴（first-party）
@@ -113,6 +89,46 @@ gh skill install . multi-account-scheduling --from-local --agent codex --scope u
 - 2026-10-03: 2026-10 の Skill 棚卸し（ADR-0069）に基づき 11 本を登録した。`agent-env-parity`（WP1）、`meeting-minutes-ingest` / `doc-grill`（WP2）、`deliverable-closeout`（WP3）、`client-proposal-pack` / `meeting-prep-brief` / `auth-preflight`（WP4）、`contract-review` / `pdf-extract` / `expense-to-ledger` / `multi-account-scheduling`（WP5）。既存では `git-branch-review` に Fleet Mode（`scripts/fleet_*.py`、`references/fleet-cleanup.md`）を追加し、`skill-manager` の `doctor` に `retired_skills` / `first_party_sync` を追加した
 - 2026-10-03: ADR-0062 で撤去済みの 6 skill（`gws-drive` / `gws-drive-upload` / `gws-shared` / `grill-me` / `opus-4-8-tuning` / `gpt-5-5-tuning`）が `~/.claude/skills` / `~/.agents/skills` / `~/.codex/skills` に残っていたため、削除せず `~/.local/share/skill-retired/2026-10-03/` へ退避した（18 件。`~/.agents/.skill-lock.json` の該当 4 エントリも、backup を取ってから外した）。続けて `~/.codex/skills` を上記 Codex 節の手順（install → rsync）で再同期した
 - 2026-10-03: `pdf-extract` の script は兄弟 skill `codex-cli-runner` を呼ぶが、Codex の一覧には `codex-cli-runner` を入れていない。Codex 親では script を使わず自分で抽出する（SKILL.md の「Codex 親の場合」節。model_registry の Self-Elision）
+- 2026-10-23: 2026-10 の Skill 統合（ADR-0072）で first-party を 33 本 + 未マージ 1 本 → 21 本（Claude Code / Codex 各 20 本。差分は codex-cli-runner / claude-cli-runner）にした。統合 2 件（5 本 → 2 本）: `code-evaluator` + `docs-evaluator` + `docs-entrypoint-check` → `repo-evaluator`、`soundcore-minutes` + `meeting-minutes-ingest` → `meeting-minutes`。吸収 5 件: `auth-preflight` → `op-cli-runner`、`multi-account-scheduling` → `gws-cli-runner`、`external-report` → `doc-grill`、`agent-env-parity` → `skill-manager`（`parity` コマンド）、`ghq-repo-placement` → `agents-common.md` の 1 行。削除 5 件: `gemini-cli-runner` / `copilot-cli-runner` / `agent-orchestration-evaluator` / `model-tuning` / `ai-usage-coach`（固有内容は `agent-orchestrator` の references へ移設）。`task-sweep`（ADR-0070、未マージ worktree）は会社固有値を repo 側 profile に分離して取り込んだ。`onepassword-secret-materialize` は `op-cli-runner` への吸収を見送り維持（別セッションがラッパーを編集中）。撤去 15 本の記録は下記「撤去済み（first-party）」
+
+### 撤去済み（first-party）
+
+ADR-0072（2026-10-23）で撤去した 15 本（統合 5 + 吸収 5 + 削除 5）。配備先に残っているコピーは削除せず `~/.local/share/skill-retired/2026-10-23/` へ退避する（2026-10-03 の手順と同じ。ADR-0069 決定 1）。
+
+| skill | 撤去日 | 理由 | 統合先 / 移設先 | 再導入条件 |
+|---|---|---|---|---|
+| `code-evaluator` | 2026-10-23 | `docs-evaluator` と Core Rules / Workflow / Mutation Guard が同文 | `repo-evaluator`（`code:*` モード） | `repo-evaluator` の SKILL.md が description 予算（500 文字）に収まらなくなった場合 |
+| `docs-evaluator` | 2026-10-23 | 同上 | `repo-evaluator`（`docs:*` モード） | 同上 |
+| `docs-entrypoint-check` | 2026-10-23 | `docs-evaluator` の部分集合。呼出 0 | `repo-evaluator` の entrypoint-check / bootstrap モード | 同上 |
+| `soundcore-minutes` | 2026-10-23 | 後工程の `meeting-minutes-ingest` と常に対で使われる | `meeting-minutes`（`references/soundcore-retrieval.md`） | Soundcore 以外の録音ソースが増え、取得と議事録化を分ける必要が出た場合 |
+| `meeting-minutes-ingest` | 2026-10-23 | 同上 | `meeting-minutes` | 同上 |
+| `auth-preflight` | 2026-10-23 | 呼出 0。症状表は共通ルール・gws Runbook と同文 | `op-cli-runner`（`references/preflight.md`、`scripts/auth_preflight.py`） | 1Password 以外の認証系が主経路になった場合 |
+| `multi-account-scheduling` | 2026-10-23 | 呼出 1。ACL 手順は `gws-cli-runner` と同文 | `gws-cli-runner`（`references/calendar.md`、`scripts/free_slots.py`） | gws 以外のカレンダー provider を跨ぐ必要が出た場合 |
+| `external-report` | 2026-10-23 | 呼出 0。送付前検品は `doc-grill` が担う | `doc-grill`（`references/external-report-standard.md`） | 外部報告書の雛形が `doc-grill` の検品ゲートと分離して必要になった場合 |
+| `agent-env-parity` | 2026-10-23 | ルーティング文書のみで固有ロジック無し | `skill-manager` の `parity` コマンド | 検査対象が skill-manager の範囲（skill / 設定 / クラウド）を超えた場合 |
+| `ghq-repo-placement` | 2026-10-23 | 共通ルールの ghq 規則と重複 | `.chezmoitemplates/agents-common.md` の 1 行 | ghq 以外の配置規則（monorepo / vendor 管理）が必要になった場合 |
+| `gemini-cli-runner` | 2026-10-23 | 呼出 0。model_registry が Gemini を route に使わない（2026-07-25 判断） | なし（CLI の導入は `bootstrap-web` に残す） | model_registry で Gemini を route に戻した場合 |
+| `copilot-cli-runner` | 2026-10-23 | 呼出 0。固有ロジックほぼ無し | なし（CLI の導入は `bootstrap-web` に残す） | Copilot CLI を role の provider として採用した場合 |
+| `agent-orchestration-evaluator` | 2026-10-23 | 呼出 0。監査専用 | `agent-orchestrator/references/orchestration-invariants.md` | オーケストレーション監査を独立 role として回す場合 |
+| `model-tuning` | 2026-10-23 | 呼出 0。検証済み reference が 1 世代分のみ | `agent-orchestrator/references/model-profiles.md` | 複数世代の tuning 差分を比較運用する場合 |
+| `ai-usage-coach` | 2026-10-23 | 呼出 1。最大サイズで evaluator 3 本に依存 | `agent-orchestrator` references（Promotion Candidate Score）。`scripts/ai-usage-aggregate.py` は dotfiles `scripts/` に残置 | 利用ログの定期レビューを運用に組み込んだ場合 |
+
+退避手順（配備先 3 箇所。`~/.agents/.skill-lock.json` は backup を取ってから該当エントリを外す）:
+
+```bash
+d="$HOME/.local/share/skill-retired/2026-10-23"
+for s in code-evaluator docs-evaluator docs-entrypoint-check soundcore-minutes meeting-minutes-ingest \
+         auth-preflight multi-account-scheduling external-report agent-env-parity ghq-repo-placement \
+         gemini-cli-runner copilot-cli-runner agent-orchestration-evaluator model-tuning ai-usage-coach; do
+  for base in "$HOME/.claude/skills" "$HOME/.agents/skills" "$HOME/.codex/skills"; do
+    tag="$(basename "$(dirname "$base")")"   # .claude / .agents / .codex
+    [ -d "$base/$s" ] && mkdir -p "$d/$tag" && mv "$base/$s" "$d/$tag/$s"
+  done
+done
+cp "$HOME/.agents/.skill-lock.json" "$d/skill-lock.json.bak"
+```
+
+退避後は manifest どおり `gh skill install`（Codex は rsync まで）をやり直し、`skill-manager` の `doctor` で `retired_skills` / `first_party_sync` が NO_ISSUES であることを確認する。
 
 ## Third-party external skills
 

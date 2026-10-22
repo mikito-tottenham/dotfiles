@@ -1,6 +1,6 @@
 ---
 name: gws-cli-runner
-description: "Plan, configure, run, or troubleshoot account-scoped Google Workspace CLI (`gws`) commands through `gws-account`. Use for proposed or executed `gws` commands and for `gws` authentication errors such as `invalid_rapt`, `invalid_grant`, `403 org_internal`, or an invalid token. Use when asked to Driveに保存, Driveから取得, Googleドキュメントを取得, スプレッドシートを読む, カレンダーを共有, Gmailを検索, or gwsの認証エラーを直す."
+description: "Plan, run, or troubleshoot account-scoped Google Workspace CLI (`gws`) commands through `gws-account`, including cross-account calendar free/busy, booking pages, and scheduling replies. Use for proposed or executed `gws` commands and for `gws` auth errors such as `invalid_rapt`, `invalid_grant`, `403 org_internal`, or an invalid token. Use when asked to Driveに保存, Driveから取得, Googleドキュメントを取得, スプレッドシートを読む, カレンダーを共有, Gmailを検索, 空いてるスロットを出して, 日程調整して, 予約ページ, 候補日を返信する文面, or gwsの認証エラーを直す."
 ---
 
 # GWS CLI Runner
@@ -92,6 +92,21 @@ gws-account <profile> drive files list --params '{"pageSize": 5}'
 ```
 
 Drive の files / permissions / drives 操作（検索・取得・作成・移動・共有・export・`+upload`）のフラグと代表例は [references/drive.md](references/drive.md) を参照する。
+
+## Calendar
+
+複数 profile のカレンダーを横断した空き枠の算出、予約ページ（予約スケジュール）の制約と設定手順、返信文案、予定作成の承認手順は [references/calendar.md](references/calendar.md) を参照する。共有 ACL の変更は [references/account-profiles.md](references/account-profiles.md) の「カレンダー共有 ACL」に従う。
+
+共通の空き枠は同梱 script で出す（読み取りのみ。profile ごとに `calendarList list` と `freebusy query` を呼ぶ）:
+
+```bash
+python3 <skill-dir>/scripts/free_slots.py \
+  --source <profile-A> --source <profile-B>:primary \
+  --from YYYY-MM-DD --to YYYY-MM-DD --start-hour 10 --end-hour 18 --slot-min 30 \
+  > .context/<task>/free-slots.md
+```
+
+exit `3` は参照できなかったカレンダーがあることを示す。出力の「参照したカレンダー」表を回答に反映し、読めなかったカレンダーの予定を空きとして提示しない。認証エラーは Recovery Runbook に従って同じ profile で復旧する。
 
 When a command fails, classify the failure before continuing:
 

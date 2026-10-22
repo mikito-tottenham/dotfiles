@@ -1,6 +1,6 @@
 ---
 title: "Model Profiles — worker tier ladder の判断補助"
-updated_at: 2026-09-15
+updated_at: 2026-10-23
 ---
 
 # Model Profiles
@@ -89,3 +89,37 @@ cli_runner になる。
   指示逐語遵守・検証まで完璧。lock 競合を恒久対策レビュー付きで報告する品質。
 - 2026-07-25 sol/low(cli_runner): 1 行修正委譲。108 秒。正確。
   仕様確定済みの小変更なら low で十分。
+
+## プロンプト・指示文書のモデル世代合わせ(典型修正パターン)
+
+旧 model tuning skill(2026-10 統合)の要約。AGENTS.md / CLAUDE.md / SKILL.md / 委譲 prompt / eval harness が
+旧世代モデル前提になっていないかを棚卸しするときの provider 共通の兆候と対応。
+モデル固有の既定値は registry と下の差分表を正とし、公式文書で確認できない項目は「未検証」と残す。
+
+| 記号 | 兆候 | 対応 |
+|---|---|---|
+| A | 旧世代 prompt を model 名だけ置換して持ち込む | 動く部分は残し、差分表に該当する箇所だけ最小修正 |
+| B | `ultrathink` / `think hard` 等の魔法語や全件最高 effort で reasoning を代用 | effort は caller / registry 側で設定し、prompt は intent と acceptance criteria に集中 |
+| C | 廃止・非対応の API parameter(sampling、固定 thinking budget)が残る | 削除し、provider の現行 effort / thinking 制御へ寄せる |
+| D | N tool call ごとの進捗報告、毎ターン plan 強制などの手順固定 | outcome / success criteria / constraints / side effects / evidence / output shape 中心へ |
+| E | 指示の優先順位・完了条件・blocked の扱いが曖昧 | instruction priority、completion rule、missing-context gate を短く追加 |
+| F | tool を必ず多用させる、tool 必須条件が曖昧 | 使う条件と evidence rule を明示し、固定回数指定は削る |
+| G | finding prompt に「high severity のみ」「be conservative」 | finding は coverage-first、ranking / dedupe / verify は後続 phase |
+| H | compaction 後に再開不能(会話中の合意だけが正本) | prompt / summary / expected artifact / blocked state を `.context/` に保存 |
+| I | verbosity と reasoning の混同 | 回答長は output contract、推論量は effort で別々に調整 |
+| J | schema を自然言語 prompt に長文埋め込み、static の前に動的 context | structured output 機能を標準にし、static first / dynamic last |
+| K | vision / computer use の旧解像度・座標前提 | 現行値へ更新。未検証なら旧値を残し「要確認」 |
+| L | skill description から起動・除外条件が読めない | literal に解釈できる description へ更新し、変更前後で誤発火・不発火を確認 |
+
+### Claude 列 A 後継世代(Opus 5.5)の差分
+
+出典: `claude-api` skill の Current Models / Thinking & Effort と model migration(2026-10-03 確認)。
+alias `opus` がこの世代を指すかは Claude Code 側の alias 定義に依存し未確認。
+
+| 項目 | 変更点 | 監査上の扱い |
+|---|---|---|
+| effort 既定 | `medium`(前世代は `high`)。省略すると 1 段低く動く | 「既定 high」前提の文書・registry は effort 明示を提案(B) |
+| thinking 無効化 | 不可(`disabled` / `budget_tokens` は 400) | 「考えずに答えて」型の指示は effort 下げへ置換(C) |
+| 強制 tool use(`tool_choice` の `any` / `tool`) | 400。`auto` + prompt 誘導か structured outputs | tool 強制前提のハーネスは「条件を書いて呼ばれたか検査」へ(F) |
+| preserved thinking | thinking ブロックが会話に結び付き、履歴編集で無効化 | 履歴を書き換えるハーネスは append-only か確認(H) |
+| 安全分類器 | `bio` / `reasoning_extraction` が追加 | 推論過程を本文に書かせる指示は削除候補(C) |

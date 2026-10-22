@@ -1,6 +1,6 @@
 ---
 name: pdf-extract
-description: Extract structured content (tables, body text, handwritten notes, margin annotations) from a PDF into a reproducible Markdown artifact with YAML frontmatter and a cache key. Codex CLI is the primary backend, resolved through the agent-orchestrator model registry and run via codex-cli-runner; an explicitly declared Claude path covers environments without Codex. Repo-specific prompt templates stay in the repository. Use when asked to PDFを構造化して抽出, PDFから表を抜き出す, 見積書・請求書・図面・FAXを読み取る, 手書きメモも含めて書き起こす, OCRして artifact に残す, or pdf-extract.
+description: Extract structured content (tables, body text, handwritten notes, margin annotations) from a PDF into a reproducible Markdown artifact with YAML frontmatter and a cache key. Codex CLI is the primary backend (resolved via the agent-orchestrator model registry, run through codex-cli-runner); a declared Claude path covers environments without Codex. Use when asked to PDFを構造化して抽出, PDFから表を抜き出す, 見積書・請求書・図面・FAXを読み取る, 手書きメモも含めて書き起こす, OCRして artifact に残す, or pdf-extract.
 ---
 
 # pdf-extract

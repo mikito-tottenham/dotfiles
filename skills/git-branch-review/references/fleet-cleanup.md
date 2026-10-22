@@ -64,5 +64,5 @@ source: ~/Claude/.context/2026-09-26-branch-pr-cleanup の scan.py / plan.py / d
 
 ## repo の取り込みと日常同期
 
-- 新しい repo の clone と置き場所は `ghq-repo-placement` skill に従う（`ghq root` が `~/Claude/ghq` を返すことを確認してから `ghq get`、その後 `~/Claude/repos/` に symlink を 1 本追加）
+- 新しい repo は `ghq root` 配下に置く（`ghq root` が期待する root を返すことを確認してから `ghq get`。環境固有の後処理、例えば `repos/` への symlink 追加は、その環境の指示ファイルに従う）
 - push 権限のある repo の定期的な fast-forward 追従は dotfiles 管理の `repo-sync`（`~/.local/bin/repo-sync`、LaunchAgent で毎時実行）が担う。clean かつ fast-forward 可能なものだけ pull し、dirty / ahead / diverged は ATTENTION として報告するので、その一覧を棚卸しの入力にしてよい

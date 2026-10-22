@@ -1,0 +1,4 @@
+interface:
+  display_name: "Task Sweep"
+  short_description: "Verify my tasks are really done from source evidence"
+  default_prompt: "Use $task-sweep to check, read-only, whether my tasks are really done, citing evidence from every connected source of the organization my repository points to."

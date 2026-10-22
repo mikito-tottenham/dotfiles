@@ -1,0 +1,4 @@
+interface:
+  display_name: "Meeting Minutes"
+  short_description: "Retrieve transcripts and turn them into repo-conformant minutes"
+  default_prompt: "Use $meeting-minutes to retrieve a meeting transcript (from Soundcore AI when needed), map speakers, write minutes in the target repo's format, update its index, and extract decisions and action items."

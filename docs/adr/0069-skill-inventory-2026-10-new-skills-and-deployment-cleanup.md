@@ -105,3 +105,12 @@ Skill の正本と配備先、dotfiles の ADR、各 repo の repo ローカル 
 - `skill-manager` の `doctor` で `retired_skills` / `first_party_sync` が NO_ISSUES（2026-10-03 の退避・再同期後に確認済み）
 - `pdf-extract`: runner 不在で exit 2 と Codex 親経路の案内、`codex` 不在で exit 127 と `fallback_required` を返すこと
 - 新規 skill 配下に実名・メールアドレス・secret・モデル名の直書きが無いこと（grep）
+
+## 追補（2026-10-23、ADR-0072）
+
+- 決定 2 で新設した 11 本のうち 4 本を、3 週間後の再棚卸し（ADR-0072）で統合・吸収した。`meeting-minutes-ingest` は
+  `soundcore-minutes` と合わせて `meeting-minutes` に統合、`auth-preflight` は `op-cli-runner`、
+  `multi-account-scheduling` は `gws-cli-runner`、`agent-env-parity` は `skill-manager` の `parity` コマンドへ吸収した。
+  いずれも Skill tool の呼出が 0〜1 回で、本文の大半が統合先と同文だった
+- 決定 1 の退避方式は変えず、2026-10-23 の撤去分は `~/.local/share/skill-retired/2026-10-23/` に置く
+- 決定 5 の `model-tuning` / `ai-usage-coach` への追記は、両 skill の削除に伴い `agent-orchestrator` の references へ移した

@@ -1,6 +1,6 @@
 ---
 name: agent-orchestrator
-description: "Plan and coordinate delegated work across agents and runners. Use when splitting independent work packages, selecting role routes through rules/model_registry.yaml, or managing delegated execution. Use when asked to 司令塔として進める, オーケストレーションする, マルチモデルで分担する, Codexへ委譲する, or Claudeへ委譲する."
+description: "Plan and coordinate delegated work across agents and runners. Use when splitting independent work packages, selecting role routes through rules/model_registry.yaml, or managing delegated execution. Use when asked to 司令塔として進める, オーケストレーションする, マルチモデルで分担する, Codexへ委譲する, or Claudeへ委譲する. Also use to audit orchestration boundaries (self vs Self-Elision, runner ownership, explicit fallback) or to tune AGENTS.md / CLAUDE.md / skill / prompt text for a current model generation (委譲境界を監査, モデル向けに調整)."
 ---
 
 # Agent Orchestrator
@@ -101,6 +101,16 @@ resolver の解決結果に従って runner skill または同 provider の suba
 - エラーを迂回して進めた場合の bypass remediation review(恒久対策レビュー)は、
   親 AI の正規指示ファイル(AGENTS-common)の規則を正本とし、発動条件と整理項目は
   そこに従う。本 skill では再定義しない。
+
+## References
+
+- `references/model-profiles.md`: tier ladder 上のモデル特性、実行経路の差、
+  指示文書・prompt を現行モデル世代へ合わせる典型修正パターン(A〜L)と世代差分。
+  `tier: dynamic` の判断時、または AGENTS.md / SKILL.md / prompt のモデル世代棚卸し時に読む。
+- `references/orchestration-invariants.md`: 委譲境界の不変条件(self ≠ Self-Elision、
+  runner 所有権、暗黙 fallback 禁止、coverage-first finding)と、反復する無駄を
+  恒久化するかを決める Promotion Candidate Score。orchestration 文書や委譲 prompt を
+  監査・修正するとき、恒久対策レビューで durable home を選ぶときに読む。
 
 ## 発動
 

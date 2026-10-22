@@ -47,8 +47,6 @@ pandoc draft.md -s --embed-resources --css style.css --metadata title="<タイ�
 
 ## 検品
 
-1. 描画: PPTX は `scripts/render_pptx.sh <deck.pptx> [keynote|soffice]` で `render/slide-NN.jpg` を作り、全ページを目で見る。PDF は `pdftoppm -jpeg -r 110 deck.pdf .context/<task>/slide`。
-2. フォント: `pdffonts deck.pdf` で日本語フォントが埋め込まれている（`emb` が `yes`）ことを確かめる。代替フォントに落ちていたら、テーマ・CSS のフォント指定と環境のフォントを直す。
-3. 本文の欠落: 原稿と PPTX の本文を照合する。`markitdown deck.pptx > .context/<task>/deck.md` の後、`scripts/pptx_text_coverage.py <原稿.md> .context/<task>/deck.md --section '## 本文'`。
-4. 文字数・ページ数: `pypdf` でページ数とテキスト抽出を確かめ、はみ出し（ページ数の想定外の増加）を見つける。
-5. 対外表現: 他の顧客名・内部計画値・社内向けの言い回し・目標値と実績値の混同・出典の無い数値が無いかを、最終ゲートとして `doc-grill` の送付前検品に通す。
+描画の目視、日本語フォントの埋め込み、原稿との本文照合、ページ数、対外表現の確認は `doc-grill` の `references/preflight-checklist.md` を全項目通す。描画用の `render_pptx.sh` と照合用の `pptx_text_coverage.py` は `doc-grill` の `scripts/` にある。ここには再掲しない。
+
+提案資料で特に見る点: 他の顧客名・内部計画値・社内向けの言い回し・目標値と実績値の混同・出典の無い数値。
