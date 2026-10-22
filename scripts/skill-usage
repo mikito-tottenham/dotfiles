@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+"""Count skill invocations in local Claude Code transcripts.
+
+Reads `~/.claude/projects/**/*.jsonl`, collects `Skill` tool calls (the `skill`
+argument) and `<command-name>` markers (slash commands, reported as `slash:<name>`),
+and prints per-skill call counts and the number of distinct sessions (one transcript
+file = one session) within the period. Only skill names and counts are printed; no
+message bodies, arguments, or secrets.
+
+Examples:
+  scripts/skill-usage                                  # last 90 days
+  scripts/skill-usage --since 2026-07-01
+  scripts/skill-usage --skills-dir skills --since 2026-07-01   # also list skills with 0 calls
+  scripts/skill-usage --projects-dir ~/.claude/projects --skills-dir skills | head
+
+Progress (file count, start, done) goes to stderr; the report goes to stdout.
+"""
+
+from __future__ import annotations
+
+import argparse
+import collections
+import datetime as dt
+import json
+import re
+import sys
+import time
+from pathlib import Path
+
+COMMAND_NAME_RE = re.compile(r"<command-name>/?([\w:-]+)</command-name>")
+PROGRESS_EVERY = 200
+
+
+def log(msg: str) -> None:
+    print(f"[skill-usage] {msg}", file=sys.stderr, flush=True)
+
+
+def record_date(obj: dict, fallback: str) -> str:
+    """Return the record's YYYY-MM-DD, from its `timestamp` when present, else the file mtime date."""
+    ts = obj.get("timestamp")
+    if isinstance(ts, str) and len(ts) >= 10:
+        return ts[:10]
+    return fallback
+
+
+def scan_file(path: Path, since: str, calls: collections.Counter, sessions: dict[str, set]) -> None:
+    mtime_date = dt.date.fromtimestamp(path.stat().st_mtime).isoformat()
+    with path.open(encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if '"Skill"' not in line and "command-name" not in line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(obj, dict) or record_date(obj, mtime_date) < since:
+                continue
+            content = (obj.get("message") or {}).get("content")
+            names: list[str] = []
+            if isinstance(content, list):
+                for part in content:
+                    if not isinstance(part, dict):
+                        continue
+                    if part.get("type") == "tool_use" and part.get("name") == "Skill":
+                        skill = (part.get("input") or {}).get("skill")
+                        if isinstance(skill, str) and skill:
+                            names.append(skill.lstrip("/"))
+                    elif part.get("type") == "text":
+                        names.extend("slash:" + m for m in COMMAND_NAME_RE.findall(part.get("text", "")))
+            elif isinstance(content, str):
+                names.extend("slash:" + m for m in COMMAND_NAME_RE.findall(content))
+            for name in names:
+                calls[name] += 1
+                sessions[name].add(str(path))
+
+
+def skill_dirs(root: Path) -> list[str]:
+    return sorted(p.name for p in root.iterdir() if p.is_dir() and (p / "SKILL.md").is_file())
+
+
+def is_used(skill: str, keys: set[str]) -> bool:
+    return any(k == skill or k == f"slash:{skill}" or k.endswith(f":{skill}") for k in keys)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    default_since = (dt.date.today() - dt.timedelta(days=90)).isoformat()
+    ap.add_argument("--since", default=default_since, metavar="YYYY-MM-DD",
+                    help=f"count records on or after this date (default: 90 days ago = {default_since})")
+    ap.add_argument("--projects-dir", default=str(Path.home() / ".claude/projects"),
+                    help="Claude Code transcript root (default: ~/.claude/projects)")
+    ap.add_argument("--skills-dir", metavar="DIR",
+                    help="first-party skills root; when given, list skills with zero calls in the period")
+    args = ap.parse_args()
+
+    try:
+        dt.date.fromisoformat(args.since)
+    except ValueError:
+        print(f"--since must be YYYY-MM-DD, got {args.since!r}", file=sys.stderr)
+        return 2
+
+    root = Path(args.projects_dir).expanduser()
+    files = sorted(root.glob("**/*.jsonl"))
+    t0 = time.monotonic()
+    log(f"start since={args.since} projects_dir={root} files={len(files)}")
+
+    calls: collections.Counter = collections.Counter()
+    sessions: dict[str, set] = collections.defaultdict(set)
+    errors = 0
+    for i, path in enumerate(files, 1):
+        try:
+            scan_file(path, args.since, calls, sessions)
+        except OSError as exc:
+            errors += 1
+            log(f"skip {path.name}: {exc.__class__.__name__}")
+        if i % PROGRESS_EVERY == 0:
+            log(f"progress {i}/{len(files)} files, {time.monotonic() - t0:.1f}s")
+    log(f"done files={len(files)} errors={errors} skills={len(calls)} calls={sum(calls.values())} "
+        f"elapsed={time.monotonic() - t0:.1f}s")
+
+    print(f"since={args.since} transcripts={len(files)}")
+    print(f"{'skill':48s} {'calls':>5s} {'sessions':>8s}")
+    for name, count in sorted(calls.items(), key=lambda kv: (-kv[1], kv[0])):
+        print(f"{name:48s} {count:5d} {len(sessions[name]):8d}")
+
+    if args.skills_dir:
+        skills_root = Path(args.skills_dir).expanduser()
+        if not skills_root.is_dir():
+            print(f"--skills-dir not found: {skills_root}", file=sys.stderr)
+            return 2
+        keys = set(calls)
+        unused = [s for s in skill_dirs(skills_root) if not is_used(s, keys)]
+        print(f"\nskills in {skills_root} with 0 calls since {args.since}: {len(unused)}")
+        for name in unused:
+            print(f"  {name}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

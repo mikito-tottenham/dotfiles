@@ -342,6 +342,40 @@ def check_first_party_source_drift() -> None:
     add_pass_if_empty("source_drift", "no first-party installs with metadata.local-path found", "global", "source-path")
 
 
+
+WORKTREE_MARKER = "/.claude/worktrees/"
+
+
+def check_source_branch() -> None:
+    """Detect first-party installs recorded from a branch worktree or from a checkout other than the publisher source."""
+    source_path, how = resolve_source_path()
+    if source_path is None:
+        add_check("source_branch", "warn", "SOURCE_PATH_UNRESOLVED", "", f"publisher source path unresolved ({how}); set SKILL_MANAGER_SOURCE_PATH to enable source-branch detection", "source-path", "global")
+        return
+    for agent, skills_dir in (("claude-code", CLAUDE_HOME / "skills"), ("agents", AGENTS_HOME / "skills"), ("codex", CODEX_HOME / "skills")):
+        if not skills_dir.exists():
+            continue
+        for path in sorted(skills_dir.iterdir()):
+            if path.name.startswith(".") or not path.is_dir():
+                continue
+            skill_md = path / "SKILL.md"
+            if not skill_md.exists():
+                continue
+            local_path_raw = read_local_path(skill_md)
+            if local_path_raw is None:
+                continue  # external or manual install; provenance handled elsewhere
+            local_path = Path(local_path_raw).expanduser()
+            local_resolved = local_path.resolve()  # non-strict: a removed worktree must still be reported as the origin
+            subject = f"{agent}:{path.name}"
+            if WORKTREE_MARKER in local_path.as_posix() or WORKTREE_MARKER in local_resolved.as_posix():
+                add_check("source_branch", "warn", "SOURCE_BRANCH_WORKTREE", skill_md, f"metadata.local-path {local_path} was installed from a branch worktree, not from the publisher source checkout; after the branch merges, reinstall from `chezmoi source-path` with gh skill install --from-local --force", subject, "global")
+                continue
+            if local_resolved != source_path and source_path not in local_resolved.parents:
+                add_check("source_branch", "warn", "SOURCE_BRANCH_OUTSIDE_SOURCE", skill_md, f"metadata.local-path {local_path} is not under {source_path} ({how}); reinstall from the publisher source with gh skill install --from-local --force", subject, "global")
+                continue
+            add_check("source_branch", "pass", "SOURCE_BRANCH_OK", skill_md, f"metadata.local-path is under {how} and not a branch worktree", subject, "global")
+    add_pass_if_empty("source_branch", "no first-party installs with metadata.local-path found", "global", "source-path")
+
 T0 = time.time()
 
 
@@ -863,6 +897,7 @@ def main() -> None:
     check_codex_plugins()
     check_registry_health()
     check_first_party_source_drift()
+    check_source_branch()
     check_retired_skills()
     check_first_party_sync()
     check_deprecated_commands()

@@ -472,15 +472,14 @@ ls ~/.config/gws/accounts/*/credentials.json 2>/dev/null | wc -l    # gws プロ
 | op-cli-runner | op | `OP_SERVICE_ACCOUNT_TOKEN` | スコープ内・認証済 |
 | onepassword-secret-materialize | opmaterialize + op + jq | 上記 op に依存（field 方式は `jq` 必須） | スコープ内・認証済 |
 | gws-cli-runner | gws (+ gws-account) | `~/.config/gws/accounts/<profile>/`（restore 後） | スコープ内・restore 後に有効 |
-| ghq-repo-placement | ghq | 不要 | スコープ内・常時可 |
 | skill-manager | gh（`gh skill`） | `GH_TOKEN` / `GITHUB_TOKEN`（web では未設定） | 下記参照 |
-| gemini-cli-runner | gemini | `GEMINI_API_KEY` | 任意（導入のみ・使う時に認証） |
-| copilot-cli-runner | copilot | `COPILOT_GITHUB_TOKEN` / `GH_TOKEN` / `GITHUB_TOKEN` | 任意（導入のみ・使う時に認証） |
 | grok-cli-runner | （bootstrap 対象外） | xAI OAuth（Hermes） | 任意・**bootstrap 未導入**（headless 経路なし） |
 
-> gemini / copilot は「導入はされるが未認証」が既定で、使う時だけ environment 変数または
-> 1Password 経由で認証材料を足す。grok は headless 認証経路が無いため bootstrap-web の導入対象外で、
-> 使うなら別途 CLI 導入 + xAI OAuth が要る（ADR-0045）。
+> gemini / copilot の CLI は引き続き導入されるが、対応する runner skill は ADR-0072 で撤去した
+> （model_registry が route に使わないため）。使う時だけ environment 変数または 1Password 経由で
+> 認証材料（`GEMINI_API_KEY`、`COPILOT_GITHUB_TOKEN` / `GH_TOKEN` / `GITHUB_TOKEN`）を足す。
+> grok は headless 認証経路が無いため bootstrap-web の導入対象外で、使うなら別途 CLI 導入 + xAI OAuth が要る（ADR-0045）。
+> ghq は CLI として導入され、配置規則は共通ルール（`agents-common.md`）が持つ。
 
 ### skill-manager と gh skill の扱い
 

@@ -1,6 +1,6 @@
 ---
 name: client-proposal-pack
-description: Produce a client-facing proposal deck or document end to end, for example for accounting or tax firms - gather prior context and existing materials, draft a skeleton, apply a size-based template, run an adversarial review through doc-grill, export to Marp, PPTX, or PDF after a toolchain preflight, inspect the rendering and fonts, close out through deliverable-closeout, and draft a thank-you email. Use when asked to 提案資料を作って, 事務所向け提案書, 顧問先向けの提案, 資料骨格, 提案の PPT 化, スライドにして, PDF にして送れるように, テンプレート抽出, or お礼メールの文案.
+description: Produce a client-facing proposal deck or document end to end, for example for accounting or tax firms - gather prior context, draft a skeleton, apply a size-based template, run an adversarial review through doc-grill, export to Marp, PPTX, or PDF after a toolchain preflight, inspect the rendering and fonts, close out through deliverable-closeout, and draft a thank-you email. Use when asked to 提案資料を作って, 事務所向け提案書, 顧問先向けの提案, 資料骨格, 提案の PPT 化, スライドにして, PDF にして送れるように, テンプレート抽出, or お礼メールの文案.
 ---
 
 # Client Proposal Pack
@@ -49,12 +49,12 @@ description: Produce a client-facing proposal deck or document end to end, for e
 
 ### Phase 6 検品 → `06-inspection.md`
 
-[references/build-routes.md](references/build-routes.md) の「検品」を全部行う。
+`doc-grill` の送付前検品（`references/preflight-checklist.md`）を全項目通し、結果を `06-inspection.md` に書く。
 
-- 全ページの描画を目で見る（`scripts/render_pptx.sh`、`pdftoppm`）
+- 全ページの描画を目で見る（`doc-grill` の `scripts/render_pptx.sh`、`pdftoppm`）
 - `pdffonts` で日本語フォントの埋め込みを確かめる
-- PPTX は `scripts/pptx_text_coverage.py` で原稿との本文照合をする
-- 最後に `doc-grill` の送付前検品（他の顧客名・内部向け表現・出典の無い数値・目標値と実績値の混同）を通す
+- PPTX は `doc-grill` の `scripts/pptx_text_coverage.py` で原稿との本文照合をする
+- 他の顧客名・内部向け表現・出典の無い数値・目標値と実績値の混同が無いこと
 
 問題が見つかったら Phase 3 か 5 へ戻り、`06-inspection.md` に指摘と修正を記録する。
 

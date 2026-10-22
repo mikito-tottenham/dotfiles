@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Validate a skill without requiring third-party Python packages."""
+"""Validate one or more skills without requiring third-party Python packages.
+
+Usage: scripts/skill-quick-validate <skill_directory> [<skill_directory> ...]
+
+Each description longer than DESCRIPTION_BUDGET characters (Python `len`) prints a
+WARN without changing the exit code; the hard limit of 1024 characters stays an error.
+With several skill directories (for example `skills/*`), the total description length
+is printed at the end so the combined budget stays visible.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +17,8 @@ import sys
 from pathlib import Path
 
 MAX_SKILL_NAME_LENGTH = 64
+MAX_DESCRIPTION_LENGTH = 1024
+DESCRIPTION_BUDGET = 500
 RUNNER_COMMON_RELPATH = Path("references") / "runner-common.md"
 ALLOWED_PROPERTIES = {"name", "description", "license", "allowed-tools", "metadata"}
 
@@ -92,60 +102,76 @@ def check_runner_common(skill_path: Path) -> str | None:
     return f"{RUNNER_COMMON_RELPATH.as_posix()} differs across cli-runner skills (md5): {detail}"
 
 
-def validate_skill(skill_path: Path) -> tuple[bool, str]:
+def validate_skill(skill_path: Path) -> tuple[bool, str, int]:
+    """Return (valid, message, description_length). Length is 0 when the description could not be read."""
     skill_md = skill_path / "SKILL.md"
     if not skill_md.exists():
-        return False, "SKILL.md not found"
+        return False, "SKILL.md not found", 0
 
     frontmatter, warnings, error = parse_frontmatter(skill_md)
     if error:
-        return False, error
+        return False, error, 0
 
     unexpected_keys = set(frontmatter) - ALLOWED_PROPERTIES
     if unexpected_keys:
         allowed = ", ".join(sorted(ALLOWED_PROPERTIES))
         unexpected = ", ".join(sorted(unexpected_keys))
-        return False, f"Unexpected key(s) in SKILL.md frontmatter: {unexpected}. Allowed properties are: {allowed}"
+        return False, f"Unexpected key(s) in SKILL.md frontmatter: {unexpected}. Allowed properties are: {allowed}", 0
 
     if "name" not in frontmatter:
-        return False, "Missing 'name' in frontmatter"
+        return False, "Missing 'name' in frontmatter", 0
     if "description" not in frontmatter:
-        return False, "Missing 'description' in frontmatter"
+        return False, "Missing 'description' in frontmatter", 0
 
     name = frontmatter.get("name", "").strip()
     description = frontmatter.get("description", "").strip()
+    desc_len = len(description)
     if not name:
-        return False, "Name must be a non-empty string"
+        return False, "Name must be a non-empty string", desc_len
     if not re.match(r"^[a-z0-9-]+$", name):
-        return False, f"Name '{name}' should be hyphen-case (lowercase letters, digits, and hyphens only)"
+        return False, f"Name '{name}' should be hyphen-case (lowercase letters, digits, and hyphens only)", desc_len
     if name.startswith("-") or name.endswith("-") or "--" in name:
-        return False, f"Name '{name}' cannot start/end with hyphen or contain consecutive hyphens"
+        return False, f"Name '{name}' cannot start/end with hyphen or contain consecutive hyphens", desc_len
     if len(name) > MAX_SKILL_NAME_LENGTH:
-        return False, f"Name is too long ({len(name)} characters). Maximum is {MAX_SKILL_NAME_LENGTH} characters."
+        return False, f"Name is too long ({len(name)} characters). Maximum is {MAX_SKILL_NAME_LENGTH} characters.", desc_len
 
     if not description:
-        return False, "Description must be a non-empty string"
+        return False, "Description must be a non-empty string", desc_len
     if "<" in description or ">" in description:
-        return False, "Description cannot contain angle brackets (< or >)"
-    if len(description) > 1024:
-        return False, f"Description is too long ({len(description)} characters). Maximum is 1024 characters."
+        return False, "Description cannot contain angle brackets (< or >)", desc_len
+    if desc_len > MAX_DESCRIPTION_LENGTH:
+        return False, f"Description is too long ({desc_len} characters). Maximum is {MAX_DESCRIPTION_LENGTH} characters.", desc_len
 
     if warnings:
-        return False, "; ".join(warnings)
+        return False, "; ".join(warnings), desc_len
 
     runner_common_error = check_runner_common(skill_path)
     if runner_common_error:
-        return False, runner_common_error
-    return True, "Skill is valid!"
+        return False, runner_common_error, desc_len
+    return True, f"Skill is valid! (description {desc_len} chars)", desc_len
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
-        print("Usage: scripts/skill-quick-validate <skill_directory>")
+    paths = [Path(arg) for arg in sys.argv[1:]]
+    if not paths:
+        print("Usage: scripts/skill-quick-validate <skill_directory> [<skill_directory> ...]")
         return 1
-    valid, message = validate_skill(Path(sys.argv[1]))
-    print(message)
-    return 0 if valid else 1
+
+    all_valid = True
+    total_len = 0
+    prefix = len(paths) > 1
+    for skill_path in paths:
+        valid, message, desc_len = validate_skill(skill_path)
+        all_valid = all_valid and valid
+        total_len += desc_len
+        label = f"{skill_path}: " if prefix else ""
+        print(f"{label}{message}")
+        if desc_len > DESCRIPTION_BUDGET:
+            print(f"{label}WARN: description is {desc_len} chars; budget is {DESCRIPTION_BUDGET}")
+
+    if prefix:
+        print(f"description total: {total_len} chars across {len(paths)} skills")
+    return 0 if all_valid else 1
 
 
 if __name__ == "__main__":

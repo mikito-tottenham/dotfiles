@@ -12,8 +12,9 @@
 # - 判断基準はこのファイルに書き、tier / provider の選択は親オーケストレータが
 #   タスク内容から毎回推論する(基準は文書、判断は動的)。
 #
-# 2026-07-25 ユーザー判断: Gemini / Grok / Copilot は route に使わない
-# (runner skill 自体は他用途のため残置)。対応 tier / role が存在しない依頼は、
+# 2026-07-25 ユーザー判断: Gemini / Grok / Copilot は route に使わない。
+# 2026-10-23: Gemini / Copilot の runner skill は撤去済み(Grok の runner は
+# X/Twitter 証拠取得など route 外の用途のため残置)。対応 tier / role が存在しない依頼は、
 # 暗黙 fallback せず route 不在としてユーザーへ blocked 報告すること。
 #
 # v3: provider: parent と codex self_elision を追加し、resolver を親相対化。

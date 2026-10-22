@@ -1,6 +1,6 @@
 ---
 name: doc-grill
-description: "Run an adversarial review loop on a document: a different model grills the draft, the parent adjudicates every finding in a table, fixes the source, has a consistency review check the fixes, and repeats until a stated convergence condition holds; documents leaving the organization then pass a pre-send gate for Japanese fonts, client-unfit wording, leaked internal notes or confidential data, and file format. For proposals, business plans, scheme documents, training material, and client decks. Not grill-me, which interviews the user about their plan; this skill reviews a written document. Use when asked to Grill して, 叩いて, 敵対レビュー, 壁打ちレビュー, 批判的にレビュー, 別モデルでレビュー, 相互レビュー, 徹底的にレビューして, 外部に出せるように, or 送付前チェック."
+description: "Adversarial review loop on a written document: another model grills the draft, the parent adjudicates every finding, fixes the source, then a consistency review, until convergence; external documents then pass a pre-send gate (fonts, wording, leaked notes, format). Covers proposals, decks, and public or sourced reports. Not grill-me. Use when asked to Grill して, 叩いて, 敵対レビュー, 壁打ちレビュー, 批判的にレビュー, 別モデルでレビュー, 相互レビュー, 徹底的にレビューして, 外部に出せるように, 送付前チェック, 外部公開レポート, or 出典付きレポート."
 ---
 
 # Doc Grill
@@ -106,6 +106,10 @@ Grill 結果の**全件**について、[references/adjudication.md](references/
 - 顧客に出せない文言（内輪の表現、過剰な約束、保証表現、保留中の論点の確約）
 - 機密・内部メモの混入（コメント、発表者ノート、`要確認` タグ、他案件の名称、内部 path、AI の作業メモ）
 - ファイル形式（指定どおりの形式、最新の正本からの生成、ファイル名の規約、開けること）
+
+描画と本文照合には同梱 script を使う: `scripts/render_pptx.sh <deck.pptx> [keynote|soffice]`（PPTX → PDF → `render/slide-NN.jpg`）、`scripts/pptx_text_coverage.py <原稿.md> <pptx のテキスト.md> [--section '## 本文']`（原稿の本文が派生物に欠けていないか）。呼び方はチェックリストに書いてある。
+
+外部公開レポート・出典付きレポートの Grill 観点と検品基準は [references/external-report-standard.md](references/external-report-standard.md) を併用する。
 
 送付、アップロード、共有設定の変更は、この skill では行わない。ユーザーの明示指示を受けて別の作業として行う。
 

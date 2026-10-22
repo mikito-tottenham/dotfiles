@@ -11,7 +11,7 @@ description: Prepare a pre-meeting brief for a recurring or one-off meeting by c
 
 - 作業 repo に会議専用の Skill（例: 定例会議専用の repo ローカル Skill）があれば、そちらを優先する。この Skill はその一般形で、会議ごとの Doc ID・チャンネル・出席者・書き込み先は持たない。
 - 会議固有の情報（議事録の置き場、アジェンダの正本、見るチャンネル、相手先の呼び方）は作業 repo の README / AGENTS.md / 議事録索引から読む。見つからなければユーザーに聞く。
-- 議事録の作成（会議後）は対象外。文字起こしの取得は `soundcore-minutes` を使う。
+- 議事録の作成（会議後）と文字起こしの取得は対象外。`meeting-minutes` を使う。
 
 ## Phase と artifact
 
@@ -21,7 +21,7 @@ description: Prepare a pre-meeting brief for a recurring or one-off meeting by c
 
 1. 会議の主体（どの会社・どの相手との会議か）を決める。曖昧ならユーザーに聞く。
 2. 作業ルートの `AGENTS.md`「アカウント境界」節で、主体ごとの経路を引く。カレンダー・Gmail・Drive は `gws-account <profile>` か MCP コネクタ、Slack は `oprun slack-account <profile>` か MCP コネクタ、Chatwork は MCP。プロファイル名の対応は `gws-cli-runner` の `references/account-profiles.md` を正本とする。
-3. `auth-preflight` Skill の script を `--only gws` などで実行し、使う経路の状態を確かめる。MCP コネクタは同 Skill の「MCP コネクタの確認」で接続先の組織を確かめる。コネクタの接続先が目的の組織と違う場合、そのコネクタの結果は使わない。
+3. `op-cli-runner` の `scripts/auth_preflight.py` を `--only gws` などで実行し、使う経路の状態を確かめる。MCP コネクタは同 Skill の `references/preflight.md` の「MCP コネクタの確認」で接続先の組織を確かめる。コネクタの接続先が目的の組織と違う場合、そのコネクタの結果は使わない。
 4. 情報源ごとに「使う経路／接続先の確認結果／使えない理由」を `00-preflight.md` に書く。
 
 ### Phase 1 収集 → `01-sources.md`

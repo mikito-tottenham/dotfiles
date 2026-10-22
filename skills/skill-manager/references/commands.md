@@ -163,6 +163,12 @@ Script-backed checks (`scripts/executable_doctor.sh`) also emit a `source_drift`
 
 Without the script, do the same check by hand: `chezmoi source-path`, then `grep -h 'local-path' ~/.claude/skills/*/SKILL.md ~/.codex/skills/*/SKILL.md` and compare prefixes.
 
+`source_branch` complements `source_drift` by asking where the recorded path came from, across `~/.claude/skills`, `~/.agents/skills`, and `~/.codex/skills`:
+- `SOURCE_BRANCH_OK`: `metadata.local-path` is under the `chezmoi source-path` checkout and not inside a branch worktree
+- `SOURCE_BRANCH_WORKTREE` (warn): `metadata.local-path` contains `/.claude/worktrees/`, i.e. the skill was installed from a branch worktree (for example while a new skill was under review). Acceptable until the branch merges; then reinstall from the publisher source with `gh skill install . <name> --from-local --agent <agent> --scope user --force`. The path is not resolved strictly, so a removed worktree still reports this code (together with `LOCAL_PATH_MISSING` from `source_drift`)
+- `SOURCE_BRANCH_OUTSIDE_SOURCE` (warn): `metadata.local-path` is outside the `chezmoi source-path` checkout altogether (a second clone, a `.context/` copy); same remediation as `SOURCE_PATH_STALE`
+- `SOURCE_PATH_UNRESOLVED` (warn): the publisher source could not be resolved, so the check was skipped
+
 The script also cross-checks retirement declarations and Codex sync across `~/.claude/skills`, `~/.agents/skills`, and `~/.codex/skills`. It reads the install manifest at `<chezmoi source-path>/docs/skills-install-manifest.md` (override with `SKILL_MANAGER_MANIFEST`; `~/.agents` with `SKILL_MANAGER_AGENTS_HOME`) and prints progress lines on stderr:
 
 - `retired_skills`:
@@ -180,6 +186,38 @@ Remediation stays user-approved and follows the repository policy, not this skil
 1. Retired skills: move each flagged directory out of all three deployment directories into a dated retire directory (or `gh skill remove <name> --agent <agent> --scope user`). For `RETIRED_IN_LOCK`, back up the lock file first and remove only the matching entries with a JSON-aware tool (`jq` / `python3`), never by text substitution.
 2. Codex sync: from `cd "$(chezmoi source-path)"`, rerun the manifest's Codex block (`gh skill install . <name> --from-local --agent codex --scope user --force`), then `rsync -a --delete ~/.agents/skills/<name>/ ~/.codex/skills/<name>/` per skill. Copy the existing `~/.codex/skills/<name>` aside first if it may hold local edits. Leave Codex-only skills (e.g. bundled ones such as `hatch-pet`) and `.system` untouched.
 3. Rerun `doctor` and confirm `retired_skills` and `first_party_sync` report `NO_ISSUES`.
+
+### `parity`
+
+Check whether the dotfiles source and the agent environments still match (formerly the `agent-env-parity` skill). The checks themselves live in existing scripts; this command only decides which check runs where and how the result is summarized. Do not reimplement a check or write a new comparison script; if a check is missing, propose it as a change to the owning script.
+
+Premises:
+- The source of truth is the checkout returned by `chezmoi source-path`. Cloud sessions clone the default branch of origin, so local unpushed changes do not exist in the cloud.
+- Every step is read-only. Remediation (delete, move aside, reinstall, `chezmoi apply`, push) happens only after showing the result and getting the user's approval, through the owner in the table below.
+- A worktree created by the Agent tool's `isolation: "remote"` (or any `.claude/worktrees/` worktree) is not a cloud environment. Treat only results taken inside an actual cloud session as cloud measurements; never infer cloud state from a local run.
+
+| Aspect | Check | Runs | Remediation owner |
+|---|---|---|---|
+| Source checkout vs origin | `git -C "$(chezmoi source-path)" fetch origin`, then `git -C "$(chezmoi source-path)" rev-list --left-right --count HEAD...origin/HEAD` and `git status --short` | local | user decision (pull / push need approval) |
+| Skill deployment (retired skills still deployed, drift from source, `~/.codex/skills` mirror gaps, branch-worktree installs) | `doctor` (`retired_skills` / `first_party_sync` / `source_drift` / `source_branch`) | local | `doctor` remediation steps above |
+| Local dotfiles (Claude / Codex config and other managed files) vs the real files | `scripts/chezmoi-drift` (no arguments) and `scripts/chezmoi-drift --check-ignore` | local | dotfile-update skill; `--apply` / `--restore` change state and need approval |
+| Cloud environment reproduction (skills / CLIs / MCP / presence of secrets) | `scripts/verify-cloud-parity --json` | inside a cloud session (locally, cloud-only items show `N/A`) | keep `scripts/bootstrap-web` and `docs/skills-install-manifest.md` in sync (dotfiles `AGENTS.md`, skill management section) |
+
+Steps:
+1. Decide the aspects (one row when the request names one aspect; all rows top to bottom for "check everything") and create `.context/<task>/` (`agent-env-parity-<YYYY-MM-DD>` when no task name is given).
+2. Record the source checkout location and its ahead/behind count against origin. When it is not in sync, state in the report that "drift from source" below means drift from the local checkout, not from origin.
+3. Run `bash <skill-dir>/scripts/executable_doctor.sh > .context/<task>/doctor.json 2> .context/<task>/doctor.log`, then extract the non-pass items of `retired_skills`, `first_party_sync`, `source_drift`, and `source_branch`. Other categories (plugins and so on) are out of scope; keep only their counts.
+4. From the dotfiles checkout root run `scripts/chezmoi-drift` and `scripts/chezmoi-drift --check-ignore` and save the output. Without options they only list; they never apply or restore.
+5. Inside a cloud session run `scripts/verify-cloud-parity --json` and save it. A local run only confirms local prerequisites (CLIs, chezmoi layout) and must not be written up as a cloud result.
+6. Summarize everything in one table.
+
+Output: `.context/<task>/parity-report.md` with Front Matter `task` / `phase_or_step` / `created_at`, containing:
+- a verdict per aspect (`OK` / `drift` / `not checked`, with the reason)
+- the list of gaps: aspect, subject (skill name, file, CLI), check code (for example `RETIRED_STILL_DEPLOYED`, `CODEX_MIRROR_STALE`, `SOURCE_BRANCH_WORKTREE`, `MISSING`), remediation owner
+- proposed remediation, not executed; mark every operation that needs approval (delete, move aside, reinstall, `chezmoi apply`, push)
+- the path of each check's raw output
+
+Never print secret values. `verify-cloud-parity` reports only the presence of secrets, so its output may be pasted as is.
 
 ### `sync codex`
 

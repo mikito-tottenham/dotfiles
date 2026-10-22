@@ -1,6 +1,6 @@
 ---
 name: git-branch-review
-description: "Inspect fresh Git branch state across local machines and collaborators. Use when Claude Code or Codex needs to fetch recent remote refs, decide whether a clean local branch can be fast-forwarded from origin, compare local branches with upstream/default branches, check whether branches are merged, or correlate local branches with GitHub PR state; also to review or clean up branches, PRs, and worktrees across many repositories (fleet mode): inventory, cleanup plan, approval, and safe local deletion. Use when asked to ブランチの状態を確認, ブランチを最新化, マージ済みか確認, ブランチとPRの対応を確認, ブランチを棚卸し, 全部のブランチやPRを整理, 漏れてるPRは, ブランチをmainだけに, マージ済みブランチを消して, worktreeを整理, or PRの棚卸し."
+description: "Inspect and tidy Git branch state: fetch remote refs, fast-forward clean local branches, compare with upstream/default, check merge status, correlate branches with GitHub PRs; fleet mode reviews branches, PRs, and worktrees across many repositories (inventory, cleanup plan, approval, safe local deletion). Use when asked to ブランチの状態を確認, ブランチを最新化, マージ済みか確認, ブランチとPRの対応を確認, ブランチを棚卸し, 全部のブランチやPRを整理, 漏れてるPRは, ブランチをmainだけに, マージ済みブランチを消して, worktreeを整理, or PRの棚卸し."
 ---
 
 # Git Branch Review
@@ -62,7 +62,7 @@ Hard rules in this mode:
 - Call GitHub only through `ghrun gh`. On 401 or a missing token, ask the user to run `ghrun --refresh` in a normal terminal.
 - Before merging old PRs, check numbered files such as `docs/adr/NNNN-*` for collisions with the default branch.
 
-For onboarding new repositories use `ghq-repo-placement`; routine fast-forward sync of checkouts is handled by the dotfiles-managed `repo-sync` command (see the last section of the reference).
+Place new repository checkouts under the path returned by `ghq root` (`ghq get`), never under an ad hoc path; routine fast-forward sync of checkouts is handled by the dotfiles-managed `repo-sync` command (see the last section of the reference).
 
 ## Output Contract
 

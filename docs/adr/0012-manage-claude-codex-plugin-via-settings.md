@@ -30,3 +30,11 @@ Claude Code で `openai/codex-plugin-cc` を常用できるようにしたい。
 - marketplace 登録と enabled 状態は dotfiles で再現できる。
 - install cache を git 管理しないため、マシン固有の plugin 実体や更新時刻を持ち込まずに済む。
 - 新しい環境では `chezmoi apply` 後に plugin install が 1 回必要になる。
+
+## 追補（2026-10-23、ADR-0072）
+
+- 2026-10-23 の棚卸しで `codex@openai-codex` plugin はローカルの install cache が不在、利用 1 回だったため撤去を検討したが、
+  settings（`enabledPlugins` / `extraKnownMarketplaces`）に維持する。ADR-0045 の 2026-06-22 実測でクラウドセッションの
+  Codex 委譲が plugin proxy 経由で動くと記録されており、ADR-0068 でその経路が未検証のままだからである
+- ローカルで cache が無い状態は、本 ADR の Decision どおり `claude plugin install codex@openai-codex` の個別実行を案内する
+  に留める。撤去の再判断条件は ADR-0072 の Consequences に置く

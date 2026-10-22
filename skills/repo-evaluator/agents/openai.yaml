@@ -1,0 +1,6 @@
+interface:
+  display_name: "Repo Evaluator"
+  short_description: "Evaluate codebases, docs systems, and AI docs entrypoints"
+  default_prompt: "Use $repo-evaluator to evaluate this repository (code health, documentation system, or AI docs entrypoints) and write a structured, report-only evaluation."
+policy:
+  allow_implicit_invocation: false

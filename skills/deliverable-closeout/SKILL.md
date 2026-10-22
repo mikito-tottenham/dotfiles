@@ -1,6 +1,6 @@
 ---
 name: deliverable-closeout
-description: Close out finished work and deliverables in one pass. Confirm target files, commit, push, open the PR and merge it once checks pass without per-step confirmation, ask once for the Google Drive upload, save final PDF/Office outputs to the organization's Drive through gws-account with md5 de-duplication, add Drive links to the repository index, and finish with a copy-paste URL list. Use when work or a deliverable is ready to wrap up. Use when asked to 締めて, PRして, GHへ入れて, Driveに入れてリンク貼って, 成果物をDriveに保存して, 索引にリンクを追加して, or そのままコピペできるリンクで.
+description: Close out finished work and deliverables in one pass. Confirm target files, commit, push, open the PR and merge it once checks pass without per-step confirmation, ask once for the Google Drive upload, save final PDF/Office outputs to the organization's Drive through gws-account with md5 de-duplication, add Drive links to the repository index, and finish with a copy-paste URL list. Use when asked to 締めて, PRして, GHへ入れて, Driveに入れてリンク貼って, 成果物をDriveに保存して, 索引にリンクを追加して, or そのままコピペできるリンクで.
 ---
 
 # Deliverable Closeout
@@ -9,9 +9,8 @@ description: Close out finished work and deliverables in one pass. Confirm targe
 
 ## 正本と前提
 
-- Drive 保存先・対象外・重複判定のルールの正本は `~/Claude/AGENTS.md` の「成果物（PDF / pptx / docx / xlsx）の Drive 保存」節。毎回読み直し、repo の AGENTS.md / README に明示された置き場があればそちらを優先する。どちらにも無い場合は保存先をユーザーに確認する
-- gws は必ず `gws-account <profile> ...` で実行する。profile と組織の対応、再認証の依頼方法は `gws-cli-runner` skill の `references/account-profiles.md`、Drive の API 形は同 `references/drive.md` を参照する。Claude の MCP Drive コネクタは別アカウント接続のことがあるため使わない
-- git の規約（agents-common）: commit・push・PR 作成・merge は作業指示が承認を兼ね、確認を挟まない。merge はチェックの完了を待ち、すべて成功して `mergeStateStatus` が `CLEAN` のときだけ行う。ユーザーが「PR まで」などと範囲を限ったらそれに従う。状態変更コマンドは `&&`・`;`・パイプで連結せず単独で実行する。gh は `ghrun gh` で呼ぶ
+- Drive 保存先・対象外・重複判定のルールは作業ルートの `AGENTS.md` の「成果物（PDF / pptx / docx / xlsx）の Drive 保存」節を毎回読み直し、repo の AGENTS.md / README に明示された置き場があればそちらを優先する（どちらにも無ければユーザーに確認する）。gws は `gws-account <profile> ...` で実行し、profile の対応と再認証は `gws-cli-runner` の `references/account-profiles.md`、Drive の API 形は同 `references/drive.md` に従う。MCP の Drive コネクタは別アカウント接続のことがあるため使わない
+- commit・push・PR 作成・マージの規則（作業指示が承認を兼ねる範囲、チェック完了と `mergeStateStatus` が `CLEAN` の確認、状態変更コマンドの単独実行、`ghrun gh`、禁止操作）は agents-common.md の git / PR / マージ節（ADR-0065 / ADR-0071）を正本とし、ここでは再掲しない。ユーザーが「PR まで」などと範囲を限ったらそれに従う
 - 中間成果物は作業 worktree の `.context/<YYYY-MM-DD>-closeout/`（以下 `$D`）に置き、各 Step の artifact を次 Step へ進む条件にする
 
 ## Workflow
