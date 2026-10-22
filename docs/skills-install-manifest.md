@@ -10,6 +10,8 @@ updated_at: 2026-10-23
 > **install は必ず `chezmoi source-path` が返す root で実行すること。** 各行の `.` はその root（この環境では ghq 配下の dotfiles checkout）を指す。`~/.local/share/chezmoi` など別 clone や worktree から実行すると、配備コピーの `metadata.local-path` が編集中の正本と別の checkout を指す stale install になる（2026-09-15 に 43 件検出）。実行前に `cd "$(chezmoi source-path)"` し、配備後は `skill-manager` の `doctor`（`source_drift` カテゴリ）で `SOURCE_PATH_STALE` が無いことを確認する。
 
 当面は script を作らず、docs-only の install manifest として維持する。
+> 既存の配備コピーを更新するときは、`gh skill install -f` が正本から消えたファイルを配備先に残す（2026-10-23 実測。`first_party_sync` が stale を報告）ため、`rm -rf <配備先>/<skill>` してから install すること。
+
 将来 `gh` 側に manifest 機能が入ったら、そちらへ移行を検討する。
 
 Claude Code on the web の ephemeral 環境に限り、`scripts/bootstrap-web`（SessionStart hook 経由）が **web で復元可能なサブセット**を自動再インストールする（ADR-0045）。サブセットは「first-party 全部（必須）＋ 公開 third-party のうち取得できたもの（best-effort）」で、manifest 全体とは一致しない。first-party の欠落は bootstrap を失敗させ、third-party の取得失敗は skip して継続する。2026-09-23 時点の third-party 取得対象は `natural-japanese` と `japanese-business-writing`（いずれも commit SHA で pin）。スキルを追加・削除したときは、この manifest と `scripts/bootstrap-web` のリストを同期すること。
