@@ -1,6 +1,6 @@
 ---
 name: meeting-minutes
-description: "Turn a meeting recording or transcript into repo-conformant minutes: retrieve transcripts and summaries from Soundcore Work / Soundcore AI (ai.soundcore.com) through an authenticated browser session, map speakers, normalize proper nouns, write the minutes in the target repo's own format and location, update its index, and extract decisions and action items. Use when asked to Soundcoreから議事録を取得, 録音の文字起こしを取得, 議事録として保存, 文字起こしです保存して, 議事録にして, 話者を対応付けて, 決定事項とタスクを抜き出して, or この会議のネクストアクション."
+description: Turn a meeting recording or transcript into repo-conformant minutes — retrieve transcripts and summaries from Soundcore Work / Soundcore AI (ai.soundcore.com) through an authenticated browser session, map speakers, normalize proper nouns, write the minutes in the target repo's own format and location, update its index, and extract decisions and action items. Use when asked to Soundcoreから議事録を取得, 録音の文字起こしを取得, 議事録として保存, 文字起こしです保存して, 議事録にして, 話者を対応付けて, 決定事項とタスクを抜き出して, or この会議のネクストアクション.
 ---
 
 # Meeting Minutes
