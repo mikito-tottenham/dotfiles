@@ -49,14 +49,14 @@ The script prints progress before network-sensitive work and emits a Markdown re
 
 Use this mode when the user asks to review or clean up branches, PRs, or worktrees across many repositories (for example 「全部のブランチや PR を整理」「漏れてる PR は」「ブランチを main だけに」). Follow `references/fleet-cleanup.md` and its bundled scripts:
 
-1. `scripts/fleet_scan.py --root <dir> ... --out <.context/...>/01-scan.json` inventories repos read-only. Roots may be a single repo, a ghq root, or a symlink directory; pass both `~/Claude/ghq` and `~/ghq` to cover legacy checkouts.
+1. `scripts/fleet_scan.py --root <dir> ... --out <.context/...>/01-scan.json` inventories repos read-only. Roots may be a single repo, a ghq root, or a symlink directory; pass both `~/Claude/ghq` and `~/ghq` to cover legacy checkouts. Checkouts are grouped by the repo's current GitHub owner/name, so a checkout whose origin still uses a renamed or transferred slug becomes a duplicate instead of a second repo.
 2. `scripts/fleet_plan.py` turns the scan into `02-plan.json` / `02-plan.md` with categories (merged local, merged remote, open PRs, numbered-file conflicts, unmerged leftovers, dirty trees, protected items).
 3. Ask the user once which categories to execute. Nothing is deleted before that approval.
 4. `scripts/fleet_delete_local.py` deletes approved local branches (dry-run unless `--execute`) after re-verifying each branch. `scripts/fleet_verify_remote.py` only re-verifies remote branches and prints per-repo delete commands for the user to approve.
 
 Hard rules in this mode:
 
-- Never delete worktrees under `.claude/worktrees/` or branches checked out there; they belong to Claude Desktop sessions.
+- Never delete worktrees under `.claude/worktrees/` or branches checked out there, in any local checkout of the same GitHub repo; they belong to Claude Desktop sessions. A remote branch checked out in another worktree or main checkout with activity in the last 24h also stays out of deletion. The plan lists both as protected, and `fleet_verify_remote.py` re-checks every checkout before printing commands.
 - Detect squash merges by matching the branch tip to a merged PR head (or an unchanged tree after merge), not by ancestry alone.
 - Remote branch deletion, PR close, and PR merge require explicit user approval per category or PR; run each such command alone, never chained with `&&`, `;`, or pipes. Do not route around an auto mode classifier denial.
 - Call GitHub only through `ghrun gh`. On 401 or a missing token, ask the user to run `ghrun --refresh` in a normal terminal.

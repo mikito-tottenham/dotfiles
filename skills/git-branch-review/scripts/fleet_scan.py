@@ -10,12 +10,15 @@ usage:
   fleet_scan.py --root /path/to/one/repo --out ... --no-pr
 
 Roots may be a repository itself, a ghq root (host/owner/repo), or a directory of
-symlinks such as ~/Claude/repos. The first root that contains a GitHub slug is the
-primary checkout; later checkouts of the same slug are marked ``duplicate_of``.
+symlinks such as ~/Claude/repos. The origin slug is resolved to GitHub's current
+owner/name (``gh repo view``), so a renamed or transferred repo and its new name count as
+one repo. The first root that contains a slug is the primary checkout; later checkouts
+of the same slug are marked ``duplicate_of``.
 """
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import os
 import re
@@ -25,7 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from fleet_common import (SESSION_WORKTREE_MARK, content_in_default, default_branch, gh, git,  # noqa: E402
-                          is_ancestor, log, now_iso, ok, out, worktrees, write_json)
+                          is_ancestor, last_activity, log, now_iso, ok, out, worktrees, write_json)
 
 SKIP_DIRS = {".git", ".claude", ".context", "node_modules", ".venv", "venv", "go", "__pycache__"}
 PR_FIELDS = ("number,state,headRefName,headRefOid,title,createdAt,updatedAt,mergedAt,closedAt,"
@@ -62,6 +65,20 @@ def slug_of(repo: Path) -> str:
     if "github.com" not in url:
         return ""
     return url.split("github.com")[-1].lstrip(":/").removesuffix(".git")
+
+
+@functools.lru_cache(maxsize=None)
+def canonical_slug(slug: str) -> tuple[str, str | None]:
+    """GitHub's current owner/name; the old name of a renamed or transferred repo still resolves."""
+    p = gh("repo", "view", slug, "--json", "nameWithOwner", "--jq", ".nameWithOwner")
+    name = p.stdout.strip()
+    if p.returncode != 0 or not name:
+        return slug, (p.stderr.strip() or "gh repo view failed")[:300]
+    return name, None
+
+
+def iso_ts(ts: float | None) -> str | None:
+    return datetime.fromtimestamp(ts).astimezone().isoformat(timespec="seconds") if ts else None
 
 
 def fetch_prs(slug: str) -> tuple[list[dict] | None, str | None]:
@@ -107,7 +124,12 @@ def seq_numbers(paths: list[str], patterns: list[re.Pattern]) -> dict[str, list[
 
 
 def scan(real: Path, alias: str, args, patterns: list[re.Pattern]) -> dict:
-    r: dict = {"alias": alias, "path": str(real), "slug": slug_of(real)}
+    origin_slug = slug_of(real)
+    r: dict = {"alias": alias, "path": str(real), "origin_slug": origin_slug, "slug": origin_slug, "slug_error": None}
+    if origin_slug and args.no_pr:
+        r["slug_error"] = "skipped (--no-pr)"
+    elif origin_slug:
+        r["slug"], r["slug_error"] = canonical_slug(origin_slug)
     r["fetch_error"] = None
     if args.fetch or args.prune:
         fetch_args = ["fetch", "--quiet", "origin"] + (["--prune"] if args.prune else [])
@@ -118,6 +140,7 @@ def scan(real: Path, alias: str, args, patterns: list[re.Pattern]) -> dict:
     r["default"] = default
     r["current"] = out(real, "branch", "--show-current")
     r["dirty"] = len((out(real, "status", "--porcelain") or "").splitlines())
+    r["last_activity"] = iso_ts(last_activity(real))
     r["stash"] = len((out(real, "stash", "list") or "").splitlines())
 
     if args.no_pr or not r["slug"]:
@@ -163,10 +186,13 @@ def scan(real: Path, alias: str, args, patterns: list[re.Pattern]) -> dict:
         path = str(w.get("worktree"))
         br = str(w.get("branch") or "").removeprefix("refs/heads/")
         exists = os.path.isdir(path)
+        session = SESSION_WORKTREE_MARK in path
         entry = {"path": path, "branch": br or None, "exists": exists, "prunable": bool(w.get("prunable")),
-                 "locked": bool(w.get("locked")), "session_worktree": SESSION_WORKTREE_MARK in path,
+                 "locked": bool(w.get("locked")), "session_worktree": session,
                  "dirty": len((out(path, "status", "--porcelain") or "").splitlines()) if exists else None,
-                 "last": out(path, "log", "-1", "--format=%cs") if exists else None}
+                 "last": out(path, "log", "-1", "--format=%cs") if exists else None,
+                 # session worktrees are always protected, so only other worktrees need the activity time
+                 "last_activity": None if session else iso_ts(last_activity(path))}
         r["worktrees"].append(entry)
         if br:
             wt_branches[br] = entry
@@ -209,7 +235,7 @@ def main() -> int:
     ap.add_argument("--exclude", action="append", default=[], help="slug or alias substring to skip (repeatable)")
     ap.add_argument("--fetch", action="store_true", help="git fetch origin before inspecting")
     ap.add_argument("--prune", action="store_true", help="git fetch --prune (needed for accurate 'upstream gone')")
-    ap.add_argument("--no-pr", action="store_true", help="skip GitHub PR lookups")
+    ap.add_argument("--no-pr", action="store_true", help="skip GitHub lookups (PRs and slug resolution)")
     ap.add_argument("--seq-pattern", action="append", default=None,
                     help=r"regex with one group for numbered files (default: ^docs/adr/(\d{3,4})-); '' disables")
     args = ap.parse_args()
@@ -231,6 +257,10 @@ def main() -> int:
         log(f"({i}/{len(targets)}) {alias} ...")
         try:
             r = scan(real, alias, args, patterns)
+            if r["slug"] != r["origin_slug"]:
+                log(f"    slug {r['origin_slug']} -> {r['slug']} (renamed or transferred on GitHub)")
+            if r["slug_error"] and r["origin_slug"] and not args.no_pr:
+                log(f"    slug not resolved, deduped by the origin URL only: {r['slug_error']}")
             if r["slug"] and r["slug"] in seen_slugs:
                 r["duplicate_of"] = seen_slugs[r["slug"]]
             elif r["slug"]:
