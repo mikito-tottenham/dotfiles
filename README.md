@@ -160,7 +160,7 @@ Conductor などのツールが git worktree を立ち上げて dotfiles を編�
 | `.claude/CLAUDE.md` | Claude Code グローバル設定 |
 | `.claude/settings.json` | Claude Code 設定 |
 | `.claude/hooks/git_chain_guard.py` | `gh pr merge` / `git merge` / `git push` が他コマンドと連結されていれば警告する PreToolUse hook（ブロックしない。ADR 0069） |
-| `.claude/hooks/gh_merge_allow.py` | 単独の `ghrun gh pr merge <番号>` を、PR が OPEN・CLEAN・自分の PR のときだけ許可する PreToolUse hook（ADR 0074） |
+| `.claude/hooks/gh_merge_allow.py` | 単独の `ghrun gh pr merge <番号>` を、PR が OPEN・CLEAN・自分の PR のときだけ許可する PreToolUse hook（ADR 0075） |
 | `.claude/hooks/phase_artifact_hook.py` | artifact gate。repo ローカルの gate が無い repo では warn で動く（ADR 0016 追補） |
 | `.codex/AGENTS.md` | Codex エージェント設定 |
 | `.codex/config.toml` | Codex モデル・プロジェクト設定 |
