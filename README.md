@@ -157,7 +157,7 @@ Conductor などのツールが git worktree を立ち上げて dotfiles を編�
 | `.local/bin/env` | PATH 設定スクリプト |
 | `.local/bin/oprun` | `op run --env-file` 用ラッパー |
 | `.local/bin/ghrun` | materialize 済み GitHub token で `gh` / git credential helper を実行するラッパー（`--refresh` で 1Password から再生成） |
-| `.local/bin/opmaterialize` | `onepassword-secret-materialize` skill 同梱 script を呼び出すラッパー |
+| `.local/bin/opmaterialize` | `op-cli-runner` skill 同梱の `scripts/opmaterialize` を呼び出すラッパー |
 | `.local/bin/slack-fetch-message` | Slack の message permalink を Web API で読み Markdown / JSON 出力する read-only CLI |
 | `.local/bin/slack-account` | Slack Web API をプロファイル（ワークスペース）単位で分離して呼ぶ CLI。token は `SLACK_<PROFILE>_TOKEN` を `oprun` で解決（ADR 0061） |
 | `.local/bin/claude-github-daily-sync` | `~/Claude/repos` の symlink 先を、clean で upstream の祖先のときだけ ff-only で日次同期し、`--verify` で結果を突合する（Codex automation から実行。ADR 0069） |
@@ -233,7 +233,7 @@ op read 'op://<vault>/<item>/<field>'
 `oprun` は `$OP_DOTFILES_ENV_FILE` があればそのファイルを、なければ `~/.config/op/dotfiles.env` を使って `op run --env-file` を実行します。
 `OP_ACCOUNT` は既定で `my.1password.com` を使います。
 `opmaterialize` は `$OP_DOTFILES_MATERIALIZE_VAULT` があればその Vault を、なければ `Dotfiles Secrets` を使います。
-`~/.local/bin/opmaterialize` はグローバルにインストールされた `onepassword-secret-materialize` skill の `scripts/opmaterialize` を呼び出す薄いラッパーです。
+`~/.local/bin/opmaterialize` はグローバルにインストールされた `op-cli-runner` skill の `scripts/opmaterialize` を呼び出す薄いラッパーです（配備先に無ければ `chezmoi source-path` 配下の `skills/op-cli-runner/scripts/opmaterialize`）。
 `~/.zshenv.local` は secret の置き場ではなく、マシン固有の非 secret local override に限定します。
 
 ### Secret-backed file の配置
@@ -268,7 +268,7 @@ opmaterialize restore --force
 ローカルにある secret-backed file を 1Password の指定 Vault に保存し、`Secrets Manifest` に登録する場合は `add` を使います。
 `--out-path` を省略すると現在の絶対パスを `$HOME/...` 形式に正規化して登録します。
 `--item` を省略すると `dotfiles:<out-path>` が 1Password Document の item 名になります。
-なお `add` は Document 方式のため、`Dotfiles Secrets` のような field 方式の manifest（Secure Note）に対しては実行を拒否します。その場合は 1Password 上で手動登録します（`content` フィールドを持つ Secure Note ＋ manifest への `field` 行）。詳細は ADR 0046 と onepassword-secret-materialize skill を参照。
+なお `add` は Document 方式のため、`Dotfiles Secrets` のような field 方式の manifest（Secure Note）に対しては実行を拒否します。その場合は 1Password 上で手動登録します（`content` フィールドを持つ Secure Note ＋ manifest への `field` 行）。詳細は ADR 0046 と op-cli-runner skill の `references/materialize.md` を参照。
 
 ```bash
 opmaterialize add "$HOME/.config/wireguard/example.conf"

@@ -1,6 +1,6 @@
 ---
 title: "Cloud Session Runner & 1Password Setup Runbook"
-updated_at: 2026-09-29
+updated_at: 2026-10-23
 ---
 
 # Cloud Session Runner & 1Password Setup Runbook
@@ -355,7 +355,7 @@ dotfiles リポジトリのセッションは SessionStart hook が自動でフ�
    opmaterialize add ~/.config/gws/accounts/<profile>/client_secret.json
    opmaterialize add ~/.config/gws/accounts/<profile>/credentials.json
    ```
-   > 注: 現在の `Dotfiles Secrets` は field 方式で運用しており、`opmaterialize add`（Document 方式）は拒否される。その場合は 1Password 上で手動登録する（`content` フィールドを持つ Secure Note を作成し、マニフェストに `field` 行を追加）。詳細は ADR 0046 と onepassword-secret-materialize skill を参照。
+   > 注: 現在の `Dotfiles Secrets` は field 方式で運用しており、`opmaterialize add`（Document 方式）は拒否される。その場合は 1Password 上で手動登録する（`content` フィールドを持つ Secure Note を作成し、マニフェストに `field` 行を追加）。詳細は ADR 0046 と op-cli-runner skill の `references/materialize.md` を参照。
    >
    > `auth login` が同 dir に作る `credentials.enc` はマシン固有の暗号化 state（他マシンへ持ち出さない）、
    > `token_cache.json` / `cache/` は実行時 state で、いずれも 1Password 登録対象外。
@@ -470,7 +470,7 @@ ls ~/.config/gws/accounts/*/credentials.json 2>/dev/null | wc -l    # gws プロ
 | :-- | :-- | :-- | :-- |
 | codex-cli-runner | codex | `CODEX_AUTH_JSON` → `~/.codex/auth.json`（+ openai-codex companion runtime） | スコープ内・認証済。素のコンテナ egress では openai 不達だが、openai-codex プラグイン proxy 経由なら実行可（ADR-0045） |
 | op-cli-runner | op | `OP_SERVICE_ACCOUNT_TOKEN` | スコープ内・認証済 |
-| onepassword-secret-materialize | opmaterialize + op + jq | 上記 op に依存（field 方式は `jq` 必須） | スコープ内・認証済 |
+| op-cli-runner（opmaterialize） | opmaterialize + op + jq | 上記 op に依存（field 方式は `jq` 必須） | スコープ内・認証済 |
 | gws-cli-runner | gws (+ gws-account) | `~/.config/gws/accounts/<profile>/`（restore 後） | スコープ内・restore 後に有効 |
 | skill-manager | gh（`gh skill`） | `GH_TOKEN` / `GITHUB_TOKEN`（web では未設定） | 下記参照 |
 | grok-cli-runner | （bootstrap 対象外） | xAI OAuth（Hermes） | 任意・**bootstrap 未導入**（headless 経路なし） |
@@ -503,7 +503,7 @@ web セッション内で `gh skill` を直接叩きたい場合のみ `GH_TOKEN
 - 1Password CLI 認証: `docs/adr/0044-use-op-cli-runner-for-1password-cli-auth.md`
 - field 方式 secret: `docs/adr/0046-support-field-based-secrets-in-opmaterialize.md`
 - skill 配備の正本: `docs/skills-install-manifest.md`
-- secret ファイル運用: `onepassword-secret-materialize` skill
+- secret ファイル運用: `op-cli-runner` skill の `references/materialize.md`（ADR-0076）
 - アカウント選択方針: `docs/adr/0048-adopt-gws-account-profile-isolation.md`
 - アカウント選択ラッパー: `dot_local/bin/executable_gws-account`（`~/.local/bin/gws-account`）
 - agent 側の運用契約: `skills/gws-cli-runner`

@@ -266,7 +266,7 @@ install_third_party() {
 ensure_runner_clis() {
   info "runner CLI を用意中 (best-effort)..."
 
-  # jq: onepassword-secret-materialize の field 方式 secret 復元が必須依存にしている。
+  # jq: op-cli-runner の opmaterialize (field 方式 secret 復元) が必須依存にしている。
   # ここで落ちると ensure_onepassword の restore が field 方式分だけ復元できないため warn を出す。
   if command -v jq >/dev/null 2>&1; then
     runner_cli_installed+=("jq (既存)")
