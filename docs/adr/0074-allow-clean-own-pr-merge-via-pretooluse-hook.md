@@ -8,7 +8,7 @@ supersedes_in_part: ["ADR 0071"]
 related_adr: ["0057", "0062", "0063", "0069", "0071"]
 ---
 
-# ADR 0073: 条件を満たすマージを PreToolUse hook で許可し、auto mode の classifier に止められないようにする
+# ADR 0074: 条件を満たすマージを PreToolUse hook で許可し、auto mode の classifier に止められないようにする
 
 ## Context
 

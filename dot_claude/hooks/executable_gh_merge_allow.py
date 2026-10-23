@@ -3,7 +3,7 @@
 
 agents-common の「作業指示で作った PR は、チェックがすべて成功し `mergeStateStatus` が `CLEAN` なら
 マージする」（dotfiles ADR-0071）を、auto mode の classifier の判断に任せず決定的に通すための hook
-（ADR-0073）。`permissions.allow` の `Bash(ghrun gh pr merge *)` は auto mode で判定を決めず、
+（ADR-0074）。`permissions.allow` の `Bash(ghrun gh pr merge *)` は auto mode で判定を決めず、
 classifier が「レビューなしのマージ」として止める例が残ったため、この hook に置き換えた。
 
 次をすべて満たすときだけ `permissionDecision: "allow"` を返す。1 つでも外れたら許可を返さず、
@@ -146,7 +146,7 @@ def main() -> int:
             "hookEventName": "PreToolUse",
             "permissionDecision": "allow",
             "permissionDecisionReason": (
-                f"[gh-merge-allow] PR #{target['number']} は OPEN・CLEAN・自分の PR（ADR-0073）"
+                f"[gh-merge-allow] PR #{target['number']} は OPEN・CLEAN・自分の PR（ADR-0074）"
             ),
         },
     }, ensure_ascii=False))
