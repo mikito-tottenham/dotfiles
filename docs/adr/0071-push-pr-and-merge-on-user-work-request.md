@@ -5,6 +5,9 @@ worked_at: 2026-10-19 JST
 agent_model: "Claude Opus 5.5 (claude-opus-5-5)"
 status: accepted
 related_adr: ["0057", "0062", "0063", "0064", "0065"]
+superseded_in_part_by: "ADR 0073"
+updated_at: 2026-10-23
+updated_by_agent_model: "Claude Opus 5.5 (claude-opus-5-5)"
 ---
 
 # ADR 0071: 作業指示を承認として扱い、push・PR 作成・マージまで確認なしで進める
