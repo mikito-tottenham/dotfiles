@@ -264,7 +264,7 @@ BOOTSTRAP_REPO_DIR="$DOTFILES" BOOTSTRAP_WEB_SKIP_OP=true "$DOTFILES/scripts/boo
 ## parity 検証（両クラウド共通）
 
 `scripts/verify-cloud-parity` が、ローカルとクラウドの再現差分を実環境から検査する。
-期待リスト（skill / MCP）の正本は `scripts/bootstrap-web` の配列で、検証側は再定義しない。
+期待リストの正本は skill が `scripts/skill-lists.sh`、MCP が `scripts/bootstrap-web` の `mcp_servers` 配列で、検証側は再定義しない（ADR-0073）。
 
 ```bash
 BOOTSTRAP_REPO_DIR=/opt/dotfiles /opt/dotfiles/scripts/verify-cloud-parity          # 表形式

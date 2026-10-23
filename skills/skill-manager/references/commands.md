@@ -201,7 +201,7 @@ Premises:
 | Source checkout vs origin | `git -C "$(chezmoi source-path)" fetch origin`, then `git -C "$(chezmoi source-path)" rev-list --left-right --count HEAD...origin/HEAD` and `git status --short` | local | user decision (pull / push need approval) |
 | Skill deployment (retired skills still deployed, drift from source, `~/.codex/skills` mirror gaps, branch-worktree installs) | `doctor` (`retired_skills` / `first_party_sync` / `source_drift` / `source_branch`) | local | `doctor` remediation steps above |
 | Local dotfiles (Claude / Codex config and other managed files) vs the real files | `scripts/chezmoi-drift` (no arguments) and `scripts/chezmoi-drift --check-ignore` | local | dotfile-update skill; `--apply` / `--restore` change state and need approval |
-| Cloud environment reproduction (skills / CLIs / MCP / presence of secrets) | `scripts/verify-cloud-parity --json` | inside a cloud session (locally, cloud-only items show `N/A`) | keep `scripts/bootstrap-web` and `docs/skills-install-manifest.md` in sync (dotfiles `AGENTS.md`, skill management section) |
+| Cloud environment reproduction (skills / CLIs / MCP / presence of secrets) | `scripts/verify-cloud-parity --json` | inside a cloud session (locally, cloud-only items show `N/A`) | keep `scripts/skill-lists.sh` and `docs/skills-install-manifest.md` in sync (dotfiles `AGENTS.md`, skill management section) |
 
 Steps:
 1. Decide the aspects (one row when the request names one aspect; all rows top to bottom for "check everything") and create `.context/<task>/` (`agent-env-parity-<YYYY-MM-DD>` when no task name is given).

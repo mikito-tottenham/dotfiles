@@ -9,7 +9,7 @@ set -euo pipefail
 #   3. 配布スキルを再インストール
 #        - first-party (repo skills/): 必須。欠落・検証失敗があれば最後に exit 1。
 #        - third-party (公開 GitHub): best-effort。取得失敗は skip し、集計して継続する。
-#          2026-09-23 時点の取得対象は natural-japanese / japanese-business-writing (commit SHA pin)。
+#          取得対象と commit SHA pin は scripts/skill-lists.sh の third_party_pins (ADR-0073)。
 #   4. runner CLI と共通ツールを best-effort で用意 (jq/rg/codex/gemini/ghq/gh/gws/copilot)。認証は env / 1Password
 #      由来 (GH_TOKEN・GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE・COPILOT_GITHUB_TOKEN 等、未設定なら warn)。
 #      grok は xAI OAuth、soundcore は対話ブラウザのため対象外。
@@ -107,20 +107,11 @@ record_tp_skipped() { third_party_skipped+=("$1: $2"); }
 record_cli_skipped() { runner_cli_skipped+=("$1: $2"); }
 record_mcp_skipped() { mcp_skipped+=("$1: $2"); }
 
-# first-party skill のエージェント別リスト。docs/skills-install-manifest.md と対応させること。
-# Claude Code には codex-cli-runner、Codex には claude-cli-runner を入れる差分に注意。
-claude_skills=(
-  codex-cli-runner grok-cli-runner agent-orchestrator skill-manager handoff
-  dads-design repo-evaluator op-cli-runner onepassword-secret-materialize gws-cli-runner
-  meeting-minutes meeting-prep-brief doc-grill client-proposal-pack deliverable-closeout
-  git-branch-review pdf-extract contract-review expense-to-ledger task-sweep
-)
-codex_skills=(
-  claude-cli-runner grok-cli-runner agent-orchestrator skill-manager handoff
-  dads-design repo-evaluator op-cli-runner onepassword-secret-materialize gws-cli-runner
-  meeting-minutes meeting-prep-brief doc-grill client-proposal-pack deliverable-closeout
-  git-branch-review pdf-extract contract-review expense-to-ledger task-sweep
-)
+# first-party skill のエージェント別リスト (claude_skills / codex_skills) と third-party の pin
+# (third_party_pins) は scripts/skill-lists.sh を正本とし、ここでは定義しない (ADR-0073)。
+# docs/skills-install-manifest.md との一致は scripts/deploy-skills の preflight が検査する。
+# shellcheck source=scripts/skill-lists.sh
+. "$REPO_DIR/scripts/skill-lists.sh"
 
 # 単純な文字列を JSON 文字列にする (\ と " をエスケープ)。制御文字は対象外。
 json_string() {
@@ -178,8 +169,10 @@ apply_chezmoi() {
     || fail ".chezmoiignore と source state の不整合。scripts/chezmoi-drift --check-ignore を確認すること"
   # SessionStart hook には TTY が無い。--force で対話プロンプト無しに target を上書きする。
   # ハーネスが session 起動時に書き換えた ~/.gitconfig 等も dotfiles の内容へ揃える。
+  # DOTFILES_SKIP_SKILL_DEPLOY=1: run_onchange_after_deploy-skills (ローカル用) を skip する。
+  # クラウドの skill 配備は本 script の install_first_party / install_third_party が担う (ADR-0073)。
   info "chezmoi apply 実行中 (source=$REPO_DIR, --force)..."
-  chezmoi apply --force --source "$REPO_DIR"
+  DOTFILES_SKIP_SKILL_DEPLOY=1 chezmoi apply --force --source "$REPO_DIR"
   info "chezmoi apply 完了"
 }
 
@@ -247,14 +240,16 @@ install_pinned_third_party() { # $1=表示番号 $2=repo(owner/name) $3=sha $4=s
 }
 
 install_third_party() {
-  # 取得対象は docs/skills-install-manifest.md の Third-party 節と同期させる (pin も manifest と一致させること)。
+  # 取得対象と pin は scripts/skill-lists.sh の third_party_pins (manifest の Third-party 節と一致させる)。
   # 撤去済み: gws-shared / gws-drive / gws-drive-upload → gws-cli-runner に吸収、
   #   grill-me → Claude は built-in anthropic-skills:grill-me、empirical-prompt-tuning → upstream 不在 (404)
-  info "third-party skill を公開 GitHub から取得中 (best-effort)..."
-  install_pinned_third_party "1/2" coji/natural-japanese \
-    9a78a42964096da509b8f3e011f0085a5f080151 skills/natural-japanese natural-japanese
-  install_pinned_third_party "2/2" RobTar97/japanese-writing-skills \
-    e4b1700464219c60da786f005a061bccffbbd4e3 skills/japanese-business-writing japanese-business-writing
+  info "third-party skill を公開 GitHub から取得中 (best-effort / ${#third_party_pins[@]} 件)..."
+  local p i=0 repo sha path name
+  for p in ${third_party_pins[@]+"${third_party_pins[@]}"}; do
+    i=$((i + 1))
+    IFS='|' read -r repo sha path name <<<"$p"
+    install_pinned_third_party "$i/${#third_party_pins[@]}" "$repo" "$sha" "$path" "$name"
+  done
   record_tp_skipped "gws-shared" "retired: absorbed into gws-cli-runner"
   record_tp_skipped "gws-drive" "retired: absorbed into gws-cli-runner"
   record_tp_skipped "gws-drive-upload" "retired: absorbed into gws-cli-runner"

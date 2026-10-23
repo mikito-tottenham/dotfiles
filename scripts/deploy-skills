@@ -1,0 +1,319 @@
+#!/usr/bin/env bash
+# deploy-skills: 配布 skill をローカルの 3 配備先 (~/.claude/skills, ~/.agents/skills, ~/.codex/skills)
+# へ揃える。通常は chezmoi apply (run_onchange_after_deploy-skills.sh.tmpl) から呼ばれ、
+# 手動復旧では直接実行する。冪等で、複数回実行しても結果は同じ。
+#
+# 実行内容:
+#   1. preflight: gh の有無、docs/skills-install-manifest.md の install 行と
+#      scripts/skill-lists.sh の一致 (skill-manager の doctor が manifest を期待値に使うため、
+#      不一致のまま配備しない)。
+#   2. 撤去: 配備先にある first-party 由来のディレクトリ (SKILL.md の metadata.local-path が
+#      source root の skills/ 配下、または manifest で「撤去済み」と宣言された名前) のうち、現在の
+#      一覧に無いものを ~/.local/share/skill-retired/<YYYY-MM-DD>/ へ mv する (削除しない。ADR-0069)。
+#      third-party (github 由来) と Codex 同梱 (.system / hatch-pet 等、local-path 無し) は触らない。
+#   3. first-party: 配備先の既存ディレクトリを rm -rf してから
+#      `gh skill install . <skill> --from-local --agent <agent> --scope user -f` を source root で実行する
+#      (-f だけでは正本から消えたファイルが配備先に残る。2026-10-23 実測)。Codex は
+#      ~/.agents/skills に入るので、~/.codex/skills へ rsync -a --delete で同期する。
+#   4. third-party: skill-lists.sh の pin (commit SHA) どおり
+#      `gh skill install <owner/repo> <path> --pin <sha> --agent <agent> --scope user -f` で入れる。
+#      配備コピーの metadata.github-pinned が同じ SHA なら skip する。
+#
+# gh について: ここで使う `gh skill install` は --from-local も --pin 付きの公開 repo 取得も
+# GitHub 認証を要求しない (公開 repo は匿名 git 取得。2026-10-23 実測)。そのため共通ルールの
+# 「gh は ghrun gh 経由」の例外として素の gh を呼ぶ (bootstrap-web と同じ扱い。ADR-0073)。
+# 1Password がロックされていても chezmoi apply を止めないための判断でもある。
+#
+# 環境変数:
+#   DEPLOY_SKILLS_SOURCE=<dir>  source root を固定する (既定: chezmoi source-path、失敗時は script 位置)。
+#                               worktree から dry-run するときに使う。
+# オプション:
+#   --dry-run   変更せず、実行予定だけをログに出す
+#
+# 終了コード: 0 = 失敗 0 件 / 1 = preflight 不一致または配備失敗あり
+# ログは秘密情報を含まない (path と skill 名のみ)。
+set -euo pipefail
+
+# chezmoi apply は最小 PATH で呼ばれることがある (launchd / ハーネス経由)。gh / rsync を解決できるようにする。
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+DRY_RUN=false
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY_RUN=true ;;
+    -h|--help) sed -n '2,33p' "$0"; exit 0 ;;
+    *) printf 'deploy-skills: unknown option: %s\n' "$arg" >&2; exit 1 ;;
+  esac
+done
+
+START_TS=$(date +%s)
+VERB=installed; [ "$DRY_RUN" = true ] && VERB="would install"
+log()  { printf '[deploy-skills %s] %s\n' "$(date +%H:%M:%S)" "$*"; }
+warn() { printf '[deploy-skills %s] WARN: %s\n' "$(date +%H:%M:%S)" "$*" >&2; }
+die()  { printf '[deploy-skills %s] ERROR: %s\n' "$(date +%H:%M:%S)" "$*" >&2; exit 1; }
+run()  { # 変更を伴うコマンド。dry-run では表示だけ
+  if [ "$DRY_RUN" = true ]; then log "[dry-run] would: $*"; return 0; fi
+  "$@"
+}
+
+# ---- source root ----------------------------------------------------------
+if [ -n "${DEPLOY_SKILLS_SOURCE:-}" ]; then
+  SOURCE="$DEPLOY_SKILLS_SOURCE"; SOURCE_HOW="env:DEPLOY_SKILLS_SOURCE"
+elif command -v chezmoi >/dev/null 2>&1 && SOURCE="$(chezmoi source-path 2>/dev/null)" && [ -n "$SOURCE" ]; then
+  SOURCE_HOW="chezmoi source-path"
+else
+  SOURCE="$(cd "$(dirname "$0")/.." && pwd)"; SOURCE_HOW="script location"
+fi
+SOURCE="$(cd "$SOURCE" 2>/dev/null && pwd)" || die "source root が存在しない: ${DEPLOY_SKILLS_SOURCE:-?}"
+SOURCE_REAL="$(cd -P "$SOURCE" && pwd -P)"
+LISTS="$SOURCE/scripts/skill-lists.sh"
+MANIFEST="$SOURCE/docs/skills-install-manifest.md"
+[ -d "$SOURCE/skills" ] || die "source root に skills/ が無い: $SOURCE"
+[ -f "$LISTS" ] || die "skill-lists.sh が無い: $LISTS"
+[ -f "$MANIFEST" ] || die "manifest が無い: $MANIFEST"
+# shellcheck source=scripts/skill-lists.sh
+. "$LISTS"
+
+CLAUDE_DIR="$HOME/.claude/skills"
+AGENTS_DIR="$HOME/.agents/skills"
+CODEX_DIR="$HOME/.codex/skills"
+RETIRE_ROOT="$HOME/.local/share/skill-retired/$(date +%Y-%m-%d)"
+
+installed=(); retired=(); skipped=(); failed=()
+record_fail() { failed+=("$1"); warn "$1"; }
+
+log "開始 (source=$SOURCE via $SOURCE_HOW, dry-run=$DRY_RUN)"
+log "対象: first-party claude:${#claude_skills[@]} codex:${#codex_skills[@]} / third-party:${#third_party_pins[@]}"
+
+# ---- preflight ------------------------------------------------------------
+GH_OK=true
+if ! command -v gh >/dev/null 2>&1; then
+  GH_OK=false
+  if [ "$DRY_RUN" = true ]; then
+    warn "gh が見つからない (dry-run のため続行)。導入: brew install gh (Brewfile に含まれる) / https://cli.github.com"
+  else
+    die "gh が見つからない。導入: brew install gh (Brewfile に含まれる) または https://cli.github.com を参照し、再度 chezmoi apply か scripts/deploy-skills を実行すること"
+  fi
+fi
+command -v rsync >/dev/null 2>&1 || die "rsync が見つからない (Codex の ~/.codex/skills 同期に必要)"
+
+# manifest の install 行 (doctor_data.py の INSTALL_LINE と同じ形) を集合にして skill-lists.sh と比較する。
+manifest_first_party() { # $1=agent
+  grep -E "gh skill install \.[[:space:]]+[A-Za-z0-9._-]+[[:space:]]+--from-local[[:space:]]+--agent[[:space:]]+$1([[:space:]]|$)" "$MANIFEST" \
+    | sed -E 's/.*gh skill install \.[[:space:]]+([A-Za-z0-9._-]+)[[:space:]]+--from-local.*/\1/' | sort -u
+}
+manifest_third_party() { # -> "agent|owner/repo|sha|path" sorted
+  grep -E 'gh skill install [A-Za-z0-9._-]+/[A-Za-z0-9._-]+[[:space:]]+[^[:space:]]+[[:space:]]+--pin[[:space:]]+[0-9a-f]+[[:space:]]+--agent[[:space:]]+(claude-code|codex)' "$MANIFEST" \
+    | sed -E 's/.*gh skill install ([A-Za-z0-9._-]+\/[A-Za-z0-9._-]+)[[:space:]]+([^[:space:]]+)[[:space:]]+--pin[[:space:]]+([0-9a-f]+)[[:space:]]+--agent[[:space:]]+(claude-code|codex).*/\4|\1|\3|\2/' | sort -u
+}
+expected_first_party() { printf '%s\n' "$@" | sort -u; }
+expected_third_party() {
+  local p agent
+  for p in ${third_party_pins[@]+"${third_party_pins[@]}"}; do
+    for agent in claude-code codex; do
+      printf '%s|%s|%s|%s\n' "$agent" "$(cut -d'|' -f1 <<<"$p")" "$(cut -d'|' -f2 <<<"$p")" "$(cut -d'|' -f3 <<<"$p")"
+    done
+  done | sort -u
+}
+gate_fail=false
+check_set() { # $1=label $2=expected $3=manifest
+  if [ "$2" != "$3" ]; then
+    gate_fail=true
+    warn "manifest 不一致: $1 (< skill-lists.sh / > manifest)"
+    diff <(printf '%s\n' "$2") <(printf '%s\n' "$3") | sed 's/^/    /' >&2 || true
+  fi
+}
+check_set "first-party claude-code" "$(expected_first_party "${claude_skills[@]}")" "$(manifest_first_party claude-code)"
+check_set "first-party codex"       "$(expected_first_party "${codex_skills[@]}")"  "$(manifest_first_party codex)"
+check_set "third-party pins"        "$(expected_third_party)"                        "$(manifest_third_party)"
+if [ "$gate_fail" = true ]; then
+  die "scripts/skill-lists.sh と docs/skills-install-manifest.md の install 行が一致しない。両方を同じ変更で更新してから再実行すること"
+fi
+log "preflight OK (manifest と skill-lists.sh が一致)"
+
+# ---- helpers ----------------------------------------------------------------
+# frontmatter の metadata.<key> を 1 行走査で読む (doctor_data.py の read_local_path と同じ規則)。
+read_metadata() { # $1=SKILL.md $2=key -> value or empty
+  [ -f "$1" ] || return 0
+  awk -v key="$2:" '
+    NR==1 { if ($0 != "---") exit; next }
+    /^---[[:space:]]*$/ { exit }
+    /^[^[:space:]]/ { inmeta = ($0 ~ /^metadata:[[:space:]]*$/); next }
+    inmeta && $1 == key { sub(/^[[:space:]]*[^:]+:[[:space:]]*/, ""); print; exit }
+  ' "$1" | sed -E "s/^[\"']//; s/[\"']\$//"
+}
+in_list() { # $1=name, rest=list
+  local n="$1"; shift; local x
+  for x in "$@"; do [ "$x" = "$n" ] && return 0; done
+  return 1
+}
+is_third_party_name() { # $1=name
+  local p
+  for p in ${third_party_pins[@]+"${third_party_pins[@]}"}; do [ "${p##*|}" = "$1" ] && return 0; done
+  return 1
+}
+# manifest の「撤去済み」宣言: 見出し `### `name`（撤去済み）` と撤去表の行 `| `name` | 20xx-..`
+retired_patterns() {
+  # shellcheck disable=SC2016  # バッククォートは manifest の Markdown 記法で、展開意図ではない
+  { grep -E '^#{2,4}[[:space:]]+`[^`]+`[[:space:]]*(（|\()撤去済み' "$MANIFEST" | sed -E 's/^#+[[:space:]]+`([^`]+)`.*/\1/'
+    grep -E '^\|[[:space:]]*`[^`]+`[[:space:]]*\|[[:space:]]*20[0-9]{2}-' "$MANIFEST" | sed -E 's/^\|[[:space:]]*`([^`]+)`.*/\1/'
+  } | sort -u
+}
+RETIRED_PATTERNS="$(retired_patterns)"
+is_declared_retired() { # $1=name (glob 対応)
+  local pat
+  while IFS= read -r pat; do
+    [ -n "$pat" ] || continue
+    # shellcheck disable=SC2053
+    [[ "$1" == $pat ]] && return 0
+  done <<<"$RETIRED_PATTERNS"
+  return 1
+}
+is_under_source_skills() { # $1=local-path
+  local lp="$1" lp_real
+  [[ "$lp" == "$SOURCE/skills/"* ]] && return 0
+  lp_real="$(cd -P "$lp" 2>/dev/null && pwd -P)" || return 1
+  [[ "$lp_real" == "$SOURCE_REAL/skills/"* ]]
+}
+
+# ---- 2. 撤去 (削除せず退避) ------------------------------------------------
+retire_in() { # $1=dir $2=retire subdir $3.. = current list
+  local dir="$1" sub="$2"; shift 2
+  [ -d "$dir" ] || return 0
+  local d name lp reason
+  for d in "$dir"/*/; do
+    [ -d "$d" ] || continue
+    name="$(basename "$d")"
+    case "$name" in .*) continue ;; esac
+    in_list "$name" "$@" && continue
+    is_third_party_name "$name" && continue
+    reason=""
+    if is_declared_retired "$name"; then
+      reason="manifest で撤去済み"
+    else
+      lp="$(read_metadata "$d/SKILL.md" local-path)"
+      if [ -n "$lp" ] && is_under_source_skills "$lp"; then
+        reason="first-party 由来 (local-path=$lp) だが現在の一覧に無い"
+      elif [ -n "$lp" ]; then
+        log "  skip (local-path が source 外。別 publisher 由来とみなし触らない): $d"
+        continue
+      else
+        continue  # local-path 無し = third-party / 同梱 skill。触らない
+      fi
+    fi
+    log "  retire: $d -> $RETIRE_ROOT/$sub/ ($reason)"
+    if run mkdir -p "$RETIRE_ROOT/$sub" && run mv "${d%/}" "$RETIRE_ROOT/$sub/$name"; then
+      retired+=("$sub/$name")
+    else
+      record_fail "退避に失敗: $d"
+    fi
+  done
+}
+log "撤去対象を走査中 (退避先: $RETIRE_ROOT)"
+retire_in "$CLAUDE_DIR" claude-skills "${claude_skills[@]}"
+retire_in "$AGENTS_DIR" agents-skills "${codex_skills[@]}"
+retire_in "$CODEX_DIR"  codex-skills  "${codex_skills[@]}"
+log "撤去: ${#retired[@]} 件"
+
+# ---- 3. first-party ---------------------------------------------------------
+GH_ERR=""
+gh_install() { # $@ = gh skill install の引数。source root で実行し、失敗時は stderr の末尾を GH_ERR に残す
+  local err
+  GH_ERR=""
+  if [ "$DRY_RUN" = true ]; then log "[dry-run] would: (cd $SOURCE && gh skill install $*)"; return 0; fi
+  if err="$(cd "$SOURCE" && gh skill install "$@" 2>&1 >/dev/null)"; then return 0; fi
+  GH_ERR="$(printf '%s\n' "$err" | tail -1)"
+  return 1
+}
+sync_codex_mirror() { # $1=name
+  run mkdir -p "$CODEX_DIR"
+  run rsync -a --delete "$AGENTS_DIR/$1/" "$CODEX_DIR/$1/"
+}
+install_first_party() { # $1=agent $2=dest $3.. names
+  local agent="$1" dest="$2"; shift 2
+  local n=$# i=0 s
+  log "first-party ($agent -> $dest): $n 件"
+  for s in "$@"; do
+    i=$((i + 1))
+    if [ ! -d "$SOURCE/skills/$s" ]; then record_fail "[$agent $i/$n] $s: source に skills/$s が無い"; continue; fi
+    [ -d "$dest/$s" ] && run rm -rf "${dest:?}/$s"
+    if gh_install . "$s" --from-local --agent "$agent" --scope user -f; then
+      installed+=("$agent:$s")
+      if [ "$agent" = codex ]; then sync_codex_mirror "$s" || record_fail "[$agent $i/$n] $s: ~/.codex/skills への rsync に失敗"; fi
+      log "  [$i/$n] $VERB $s"
+    else
+      record_fail "[$agent $i/$n] $s: gh skill install 失敗: ${GH_ERR:-unknown}"
+    fi
+  done
+}
+verify_sample_local_path() { # $1=agent $2=dest $3=sample name
+  [ "$DRY_RUN" = true ] && return 0
+  local lp
+  lp="$(read_metadata "$2/$3/SKILL.md" local-path)"
+  if [ -n "$lp" ] && is_under_source_skills "$lp"; then
+    log "  sample OK: $2/$3 の local-path は source 配下 ($lp)"
+  else
+    record_fail "[$1] sample $3 の metadata.local-path が source 配下を指さない: ${lp:-<none>} (期待: $SOURCE/skills/$3)"
+  fi
+}
+if [ "$GH_OK" = true ] || [ "$DRY_RUN" = true ]; then
+  install_first_party claude-code "$CLAUDE_DIR" "${claude_skills[@]}"
+  verify_sample_local_path claude-code "$CLAUDE_DIR" "${claude_skills[0]}"
+  install_first_party codex "$AGENTS_DIR" "${codex_skills[@]}"
+  verify_sample_local_path codex "$AGENTS_DIR" "${codex_skills[0]}"
+  verify_sample_local_path codex "$CODEX_DIR" "${codex_skills[0]}"
+fi
+
+# ---- 4. third-party ---------------------------------------------------------
+pinned_matches() { # $1=dir $2=name $3=sha -> 0 if deployed copy is pinned at sha
+  [ "$(read_metadata "$1/$2/SKILL.md" github-pinned)" = "$3" ]
+}
+install_third_party() {
+  local n=${#third_party_pins[@]} i=0 p repo sha path name
+  log "third-party: $n 件 (pin が一致する配備コピーは skip)"
+  for p in ${third_party_pins[@]+"${third_party_pins[@]}"}; do
+    i=$((i + 1))
+    IFS='|' read -r repo sha path name <<<"$p"
+    # claude-code
+    if pinned_matches "$CLAUDE_DIR" "$name" "$sha"; then
+      skipped+=("claude-code:$name"); log "  [$i/$n] skip claude-code $name (pinned ${sha:0:7})"
+    else
+      [ -d "$CLAUDE_DIR/$name" ] && run rm -rf "${CLAUDE_DIR:?}/$name"
+      if gh_install "$repo" "$path" --pin "$sha" --agent claude-code --scope user -f; then
+        installed+=("claude-code:$name"); log "  [$i/$n] $VERB claude-code $name @${sha:0:7}"
+      else
+        record_fail "[third-party $i/$n] claude-code $name: gh skill install 失敗 (network?): ${GH_ERR:-unknown}"
+      fi
+    fi
+    # codex (~/.agents/skills + ~/.codex/skills mirror)
+    if pinned_matches "$AGENTS_DIR" "$name" "$sha" && pinned_matches "$CODEX_DIR" "$name" "$sha"; then
+      skipped+=("codex:$name"); log "  [$i/$n] skip codex $name (pinned ${sha:0:7})"
+    else
+      [ -d "$AGENTS_DIR/$name" ] && run rm -rf "${AGENTS_DIR:?}/$name"
+      if gh_install "$repo" "$path" --pin "$sha" --agent codex --scope user -f; then
+        if sync_codex_mirror "$name"; then
+          installed+=("codex:$name"); log "  [$i/$n] $VERB codex $name @${sha:0:7}"
+        else
+          record_fail "[third-party $i/$n] codex $name: ~/.codex/skills への rsync に失敗"
+        fi
+      else
+        record_fail "[third-party $i/$n] codex $name: gh skill install 失敗 (network?): ${GH_ERR:-unknown}"
+      fi
+    fi
+  done
+}
+if [ "$GH_OK" = true ] || [ "$DRY_RUN" = true ]; then
+  install_third_party
+fi
+
+# ---- summary ----------------------------------------------------------------
+ELAPSED=$(( $(date +%s) - START_TS ))
+log "完了 (${ELAPSED}s): installed ${#installed[@]} / retired ${#retired[@]} / skipped ${#skipped[@]} / failed ${#failed[@]}"
+if [ "${#retired[@]}" -gt 0 ]; then log "  退避先: $RETIRE_ROOT (${retired[*]})"; fi
+if [ "${#failed[@]}" -gt 0 ]; then
+  warn "失敗 ${#failed[@]} 件:"
+  printf '    - %s\n' "${failed[@]}" >&2
+  warn "配備は不完全。原因を直してから scripts/deploy-skills (または chezmoi apply) を再実行すること"
+  exit 1
+fi
+log "次の確認: bash \"$SOURCE/skills/skill-manager/scripts/executable_doctor.sh\" で first_party_sync / retired_skills / source_drift が pass であることを見る"

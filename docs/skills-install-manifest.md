@@ -5,16 +5,17 @@ updated_at: 2026-10-23
 
 # Skill Install Manifest
 
-新しいマシンで配布 skill を復元するときは、この一覧を正本として `gh skill install` を実行する。
+> **正本は `scripts/skill-lists.sh`（`claude_skills` / `codex_skills` / `third_party_pins`）で、通常は `chezmoi apply` が配備する**（root の `run_onchange_after_deploy-skills.sh.tmpl` → `scripts/deploy-skills`。ADR-0073）。この文書の install 行は手動復旧用の写しであり、`scripts/deploy-skills` の preflight が `skill-lists.sh` との一致を検査する（不一致なら配備せず exit 1）。skill を増減・pin 更新するときは両方を同じ変更で更新すること。dry-run は `scripts/deploy-skills --dry-run`。
+
+`chezmoi apply` が使えない環境で手動復旧するときは、以下の一覧どおり `gh skill install` を実行する。
 
 > **install は必ず `chezmoi source-path` が返す root で実行すること。** 各行の `.` はその root（この環境では ghq 配下の dotfiles checkout）を指す。`~/.local/share/chezmoi` など別 clone や worktree から実行すると、配備コピーの `metadata.local-path` が編集中の正本と別の checkout を指す stale install になる（2026-09-15 に 43 件検出）。実行前に `cd "$(chezmoi source-path)"` し、配備後は `skill-manager` の `doctor`（`source_drift` カテゴリ）で `SOURCE_PATH_STALE` が無いことを確認する。
 
-当面は script を作らず、docs-only の install manifest として維持する。
-> 既存の配備コピーを更新するときは、`gh skill install -f` が正本から消えたファイルを配備先に残す（2026-10-23 実測。`first_party_sync` が stale を報告）ため、`rm -rf <配備先>/<skill>` してから install すること。
+> 既存の配備コピーを更新するときは、`gh skill install -f` が正本から消えたファイルを配備先に残す（2026-10-23 実測。`first_party_sync` が stale を報告）ため、`rm -rf <配備先>/<skill>` してから install すること。`scripts/deploy-skills` はこれを自動で行う。
 
 将来 `gh` 側に manifest 機能が入ったら、そちらへ移行を検討する。
 
-Claude Code on the web の ephemeral 環境に限り、`scripts/bootstrap-web`（SessionStart hook 経由）が **web で復元可能なサブセット**を自動再インストールする（ADR-0045）。サブセットは「first-party 全部（必須）＋ 公開 third-party のうち取得できたもの（best-effort）」で、manifest 全体とは一致しない。first-party の欠落は bootstrap を失敗させ、third-party の取得失敗は skip して継続する。2026-09-23 時点の third-party 取得対象は `natural-japanese` と `japanese-business-writing`（いずれも commit SHA で pin）。スキルを追加・削除したときは、この manifest と `scripts/bootstrap-web` のリストを同期すること。
+クラウドの ephemeral 環境（Claude Code on the web / Codex cloud）では、`scripts/bootstrap-web`（Claude は SessionStart hook 経由）が **web で復元可能なサブセット**を自動再インストールする（ADR-0045・ADR-0058）。サブセットは「first-party 全部（必須）＋ 公開 third-party のうち取得できたもの（best-effort）」で、manifest 全体とは一致しない。first-party の欠落は bootstrap を失敗させ、third-party の取得失敗は skip して継続する。bootstrap-web の期待リストと pin は `scripts/skill-lists.sh` を source して使うため、個別に編集しない。bootstrap-web は `chezmoi apply` に `DOTFILES_SKIP_SKILL_DEPLOY=1` を付け、ローカル用の run_onchange 配備を走らせない。
 
 ## クラウドで再現する CLI と MCP
 
@@ -130,7 +131,7 @@ done
 cp "$HOME/.agents/.skill-lock.json" "$d/skill-lock.json.bak"
 ```
 
-退避後は manifest どおり `gh skill install`（Codex は rsync まで）をやり直し、`skill-manager` の `doctor` で `retired_skills` / `first_party_sync` が NO_ISSUES であることを確認する。
+退避後は manifest どおり `gh skill install`（Codex は rsync まで）をやり直し、`skill-manager` の `doctor` で `retired_skills` / `first_party_sync` が NO_ISSUES であることを確認する。2026-10-23 以降は `scripts/deploy-skills`（`chezmoi apply` 経由）がこの表と撤去済み見出しを読み、該当ディレクトリを同じ退避先へ自動で mv する（`~/.agents/.skill-lock.json` の整理は引き続き手動）。
 
 ## Third-party external skills
 
@@ -167,7 +168,7 @@ rsync -a --delete ~/.agents/skills/natural-japanese/ ~/.codex/skills/natural-jap
 rsync -a --delete ~/.agents/skills/japanese-business-writing/ ~/.codex/skills/japanese-business-writing/
 ```
 
-pin を上げるときは、この節と `scripts/bootstrap-web` の `install_third_party()` を同時に更新する。skill を追加・削除するときは `scripts/verify-cloud-parity` の `THIRD_PARTY_SKILLS` も更新する。
+pin を上げるとき、skill を追加・削除するときは、この節と `scripts/skill-lists.sh` の `third_party_pins` を同時に更新する（`scripts/deploy-skills` の preflight が一致を検査する。`bootstrap-web` / `verify-cloud-parity` は `skill-lists.sh` を読むので個別更新は不要）。`scripts/deploy-skills` は配備コピーの `metadata.github-pinned` が同じ SHA なら skip し、違えば `rm -rf` してから上記と同じ `gh skill install --pin` を実行する（公開 repo の匿名取得で、GitHub 認証は不要）。
 
 ### `gws-*`（撤去済み）
 

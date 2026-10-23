@@ -1,0 +1,34 @@
+#!/bin/bash
+# 配布 skill の配備・撤去・Codex 同期を chezmoi apply に統合する (ADR-0073)。
+# 下の hash のどれかが変わる (= skill の期待リスト、配備 script、skills/ ツリーの内容が変わる) たびに
+# 再実行され、新しいマシンでも `chezmoi apply` だけで ~/.claude/skills・~/.agents/skills・~/.codex/skills が揃う。
+# 本体は scripts/deploy-skills (冪等)。手動復旧や dry-run はそれを直接実行する。
+#
+# skill-lists hash:  {{ include "scripts/skill-lists.sh" | sha256sum }}
+# deploy-skills hash: {{ include "scripts/deploy-skills" | sha256sum }}
+# skills tree hash:  {{ output "git" "-C" .chezmoi.sourceDir "ls-files" "-s" "skills" | sha256sum }}
+#   (git の index にある skills/ 配下の blob hash 一覧。commit / stage 済みの内容変更で再実行される。
+#    未 stage の作業ツリー変更は拾わないので、その場合は scripts/deploy-skills を直接実行する。
+#    find + sha256sum で作業ツリーを走査する案は数百ファイルの読み込みが毎 apply に乗るため採らない)
+set -eu
+
+# クラウド (Claude Code on the web / Codex cloud) は scripts/bootstrap-web が skill を配備する。
+# bootstrap-web は chezmoi apply に DOTFILES_SKIP_SKILL_DEPLOY=1 を付けて呼ぶ。CLAUDE_CODE_REMOTE=true は
+# Claude のクラウドで SessionStart hook 以外から apply された場合の保険。
+if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ] || [ "${DOTFILES_SKIP_SKILL_DEPLOY:-}" = "1" ]; then
+    echo "[deploy-skills-onchange] skip (CLAUDE_CODE_REMOTE=${CLAUDE_CODE_REMOTE:-} DOTFILES_SKIP_SKILL_DEPLOY=${DOTFILES_SKIP_SKILL_DEPLOY:-})"
+    exit 0
+fi
+
+# gh が無い場合は exit 1 で chezmoi apply を失敗させる。chezmoi は run_onchange の実行済み状態を
+# script が成功したときだけ記録するので、exit 0 で抜けると gh 導入後も次の apply で再実行されず
+# 「apply は通ったが skill は未配備」が固定化する。exit 1 なら gh 導入後の apply で自動的に再試行される。
+# 新しいマシンでは Brewfile (brew bundle) で gh を入れてから chezmoi apply する (README の手順)。
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+if ! command -v gh >/dev/null 2>&1; then
+    echo "[deploy-skills-onchange] ERROR: gh が無いため skill を配備できない。brew install gh (Brewfile) の後に chezmoi apply を再実行すること" >&2
+    exit 1
+fi
+
+echo "[deploy-skills-onchange] scripts/deploy-skills を実行します (source={{ .chezmoi.sourceDir }})"
+exec "{{ .chezmoi.sourceDir }}/scripts/deploy-skills"
