@@ -6,8 +6,10 @@ usage:
       [--list remote_delete_mine] [--repo <slug-substring> ...] [--no-fetch]
 
 Checks per branch: still on origin with the same tip, not the head/base of an open PR, not checked out
-in a Desktop session worktree (.claude/worktrees/), and contained in origin/<default> (ancestor or the
-head of a merged PR recorded at scan time). Branches checked out in other local worktrees are kept
+in a Desktop session worktree (.claude/worktrees/) of any local checkout of the repo (the plan's
+``checkouts``: the primary checkout and its duplicates), not checked out in another worktree or main
+checkout with activity in the last RECENT_HOURS, and contained in origin/<default> (ancestor or the
+head of a merged PR recorded at scan time). Branches checked out in older local worktrees are kept
 in the list but reported, so the user can decide.
 Lines prefixed with ``CMD`` are the commands to show the user. Run each one on its own (never chain
 them with && or ;) and only after the user approved remote deletion for that repo.
@@ -18,11 +20,34 @@ import argparse
 import json
 import shlex
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from fleet_common import (SESSION_WORKTREE_MARK, default_branch, gh, git, is_ancestor, load_json, log,  # noqa: E402
-                          now_iso, worktrees, write_json)
+from fleet_common import (RECENT_HOURS, SESSION_WORKTREE_MARK, default_branch, gh, git, is_ancestor,  # noqa: E402
+                          last_activity, load_json, log, now_iso, worktrees, write_json)
+
+
+def checkout_holds(checkouts: list[str], wanted: set[str]) -> tuple[dict[str, dict], str | None]:
+    """Where each wanted branch is checked out, across every local checkout of the repo (main checkouts included)."""
+    cutoff = time.time() - RECENT_HOURS * 3600
+    held: dict[str, dict] = {}
+    for repo in checkouts:
+        wts = worktrees(repo)
+        if not wts:
+            return {}, f"checkout unreadable, its worktrees cannot be checked: {repo}"
+        for w in wts:
+            br = str(w.get("branch") or "").removeprefix("refs/heads/")
+            if br not in wanted:
+                continue
+            path = str(w.get("worktree"))
+            session = SESSION_WORKTREE_MARK in path
+            ts = None if session else last_activity(path)
+            info = {"worktree": path, "session": session, "recent": bool(ts and ts >= cutoff)}
+            prev = held.get(br)
+            if prev is None or (info["session"], info["recent"]) > (prev["session"], prev["recent"]):
+                held[br] = info
+    return held, None
 
 
 def main() -> int:
@@ -49,6 +74,13 @@ def main() -> int:
         if not args.no_fetch:
             git(path, "fetch", "--quiet", "origin", timeout=180)
         dref = f"origin/{default_branch(path)}"
+        checkouts = its[0].get("checkouts")
+        held, err = checkout_holds(checkouts, {it["branch"] for it in its}) if checkouts else (
+            {}, "plan has no 'checkouts' (made before sibling checkouts were tracked); re-run fleet_plan.py")
+        if err:
+            log(f"    repo skipped (no commands emitted): {err}")
+            doc["repos"].append({"repo": slug, "path": path, "delete": [], "skipped": [], "error": err})
+            continue
         p = gh("pr", "list", "-R", slug, "--state", "open", "--limit", "300", "--json", "headRefName,baseRefName")
         if p.returncode != 0:
             log(f"    gh failed, repo skipped (no commands emitted): {p.stderr.strip()[:200]}")
@@ -56,11 +88,10 @@ def main() -> int:
             continue
         open_prs = json.loads(p.stdout)
         busy = {x["headRefName"] for x in open_prs} | {x["baseRefName"] for x in open_prs}
-        local_wt = {str(w["branch"]).removeprefix("refs/heads/"): str(w.get("worktree"))
-                    for w in worktrees(path) if isinstance(w.get("branch"), str)}
         ok_list, skipped = [], []
         for it in its:
             br = it["branch"]
+            h = held.get(br)
             tip = git(path, "rev-parse", "-q", "--verify", f"refs/remotes/origin/{br}").stdout.strip()
             if not tip:
                 reason = "already gone on origin"
@@ -68,8 +99,10 @@ def main() -> int:
                 reason = f"tip moved {it['tip'][:8]} -> {tip[:8]}"
             elif br in busy:
                 reason = "head/base of an open PR"
-            elif SESSION_WORKTREE_MARK in local_wt.get(br, ""):
-                reason = "checked out in a Desktop session worktree (.claude/worktrees/)"
+            elif h and h["session"]:
+                reason = f"checked out in a Desktop session worktree ({h['worktree']})"
+            elif h and h["recent"]:
+                reason = f"checked out in {h['worktree']} with activity in the last {RECENT_HOURS}h"
             elif not (is_ancestor(path, tip, dref) or tip in it.get("merged_pr_heads", [])):
                 reason = f"not contained in {dref} and not a merged PR head"
             else:
@@ -77,8 +110,8 @@ def main() -> int:
             if reason:
                 skipped.append({"branch": br, "reason": reason})
             else:
-                ok_list.append({"branch": br, "tip": tip, "local_worktree": local_wt.get(br)})
-            note = f" (still checked out locally at {local_wt[br]})" if not reason and br in local_wt else ""
+                ok_list.append({"branch": br, "tip": tip, "local_worktree": h["worktree"] if h else None})
+            note = f" (still checked out locally at {h['worktree']})" if not reason and h else ""
             log(f"    {br} -> {'OK' if not reason else 'skip: ' + reason}{note}")
         doc["repos"].append({"repo": slug, "path": path, "delete": ok_list, "skipped": skipped})
 

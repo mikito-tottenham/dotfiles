@@ -1,6 +1,6 @@
 ---
 title: Fleet cleanup — repo 横断のブランチ / PR / worktree 棚卸しと削除
-updated_at: 2026-10-03
+updated_at: 2026-10-23
 source: ~/Claude/.context/2026-09-26-branch-pr-cleanup の scan.py / plan.py / delete_local.py / verify_remote.py を汎用化
 ---
 
@@ -10,7 +10,8 @@ source: ~/Claude/.context/2026-09-26-branch-pr-cleanup の scan.py / plan.py / d
 
 ## 守ること
 
-- `.claude/worktrees/` 配下は Claude Desktop セッションの作業場所。その worktree と、そこで checkout 中のブランチは消さない（片付けはセッションのアーカイブで行う）。script も計画・削除・リモート削除のすべてで除外する
+- `.claude/worktrees/` 配下は Claude Desktop セッションの作業場所。その worktree と、そこで checkout 中のブランチは消さない（片付けはセッションのアーカイブで行う）。script も計画・削除・リモート削除のすべてで除外する。リモートブランチは同じ GitHub repo のどの checkout（`duplicate_of` の checkout や旧 slug の checkout を含む）のセッション worktree で checkout 中でも除外する
+- 直近 24h に動き（コミット、checkout、未コミットの編集）のある worktree と main checkout で checkout 中のブランチも、リモート削除の対象から外す（`fleet_common.RECENT_HOURS`）
 - squash マージ済みは祖先判定では検出できない。マージ済み PR の head SHA との一致（scan 時に `merged_pr_heads` として記録）か、merge しても tree が変わらないことで判定する
 - 削除・クローズ・マージ・push はユーザーの明示承認を区分ごとに取ってから実行する。承認範囲外の区分（他者のブランチ、未マージの残骸、古い PR のクローズなど）は提案に留める
 - 削除系コマンドは `&&`・`;`・パイプで連結せず、1 コマンドずつ単独で実行する（連結すると permission の allow が効かず auto mode classifier に止められる）。classifier に拒否された操作を別の道具で迂回しない
@@ -28,6 +29,7 @@ source: ~/Claude/.context/2026-09-26-branch-pr-cleanup の scan.py / plan.py / d
    ```
 
    - `--root` は repo 1 つ、ghq root（host/owner/repo の 3 階層）、`~/Claude/repos` のような symlink 置き場のいずれでもよい。`~/Claude/ghq` と旧配置の `~/ghq` を両方渡すと、後に出た同じ GitHub repo の checkout は `duplicate_of` になり、リモート側の集計は 1 回だけになる
+   - 同じ repo かどうかは、origin URL の slug を `ghrun gh repo view` で GitHub 上の現在の owner/name に解決して判定する（`slug`。origin URL のままの値は `origin_slug`）。転送・リネーム前の slug を origin に持つ checkout も `duplicate_of` になる。解決に失敗した checkout は `slug_error` を残して origin の slug のまま扱い、ログに出す。`--no-pr` では解決しない
    - 既定では fetch しない。最新化するなら `--fetch`、`upstream gone` を正確に出すなら `--prune`（remote-tracking ref の掃除だけでブランチは消さない）
    - 他社・チームの外部 repo は `--exclude <slug>` で外す
 2. 計画（読み取り専用）
@@ -37,6 +39,8 @@ source: ~/Claude/.context/2026-09-26-branch-pr-cleanup の scan.py / plan.py / d
    ```
 
    `02-plan.md` の区分: A ローカルのマージ済み / B リモートのマージ済み（自分・他者）/ C open PR / D 連番衝突 / E PR 無しの未マージリモート / F PR クローズ済みの未マージ / G 未 push のローカル / H dirty な作業ツリー / I 消えた worktree の登録 / J 保護対象 / K スキャン失敗
+
+   J には、B から外したリモートのマージ済みブランチが入る: 同じ GitHub repo の全 checkout を通じてセッション worktree で checkout 中のもの（`kept_in_session_worktree`）と、直近 24h に動きのある worktree / main checkout で checkout 中のもの（`kept_recent_worktree`）。B の各項目は `checkouts`（その repo の全 checkout の path）を持ち、手順 5 の再検証が使う。`last_activity` の無い古い scan では worktree の最終コミット日（`last`）で判定し、前日以降なら直近として扱う
 3. 承認を取る: `02-plan.md` の区分ごとの件数と代表例を示し、「どの区分を実行するか」をまとめて 1 回で聞く。承認された区分だけを次へ進める
 4. ローカルブランチ削除（区分 A）
 
@@ -52,7 +56,7 @@ source: ~/Claude/.context/2026-09-26-branch-pr-cleanup の scan.py / plan.py / d
    python3 <skill>/scripts/fleet_verify_remote.py --plan "$D/02-plan.json" --out "$D/05-remote-verified.json"
    ```
 
-   この script は削除しない。出力の `CMD` 行（repo ごとの `git -C <path> push origin --delete ...`）をユーザーに示し、承認後に 1 行ずつ単独で実行する。実行後に open PR 数を確認し、巻き添えのクローズが無いことを確かめる
+   この script は削除しない。plan の `checkouts` にある全 checkout の worktree を実行時に読み直し、セッション worktree か直近 24h に動きのある worktree で checkout 中のブランチを skip する。`checkouts` の無い古い plan や読めない checkout がある repo はコマンドを出さずに skip するので、fleet_plan.py を再実行する。出力の `CMD` 行（repo ごとの `git -C <path> push origin --delete ...`）をユーザーに示し、承認後に 1 行ずつ単独で実行する。実行後に open PR 数を確認し、巻き添えのクローズが無いことを確かめる
 6. worktree の登録掃除（区分 I）は `git -C <repo> worktree prune --dry-run` で確認してから、承認後に repo ごとに単独実行する
 7. 結果を `$D/04-result.md` にまとめる: 承認範囲、実施件数、skip 理由、見送り項目、復元方法
 

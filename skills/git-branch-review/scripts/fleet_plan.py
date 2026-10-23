@@ -11,20 +11,25 @@ Protected and never listed for deletion:
 - branches checked out in any worktree, including Claude Desktop session worktrees under .claude/worktrees/
 - the worktrees under .claude/worktrees/ themselves (counted only)
 - remote branches used as the base of an open PR
+- remote branches checked out in a session worktree of any local checkout of the same GitHub repo
+  (kept_in_session_worktree), or in another worktree / main checkout with activity in the last
+  RECENT_HOURS (kept_recent_worktree)
 """
 from __future__ import annotations
 
 import argparse
 import subprocess
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from fleet_common import MERGED_CLASSES, SESSION_WORKTREE_MARK, load_json, log, now_iso, write_json  # noqa: E402
+from fleet_common import (MERGED_CLASSES, RECENT_HOURS, SESSION_WORKTREE_MARK, load_json, log, now_iso,  # noqa: E402
+                          write_json)
 
 LISTS = ("local_delete", "worktree_prune", "remote_delete_mine", "remote_merged_others", "open_prs",
          "seq_conflicts", "unmerged_local_only", "unmerged_remote_no_pr", "closed_pr_leftovers",
-         "kept_as_pr_base", "dirty_repos", "scan_errors")
+         "kept_as_pr_base", "kept_in_session_worktree", "kept_recent_worktree", "dirty_repos", "scan_errors")
 
 
 def default_me(scan_docs: list[dict]) -> list[str]:
@@ -35,13 +40,52 @@ def default_me(scan_docs: list[dict]) -> list[str]:
     return sorted(m for m in marks if m)
 
 
+def is_recent(w: dict, cutoff: datetime) -> bool:
+    if w.get("last_activity"):
+        return datetime.fromisoformat(w["last_activity"]) >= cutoff
+    # scans made before last_activity existed only have the commit date: count that whole day
+    return bool(w.get("last")) and w["last"] >= cutoff.date().isoformat()
+
+
+def checkout_holds(scan_docs: list[dict]) -> tuple[dict[str, list[str]], dict[str, dict[str, dict]]]:
+    """Every local checkout of each GitHub repo, and the branches its worktrees keep out of remote deletion.
+
+    Taken from all scanned repos before --exclude, so leaving out a duplicate checkout never drops the
+    session worktrees it carries.
+    """
+    cutoff = datetime.now().astimezone() - timedelta(hours=RECENT_HOURS)
+    checkouts: dict[str, list[str]] = {}
+    holds: dict[str, dict[str, dict]] = {}
+    for d in scan_docs:
+        for r in d["repos"]:
+            if "error" in r or not r.get("slug"):
+                continue
+            if r["path"] not in checkouts.setdefault(r["slug"], []):
+                checkouts[r["slug"]].append(r["path"])
+            main = {"path": r["path"], "branch": r.get("current"), "last_activity": r.get("last_activity")}
+            for w in [main, *r["worktrees"]]:
+                if not w.get("branch"):
+                    continue
+                if w.get("session_worktree") or SESSION_WORKTREE_MARK in w["path"]:
+                    kind = "kept_in_session_worktree"
+                elif is_recent(w, cutoff):
+                    kind = "kept_recent_worktree"
+                else:
+                    continue
+                cur = holds.setdefault(r["slug"], {}).get(w["branch"])
+                if cur is None or kind == "kept_in_session_worktree":
+                    holds[r["slug"]][w["branch"]] = {"list": kind, "worktree": w["path"]}
+    return checkouts, holds
+
+
 def build(scan_docs: list[dict], me: list[str], exclude: list[str]) -> dict:
     plan: dict = {"task": "branch-fleet", "phase_or_step": "02-plan", "created_at": now_iso(),
-                  "me_marks": me, **{k: [] for k in LISTS}, "session_worktrees": 0}
+                  "me_marks": me, "recent_hours": RECENT_HOURS, **{k: [] for k in LISTS}, "session_worktrees": 0}
+    checkouts, holds = checkout_holds(scan_docs)
     repos = []
     for d in scan_docs:
         for r in d["repos"]:
-            if any(x in r["alias"] or x == r.get("slug") for x in exclude):
+            if any(x in r["alias"] or x in (r.get("slug"), r.get("origin_slug")) for x in exclude):
                 continue
             if "error" in r:
                 plan["scan_errors"].append({"repo": r["alias"], "path": r["path"], "error": r["error"]})
@@ -87,8 +131,12 @@ def build(scan_docs: list[dict], me: list[str], exclude: list[str]) -> dict:
             mine = any(m and m in b["author"] for m in me)
             base = {"repo": r["slug"], "path": r["path"], "branch": b["name"], "date": b["date"], "author": b["author"],
                     "class": b["class"], "subject": b["subject"], "ahead": b["ahead_of_default"], "tip": b["tip"],
-                    "merged_pr_heads": b.get("merged_pr_heads", [])}
-            if b["class"] in MERGED_CLASSES:
+                    "merged_pr_heads": b.get("merged_pr_heads", []), "checkouts": checkouts[r["slug"]]}
+            hold = holds.get(r["slug"], {}).get(b["name"])
+            if b["class"] in MERGED_CLASSES and hold:
+                plan[hold["list"]].append({"repo": r["slug"], "branch": b["name"], "date": b["date"],
+                                           "author": b["author"], "mine": mine, "worktree": hold["worktree"]})
+            elif b["class"] in MERGED_CLASSES:
                 plan["remote_delete_mine" if mine else "remote_merged_others"].append(base)
             elif b["class"] in ("NO_PR_UNMERGED", "PR_MERGED_BUT_NEWER_COMMITS"):
                 plan["unmerged_remote_no_pr"].append({**base, "mine": mine})
@@ -117,7 +165,8 @@ def render_md(plan: dict, sources: list[str]) -> str:
         "origin の default に取り込み済み（祖先 / tree 不変 / マージ済み PR の head 一致）。現在ブランチと worktree で checkout 中のものは除外。\n",
         tbl(srt(plan["local_delete"], "repo", "date"), ["repo", "branch", "date", "class", "subject"]),
         f"## B. リモートのマージ済みブランチ（自分 {len(plan['remote_delete_mine'])} 本 / 他者 {len(plan['remote_merged_others'])} 本）\n"
-        "削除は承認後に fleet_verify_remote.py で再検証し、出力された repo ごとのコマンドを 1 つずつ単独実行する。他者のブランチは原則提案のみ。\n",
+        "削除は承認後に fleet_verify_remote.py で再検証し、出力された repo ごとのコマンドを 1 つずつ単独実行する。他者のブランチは原則提案のみ。"
+        "同じ GitHub repo のどの checkout でも、セッション worktree か直近の動きがある worktree で checkout 中のものは J へ回した。\n",
         tbl(srt(remote_merged, "repo", "date"), ["repo", "branch", "date", "author", "class"]),
         f"## C. Open PR（{len(plan['open_prs'])} 件）\n",
         tbl(srt(plan["open_prs"], "repo", "number"),
@@ -138,7 +187,13 @@ def render_md(plan: dict, sources: list[str]) -> str:
         tbl(plan["worktree_prune"], ["repo", "worktree"]),
         f"## J. 保護対象\n- Desktop セッションの worktree（`.claude/worktrees/`）: {plan['session_worktrees']} 件。"
         "ここで checkout 中のブランチと worktree は整理対象にしない（片付けはセッションのアーカイブで行う）\n"
-        f"- open PR の base として残すリモートブランチ: {len(plan['kept_as_pr_base'])} 本\n",
+        f"- open PR の base として残すリモートブランチ: {len(plan['kept_as_pr_base'])} 本\n"
+        f"- B から外したリモートのマージ済みブランチ: セッション worktree で checkout 中 {len(plan['kept_in_session_worktree'])} 本、"
+        f"直近 {plan['recent_hours']}h に動きのある worktree / main checkout で checkout 中 {len(plan['kept_recent_worktree'])} 本"
+        "（同じ GitHub repo の全 checkout が対象）\n",
+        tbl(srt([{**x, "held": "session"} for x in plan["kept_in_session_worktree"]]
+                + [{**x, "held": "recent"} for x in plan["kept_recent_worktree"]], "repo", "branch"),
+            ["repo", "branch", "held", "author", "worktree"]),
         f"## K. スキャン失敗（{len(plan['scan_errors'])} 件）\n",
         tbl(plan["scan_errors"], ["repo", "path", "error"]),
     ]

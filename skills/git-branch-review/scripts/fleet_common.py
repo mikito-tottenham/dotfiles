@@ -6,6 +6,7 @@ through ``ghrun gh`` so the materialized 1Password token is used.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import time
 from datetime import datetime
@@ -14,6 +15,7 @@ from pathlib import Path
 START = time.time()
 SESSION_WORKTREE_MARK = "/.claude/worktrees/"
 MERGED_CLASSES = {"MERGED", "PR_MERGED", "CONTENT_IN_DEFAULT"}
+RECENT_HOURS = 24  # worktrees with activity this recent are in use and stay out of remote deletion
 
 
 def log(msg: str) -> None:
@@ -85,6 +87,33 @@ def worktrees(repo: str | Path) -> list[dict]:
 def checked_out_branches(repo: str | Path) -> set[str]:
     """Branches checked out in any worktree, including worktrees whose directory is gone."""
     return {str(w["branch"]).removeprefix("refs/heads/") for w in worktrees(repo) if isinstance(w.get("branch"), str)}
+
+
+def last_activity(path: str | Path) -> float | None:
+    """Newest of the HEAD commit time, the HEAD reflog (commit / checkout / reset) and uncommitted paths.
+
+    Epoch seconds, or None when the directory is gone. ``git status`` and ``git fetch`` move none of these.
+    """
+    if not os.path.isdir(path):
+        return None
+    times = [float(t) for t in [out(path, "log", "-1", "--format=%ct")] if t]
+    reflog = out(path, "rev-parse", "--git-path", "logs/HEAD")
+    paths = [reflog] if reflog else []
+    p = git(path, "status", "--porcelain", "-z")
+    skip = False
+    for entry in (p.stdout.split("\0") if p.returncode == 0 else []):
+        if skip:  # source path of a rename / copy entry
+            skip = False
+            continue
+        if len(entry) > 3:
+            skip = "R" in entry[:2] or "C" in entry[:2]
+            paths.append(entry[3:])
+    for rel in paths:
+        try:
+            times.append(os.stat(os.path.join(path, rel)).st_mtime)
+        except OSError:  # deleted files
+            pass
+    return max(times) if times else None
 
 
 def load_json(path: str | Path) -> dict:
