@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2154
-# (claude_skills / codex_skills / mcp_servers は bootstrap-web から eval で読み込む)
+# (claude_skills / codex_skills / third_party_pins は scripts/skill-lists.sh から、mcp_servers は bootstrap-web から読み込む)
 set -uo pipefail
 
 # verify-cloud-parity: ローカル (macOS) 環境とクラウド環境 (Claude Code on the web /
@@ -11,10 +11,10 @@ set -uo pipefail
 #   scripts/verify-cloud-parity --json     # 機械可読 (JSON)
 #   scripts/verify-cloud-parity --quiet    # サマリ行のみ
 #
-# 期待値の正本は scripts/bootstrap-web の配列 (claude_skills / codex_skills / mcp_servers) で、
-# 本スクリプトはそこから抽出して使う。二重管理を作らないため、ここでリストを再定義しない。
-# ただし third-party skill と CLI 一覧は bootstrap-web 側が関数内にハードコードしているため、
-# 下の THIRD_PARTY_SKILLS / CLI_* だけは同期対象として本スクリプトが持つ。
+# 期待値の正本は skill が scripts/skill-lists.sh (claude_skills / codex_skills / third_party_pins)、
+# MCP が scripts/bootstrap-web の mcp_servers 配列で、本スクリプトはそこから読んで使う。
+# 二重管理を作らないため、ここでリストを再定義しない。ただし CLI 一覧は bootstrap-web 側が
+# 関数内にハードコードしているため、下の CLI_* だけは同期対象として本スクリプトが持つ。
 #
 # 判定:
 #   OK      期待どおり存在する
@@ -39,12 +39,18 @@ for arg in "$@"; do
 done
 
 [ -f "$BOOTSTRAP" ] || { printf 'verify-cloud-parity: bootstrap-web が見つからない: %s\n' "$BOOTSTRAP" >&2; exit 2; }
+[ -f "$REPO_DIR/scripts/skill-lists.sh" ] || { printf 'verify-cloud-parity: skill-lists.sh が見つからない: %s\n' "$REPO_DIR/scripts/skill-lists.sh" >&2; exit 2; }
 
-# bootstrap-web から期待リストを抽出する (実行はしない)。
-eval "$(sed -n '/^claude_skills=(/,/^)/p; /^codex_skills=(/,/^)/p; /^mcp_servers=(/,/^)/p' "$BOOTSTRAP")"
+# skill の期待リスト (ADR-0073)。
+# shellcheck source=scripts/skill-lists.sh
+. "$REPO_DIR/scripts/skill-lists.sh"
+# bootstrap-web から MCP の期待リストを抽出する (実行はしない)。
+eval "$(sed -n '/^mcp_servers=(/,/^)/p' "$BOOTSTRAP")"
 
-# bootstrap-web の install_third_party がハードコードしている公開 skill (同期対象)
-THIRD_PARTY_SKILLS="natural-japanese japanese-business-writing"  # ADR-0066。gws-* / grill-me は撤去済み（ADR-0062）
+# third_party_pins ("owner/repo|sha|path|name") から skill 名だけを取り出す。gws-* / grill-me は撤去済み（ADR-0062）
+THIRD_PARTY_SKILLS=""
+for _pin in ${third_party_pins[@]+"${third_party_pins[@]}"}; do THIRD_PARTY_SKILLS="$THIRD_PARTY_SKILLS ${_pin##*|}"; done
+THIRD_PARTY_SKILLS="${THIRD_PARTY_SKILLS# }"
 
 # bootstrap-web が導入する CLI (同期対象)
 CLI_BOOTSTRAP="jq rg codex gemini ghq gh gws copilot op"

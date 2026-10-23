@@ -25,17 +25,19 @@
 - 本リポジトリではリポジトリ専用の Claude Code 用スキル（`.claude/skills/`）も管理対象に含む
 - `.claude/skills/` 配下のファイルは repo ローカル用途とし、chezmoi でグローバル配備しない
 - 配布する repo オリジナル skill は publisher layout の `skills/` 配下を正本として git 管理すること
-- publisher layout の skill は `gh skill install --from-local <repo-root> <skill> --agent <agent> --scope user` を標準配備経路とし、chezmoi で `~/.claude/skills/` や `~/.codex/skills/` へ直接配備しないこと
-- 新しいマシン向けの復元情報は当面 script 化せず、`docs/skills-install-manifest.md` の docs-only manifest を正本として保存すること
-- ただしクラウドの ephemeral 環境（Claude Code on the web / Codex cloud）に限り、`scripts/bootstrap-web` と SessionStart hook（`.claude/hooks/session-start.sh`、Claude のみ）で `chezmoi apply` とスキル再インストールを自動化してよい（ADR-0045・ADR-0058）。これはセッション起動時の再現専用で、ローカル / macOS の標準配備は引き続き `gh skill install` と docs-only manifest を正本とすること
+- publisher layout の skill は `gh skill install --from-local <repo-root> <skill> --agent <agent> --scope user` を配備機構とし、chezmoi のファイル管理（`dot_*`）で `~/.claude/skills/` や `~/.codex/skills/` へ直接配備しないこと
+- ローカル / macOS の標準配備は `chezmoi apply` とする。root の `run_onchange_after_deploy-skills.sh.tmpl` が `scripts/deploy-skills` を実行し、first-party の install（`--from-local`）、撤去済み skill の `~/.local/share/skill-retired/<date>/` への退避、third-party の pin install、`~/.codex/skills` への rsync まで行う（ADR-0073）。手動復旧・dry-run は `scripts/deploy-skills [--dry-run]` を直接実行する。Agent が skill だけを配備するときは全体 apply ではなく `chezmoi apply --include=scripts` か `scripts/deploy-skills` を使うこと（CLAUDE.md の部分 apply ルールを維持）
+- 期待リストの正本は `scripts/skill-lists.sh`（`claude_skills` / `codex_skills` / `third_party_pins`）とし、`docs/skills-install-manifest.md` の install 行は手動復旧用の写しとして同じ変更で更新すること。`scripts/deploy-skills` の preflight が両者の一致を検査し、不一致なら配備せず exit 1 する（skill-manager の doctor は manifest の install 行を期待値に使うため）
+- `scripts/deploy-skills` は `gh skill install` を `--from-local` と公開 repo の `--pin` 取得にしか使わず、どちらも GitHub 認証を要求しないため、共通ルール「gh は `ghrun gh` 経由」の例外として素の `gh` を呼ぶ（`scripts/bootstrap-web` と同じ。ADR-0073）。`gh` 以外の remote 操作をこの script に足すときは例外を見直すこと
+- クラウドの ephemeral 環境（Claude Code on the web / Codex cloud）は `scripts/bootstrap-web` と SessionStart hook（`.claude/hooks/session-start.sh`、Claude のみ）が `chezmoi apply` とスキル再インストールを担う（ADR-0045・ADR-0058）。bootstrap-web は `DOTFILES_SKIP_SKILL_DEPLOY=1` を付けて apply し、run_onchange 側の配備を二重に走らせないこと
 - `scripts/bootstrap-web` では first-party skill を必須（欠落で `exit 1`）、公開 third-party skill を best-effort（取得失敗は skip）として扱い、結果を `$BOOTSTRAP_WEB_STATUS` に機械可読で残すこと。`chezmoi apply --force` がハーネス書き込みの `~/.gitconfig` も上書きし、web セッションのコミットが dotfiles の git identity になる点は意識的受容事項として ADR-0045 に記録すること
 - `scripts/bootstrap-web` はプラットフォーム非依存に保ち、source の固定は `BOOTSTRAP_REPO_DIR` で行うこと（`CLAUDE_PROJECT_DIR` は Claude 固有のため前提にしない、ADR-0058）
-- skill / CLI / MCP を増減したときは `docs/skills-install-manifest.md`・`scripts/bootstrap-web`・`scripts/verify-cloud-parity` の 3 箇所を同期すること。期待リストの正本は `bootstrap-web` の配列とし、検証側でリストを再定義しないこと
+- skill を増減・pin 更新したときは `scripts/skill-lists.sh` と `docs/skills-install-manifest.md`（install 行と撤去表）の 2 箇所を同期すること。`bootstrap-web` と `verify-cloud-parity` は `skill-lists.sh` を source するので個別に直さない。CLI / MCP を増減したときは従来どおり `docs/skills-install-manifest.md`・`scripts/bootstrap-web`（`mcp_servers` 配列と CLI 導入処理）・`scripts/verify-cloud-parity`（`CLI_*`）を同期し、検証側でリストを再定義しないこと
 - クラウド環境の再現差分は `scripts/verify-cloud-parity` で検査すること。`MISSING` は移植差分、`N/A` はその環境の対象外を意味し、secret は有無だけを検査して実値を出力しないこと
 - headless で再現できない要素（ローカルアプリ依存の MCP、対話 OAuth 必須の連携）は再現対象に含めず、対象外である理由を配列コメントと手順書に残すこと
 - external skill はこの repo に vendoring せず、`gh skill` による install / update / remove を標準運用とすること
-- ただし fork 元 `rmanzoku/dotfiles` の publisher layout skill は external ではなく repo オリジナル skill と同格に扱い、同一 path `skills/<name>` へ verbatim copy で取り込み、first-party として `docs/skills-install-manifest.md` と `scripts/bootstrap-web` を同期すること（fork sync との整合が目的）
-- third-party external skill が upstream publisher layout を持たない場合は、`docs/skills-install-manifest.md` に `fetch + gh skill install --from-local` 手順を残して管理すること
+- ただし fork 元 `rmanzoku/dotfiles` の publisher layout skill は external ではなく repo オリジナル skill と同格に扱い、同一 path `skills/<name>` へ verbatim copy で取り込み、first-party として `scripts/skill-lists.sh` と `docs/skills-install-manifest.md` を同期すること（fork sync との整合が目的）
+- third-party external skill が upstream publisher layout を持たない場合は、`docs/skills-install-manifest.md` に `fetch + gh skill install --from-local` 手順を残して管理すること（`scripts/skill-lists.sh` の `third_party_pins` は publisher layout を持つ公開 repo 専用）
 - Codex `.system/skill-installer` は Codex-only の補助入口として認識し、恒久的な外部 skill 管理は `gh skill` と `docs/skills-install-manifest.md` を正本にすること
 - 各 AI ツール間のスキル同期は skill-manager スキルの責務であり、本リポジトリでは扱わない
 - `dotfile-update` は chezmoi 管理の dotfile 更新専用とし、repo ローカル skill の編集責務を持たせない

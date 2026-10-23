@@ -2,7 +2,7 @@
 
 [chezmoi](https://www.chezmoi.io/) で管理する dotfiles。
 
-配布 skill の復元一覧は [docs/skills-install-manifest.md](docs/skills-install-manifest.md) を正本にします。
+配布 skill は `chezmoi apply` が `scripts/deploy-skills` 経由で配備し、期待リストは `scripts/skill-lists.sh`、手動復旧用の一覧は [docs/skills-install-manifest.md](docs/skills-install-manifest.md) です。
 
 Claude Code on the web（クラウドセッション）で runner CLI と 1Password secret を再現する手順は [docs/web-session-runner-setup.md](docs/web-session-runner-setup.md) を参照します。
 
@@ -24,10 +24,12 @@ fi && \
 brew install git chezmoi && \
 mkdir -p "$HOME/.local/share" && \
 git clone https://github.com/mikito-tottenham/dotfiles.git "$HOME/.local/share/chezmoi" && \
-chezmoi apply && \
 brew bundle --file="$HOME/.local/share/chezmoi/Brewfile" && \
+chezmoi apply && \
 "$HOME/.local/share/chezmoi/scripts/bootstrap-workspace"
 ```
+
+`brew bundle` を `chezmoi apply` より先に実行します。`chezmoi apply` は配布 skill の配備（`scripts/deploy-skills`）に Brewfile の `gh` を使い、無い場合は失敗して止まります（ADR-0073）。
 
 既に Homebrew が入っている場合は、以下だけで復元できます。
 
@@ -39,7 +41,10 @@ brew install git chezmoi
 mkdir -p "$HOME/.local/share"
 git clone https://github.com/mikito-tottenham/dotfiles.git "$HOME/.local/share/chezmoi"
 
-# dotfiles を適用
+# Homebrew パッケージを復元（chezmoi apply の skill 配備が gh を使うため先に入れる）
+brew bundle --file="$HOME/.local/share/chezmoi/Brewfile"
+
+# dotfiles を適用（run_onchange script が配布 skill を ~/.claude/skills などへ配備する）
 chezmoi apply
 
 # 必要なら 1Password secret reference を設定
@@ -47,9 +52,6 @@ mkdir -p ~/.config/op
 cp ~/.config/op/dotfiles.env.example ~/.config/op/dotfiles.env
 chmod 600 ~/.config/op/dotfiles.env
 $EDITOR ~/.config/op/dotfiles.env
-
-# Homebrew パッケージを復元
-brew bundle --file="$HOME/.local/share/chezmoi/Brewfile"
 
 # 1Password にサインイン後、secret-backed file を復元
 opmaterialize restore
@@ -61,7 +63,7 @@ ghrun --refresh
 "$HOME/.local/share/chezmoi/scripts/bootstrap-workspace"
 ```
 
-配布 skill と third-party external skill の復元は script を持たず、[docs/skills-install-manifest.md](docs/skills-install-manifest.md) に記録した `gh skill install` 一覧を使います。
+配布 skill と third-party external skill は `chezmoi apply` の run_onchange script（`run_onchange_after_deploy-skills.sh.tmpl` → `scripts/deploy-skills`）が `gh skill install` で配備・撤去・Codex 同期まで行います（ADR-0073）。期待リストの正本は `scripts/skill-lists.sh`、手動復旧用の `gh skill install` 一覧は [docs/skills-install-manifest.md](docs/skills-install-manifest.md) です。
 
 ### サブエージェントの復元
 
