@@ -1,4 +1,4 @@
 interface:
   display_name: "OP CLI Runner"
-  short_description: "Run 1Password CLI directly with clear failures"
-  default_prompt: "Use $op-cli-runner to run an op or opmaterialize command with safe logging."
+  short_description: "Run 1Password CLI and restore secret-backed files"
+  default_prompt: "Use $op-cli-runner to run an op command, or register, diff, or restore secret-backed files with opmaterialize, with safe logging."

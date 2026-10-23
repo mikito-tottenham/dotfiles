@@ -1,22 +1,19 @@
----
-name: onepassword-secret-materialize
-description: Register, diff, or restore this dotfiles repository's 1Password-backed files through `opmaterialize` and its Secrets Manifest. Use for that file-materialization workflow, including VPN configs and dotenv files; use `op-cli-runner` for unrelated `op` command execution.
----
+# Secret-Backed Files (`opmaterialize`)
 
-# Onepassword Secret Materialize
+Read this reference before registering, diffing, or restoring file-based secrets that must be reproducible on other machines without storing secret values or individual secret item names in git: VPN configs, dotenv files with API keys or `op://` references, private subagent definitions, and other local config files (typically under `~/.config`) declared in the `Secrets Manifest`.
 
-Use this skill for file-based secrets that should be reproducible on other machines without storing secret values or individual secret item names in git.
-
-The repository owns the generic tool and policy. 1Password owns the sensitive manifest and file contents.
+The dotfiles repository owns the generic tool and policy. 1Password owns the sensitive manifest and file contents. Execution mechanics (the observable wrapper, timeouts, and failure classification) stay in this skill's `SKILL.md`; this reference holds the restore policy.
 
 ## Default Model
 
 - Account selector: `my.1password.com`
 - Vault: `Dotfiles Secrets`
 - Manifest item: `Secrets Manifest`
-- Managed restore tool source: `scripts/opmaterialize` inside this skill
+- Managed restore tool source: `scripts/opmaterialize` inside this skill (`<skill-dir>/scripts/opmaterialize`)
 - Optional deployed wrapper after `chezmoi apply`: `~/.local/bin/opmaterialize`
 - Generated local files remain ignored by `.chezmoiignore`
+
+The `~/.local/bin/opmaterialize` wrapper looks for the script in this order and runs the first one it finds: `~/.codex/skills/op-cli-runner/scripts/opmaterialize`, `~/.claude/skills/op-cli-runner/scripts/opmaterialize`, then `skills/op-cli-runner/scripts/opmaterialize` under `chezmoi source-path`. It does not fall back to the path of the skill that was merged into `op-cli-runner` (ADR-0076); when nothing is found it exits `127` and prints how to deploy `op-cli-runner`.
 
 Do not print secret file contents. Do not add materialized files, manifest rows, VPN configs, API keys, tokens, private keys, or real `op://...` references to git.
 
@@ -50,6 +47,8 @@ OP_ACCOUNT=my.1password.com op vault get "Dotfiles Secrets"
 
 If `opmaterialize` is not on `PATH`, use the bundled script form shown below. If `op` is not authenticated from the current agent process, stop after the readiness probe and ask the user to unlock or sign in from their normal terminal; repeated AI-side permission approvals are not a stable recovery path.
 
+For non-trivial runs, wrap `opmaterialize diff` / `restore` with `scripts/run_op_cli.py` as shown in the Restore Pattern of `SKILL.md`, so failures are classified in `summary.json`.
+
 Run `opmaterialize add` for one file at a time. Do not pass multiple secret-backed files to one `add` invocation.
 
 ## Choose The Operation
@@ -77,7 +76,7 @@ Use this when the user says a file is ready and should be saved for other PCs.
    ```bash
    OP_ACCOUNT=my.1password.com \
    OP_DOTFILES_MATERIALIZE_VAULT="Dotfiles Secrets" \
-   sh ~/.codex/skills/onepassword-secret-materialize/scripts/opmaterialize add <path>
+   sh <skill-dir>/scripts/opmaterialize add <path>
    ```
 
 3. Report only the created/updated item name and manifest status from command output. Do not show file contents.
@@ -128,23 +127,24 @@ Use this when setting up a new machine or rehydrating ignored local config files
 
 - If `op` reports multiple accounts, use `OP_ACCOUNT=my.1password.com`.
 - If `op` requires authentication, let the user unlock/sign in to 1Password from their normal terminal; do not ask them to paste secrets into chat, and do not keep retrying AI-side permission prompts after the readiness probe still fails.
-- If `opmaterialize` exits `127` or the wrapper is not found, use the bundled script with `OP_ACCOUNT=my.1password.com` and `OP_DOTFILES_MATERIALIZE_VAULT="Dotfiles Secrets"`.
+- If `opmaterialize` exits `127` or the wrapper is not found, use the bundled script with `OP_ACCOUNT=my.1password.com` and `OP_DOTFILES_MATERIALIZE_VAULT="Dotfiles Secrets"`. If the bundled script is missing too, the `op-cli-runner` skill is not deployed; run `scripts/deploy-skills` (or `chezmoi apply`) from the dotfiles source instead of pointing at an old skill path.
 - If `Dotfiles Secrets` or `Secrets Manifest` is missing, create or ask the user to create it in 1Password rather than storing its content in git.
 - If `op document get` reports `<id> is not a document`, the item is a Secure Note, not a Document. The manifest and field-based files use Secure Notes; rely on `opmaterialize` (which reads `notesPlain` and `type=field` rows), not a bare `op document get`.
 - If `opmaterialize add` fails after multiple positional paths, retry as separate one-file `add` invocations.
 - If a requested generated path is not ignored, update `.chezmoiignore` before registering the file.
+
+## Changing The Tool (dotfiles repository)
+
 - If changing the managed script, README, ADR, `.chezmoiignore`, or deployed dotfiles, follow the repository `dotfile-update` workflow.
-- If changing this skill, follow `skill-creator` and run `scripts/skill-quick-validate`.
+- If changing this reference or the script, follow `skill-creator` for `op-cli-runner` and run `scripts/skill-quick-validate`.
 
-## Validation For Script Or Policy Changes
-
-After editing the workflow implementation or docs, run:
+After editing the workflow implementation or docs, run from the dotfiles repository root:
 
 ```bash
-shellcheck skills/onepassword-secret-materialize/scripts/opmaterialize dot_local/bin/executable_opmaterialize dot_local/bin/executable_oprun
+shellcheck skills/op-cli-runner/scripts/opmaterialize dot_local/bin/executable_opmaterialize dot_local/bin/executable_oprun
 git diff --check -- . ':(exclude).context'
 scripts/chezmoi-drift --check-ignore
-scripts/skill-quick-validate skills/onepassword-secret-materialize
+scripts/skill-quick-validate skills/op-cli-runner
 ```
 
 For behavior changes, use a fake `op` in `.context/` to test `diff`, `restore`, and `add` without touching live 1Password.

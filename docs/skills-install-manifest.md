@@ -43,7 +43,6 @@ gh skill install . handoff --from-local --agent claude-code --scope user
 gh skill install . dads-design --from-local --agent claude-code --scope user
 gh skill install . repo-evaluator --from-local --agent claude-code --scope user
 gh skill install . op-cli-runner --from-local --agent claude-code --scope user
-gh skill install . onepassword-secret-materialize --from-local --agent claude-code --scope user
 gh skill install . gws-cli-runner --from-local --agent claude-code --scope user
 gh skill install . meeting-minutes --from-local --agent claude-code --scope user
 gh skill install . meeting-prep-brief --from-local --agent claude-code --scope user
@@ -72,7 +71,6 @@ gh skill install . handoff --from-local --agent codex --scope user
 gh skill install . dads-design --from-local --agent codex --scope user
 gh skill install . repo-evaluator --from-local --agent codex --scope user
 gh skill install . op-cli-runner --from-local --agent codex --scope user
-gh skill install . onepassword-secret-materialize --from-local --agent codex --scope user
 gh skill install . gws-cli-runner --from-local --agent codex --scope user
 gh skill install . meeting-minutes --from-local --agent codex --scope user
 gh skill install . meeting-prep-brief --from-local --agent codex --scope user
@@ -93,10 +91,11 @@ gh skill install . task-sweep --from-local --agent codex --scope user
 - 2026-10-03: ADR-0062 で撤去済みの 6 skill（`gws-drive` / `gws-drive-upload` / `gws-shared` / `grill-me` / `opus-4-8-tuning` / `gpt-5-5-tuning`）が `~/.claude/skills` / `~/.agents/skills` / `~/.codex/skills` に残っていたため、削除せず `~/.local/share/skill-retired/2026-10-03/` へ退避した（18 件。`~/.agents/.skill-lock.json` の該当 4 エントリも、backup を取ってから外した）。続けて `~/.codex/skills` を上記 Codex 節の手順（install → rsync）で再同期した
 - 2026-10-03: `pdf-extract` の script は兄弟 skill `codex-cli-runner` を呼ぶが、Codex の一覧には `codex-cli-runner` を入れていない。Codex 親では script を使わず自分で抽出する（SKILL.md の「Codex 親の場合」節。model_registry の Self-Elision）
 - 2026-10-23: 2026-10 の Skill 統合（ADR-0072）で first-party を 33 本 + 未マージ 1 本 → 21 本（Claude Code / Codex 各 20 本。差分は codex-cli-runner / claude-cli-runner）にした。統合 2 件（5 本 → 2 本）: `code-evaluator` + `docs-evaluator` + `docs-entrypoint-check` → `repo-evaluator`、`soundcore-minutes` + `meeting-minutes-ingest` → `meeting-minutes`。吸収 5 件: `auth-preflight` → `op-cli-runner`、`multi-account-scheduling` → `gws-cli-runner`、`external-report` → `doc-grill`、`agent-env-parity` → `skill-manager`（`parity` コマンド）、`ghq-repo-placement` → `agents-common.md` の 1 行。削除 5 件: `gemini-cli-runner` / `copilot-cli-runner` / `agent-orchestration-evaluator` / `model-tuning` / `ai-usage-coach`（固有内容は `agent-orchestrator` の references へ移設）。`task-sweep`（ADR-0070、未マージ worktree）は会社固有値を repo 側 profile に分離して取り込んだ。`onepassword-secret-materialize` は `op-cli-runner` への吸収を見送り維持（別セッションがラッパーを編集中）。撤去 15 本の記録は下記「撤去済み（first-party）」
+- 2026-10-23: ADR-0072 で見送った `onepassword-secret-materialize` を `op-cli-runner` へ吸収した（ADR-0076）。本文は `skills/op-cli-runner/references/materialize.md`、script は `skills/op-cli-runner/scripts/opmaterialize` へ移し、`~/.local/bin/opmaterialize` の探索先も `op-cli-runner` に改めた（旧 path へのフォールバックは置かない）。repo ローカルの同名 skill（`.claude/skills/`）は publisher 版の旧版で固有手順が無かったため削除した。first-party は 21 本 → 20 本（Claude Code / Codex 各 19 本）
 
 ### 撤去済み（first-party）
 
-ADR-0072（2026-10-23）で撤去した 15 本（統合 5 + 吸収 5 + 削除 5）。配備先に残っているコピーは削除せず `~/.local/share/skill-retired/2026-10-23/` へ退避する（2026-10-03 の手順と同じ。ADR-0069 決定 1）。
+ADR-0072（2026-10-23）で撤去した 15 本（統合 5 + 吸収 5 + 削除 5）と、ADR-0076（同日）で吸収した 1 本。配備先に残っているコピーは削除せず `~/.local/share/skill-retired/2026-10-23/` へ退避する（2026-10-03 の手順と同じ。ADR-0069 決定 1）。
 
 | skill | 撤去日 | 理由 | 統合先 / 移設先 | 再導入条件 |
 |---|---|---|---|---|
@@ -115,6 +114,7 @@ ADR-0072（2026-10-23）で撤去した 15 本（統合 5 + 吸収 5 + 削除 5�
 | `agent-orchestration-evaluator` | 2026-10-23 | 呼出 0。監査専用 | `agent-orchestrator/references/orchestration-invariants.md` | オーケストレーション監査を独立 role として回す場合 |
 | `model-tuning` | 2026-10-23 | 呼出 0。検証済み reference が 1 世代分のみ | `agent-orchestrator/references/model-profiles.md` | 複数世代の tuning 差分を比較運用する場合 |
 | `ai-usage-coach` | 2026-10-23 | 呼出 1。最大サイズで evaluator 3 本に依存 | `agent-orchestrator` references（Promotion Candidate Score）。`scripts/ai-usage-aggregate.py` は dotfiles `scripts/` に残置 | 利用ログの定期レビューを運用に組み込んだ場合 |
+| `onepassword-secret-materialize` | 2026-10-23 | `op-cli-runner` と担当範囲（`op` 実行と `opmaterialize`）が重なり、`op-cli-runner` 側が復元方針を参照するだけだった。ADR-0072 ではラッパー編集中のため見送り | `op-cli-runner`（`references/materialize.md`、`scripts/opmaterialize`） | secret-backed file の運用が `op` 以外のバックエンドを持つなど、`op-cli-runner` と分ける必要が出た場合 |
 
 退避手順（配備先 3 箇所。`~/.agents/.skill-lock.json` は backup を取ってから該当エントリを外す）:
 
@@ -122,7 +122,8 @@ ADR-0072（2026-10-23）で撤去した 15 本（統合 5 + 吸収 5 + 削除 5�
 d="$HOME/.local/share/skill-retired/2026-10-23"
 for s in code-evaluator docs-evaluator docs-entrypoint-check soundcore-minutes meeting-minutes-ingest \
          auth-preflight multi-account-scheduling external-report agent-env-parity ghq-repo-placement \
-         gemini-cli-runner copilot-cli-runner agent-orchestration-evaluator model-tuning ai-usage-coach; do
+         gemini-cli-runner copilot-cli-runner agent-orchestration-evaluator model-tuning ai-usage-coach \
+         onepassword-secret-materialize; do
   for base in "$HOME/.claude/skills" "$HOME/.agents/skills" "$HOME/.codex/skills"; do
     tag="$(basename "$(dirname "$base")")"   # .claude / .agents / .codex
     [ -d "$base/$s" ] && mkdir -p "$d/$tag" && mv "$base/$s" "$d/$tag/$s"

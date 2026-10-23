@@ -1,9 +1,11 @@
 #!/bin/sh
 set -eu
 
+# op-cli-runner skill 同梱の scripts/opmaterialize を探して実行する薄いラッパー。
+# 統合前の旧 skill の path へはフォールバックしない (ADR-0076)。
 for candidate in \
-  "$HOME/.codex/skills/onepassword-secret-materialize/scripts/opmaterialize" \
-  "$HOME/.claude/skills/onepassword-secret-materialize/scripts/opmaterialize"
+  "$HOME/.codex/skills/op-cli-runner/scripts/opmaterialize" \
+  "$HOME/.claude/skills/op-cli-runner/scripts/opmaterialize"
 do
   if [ -f "$candidate" ]; then
     exec sh "$candidate" "$@"
@@ -20,11 +22,12 @@ if ! source_dir=$(chezmoi source-path 2>/dev/null) || [ -z "$source_dir" ]; then
   exit 1
 fi
 
-candidate="$source_dir/skills/onepassword-secret-materialize/scripts/opmaterialize"
+candidate="$source_dir/skills/op-cli-runner/scripts/opmaterialize"
 if [ -f "$candidate" ]; then
   exec sh "$candidate" "$@"
 fi
 
-printf '%s\n' "opmaterialize: onepassword-secret-materialize skill script not found" >&2
-printf '%s\n' "install it with: gh skill install <dotfiles-repo> onepassword-secret-materialize --from-local --agent codex --scope user" >&2
+printf '%s\n' "opmaterialize: op-cli-runner skill script not found" >&2
+printf '%s\n' "deploy it with: chezmoi apply --include=scripts (or scripts/deploy-skills in the dotfiles source)" >&2
+printf '%s\n' "manual: cd \"\$(chezmoi source-path)\" && gh skill install . op-cli-runner --from-local --agent codex --scope user" >&2
 exit 127

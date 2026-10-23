@@ -1,11 +1,11 @@
 ---
 name: op-cli-runner
-description: "Run 1Password CLI (`op`) and `opmaterialize` through one observable wrapper with timeouts and failure classification, plus a read-only auth preflight and triage for `op`/`oprun`, `ghrun gh`, `gws-account`, `slack-account`, and MCP connectors. Use on `account is not signed in`, `401`, `invalid_grant`, `not_authed`, or before multi-service work. Use when asked to opコマンドを実行, 1Passwordから値を読む, opmaterializeで復元, 認証を確認して, 認証が切れた, gh が 401, gws が invalid_grant, Slack が繋がらない, MF の MCP が切れた, or 作業前に接続確認."
+description: "Run 1Password CLI (`op`) through an observable wrapper and register, diff, or restore secret-backed files with `opmaterialize`, plus a read-only auth preflight for `oprun`, `ghrun gh`, `gws-account`, `slack-account`, and MCP connectors. Use on `account is not signed in`, `not_authed`, or before multi-service work. Use when asked to opコマンドを実行, opmaterializeで復元, secret-backed file を登録, VPN設定を1Passwordへ保存, 認証を確認して, 認証が切れた, gh が 401, gws が invalid_grant, Slack が繋がらない, MF の MCP が切れた, or 作業前に接続確認."
 ---
 
 # OP CLI Runner
 
-Use this skill for the execution mechanics of 1Password CLI commands and for the read-only authentication preflight that precedes multi-service work. Keep higher-level secret workflows in their owning skill, for example `$onepassword-secret-materialize` for `Secrets Manifest` and file restore policy.
+Use this skill for the execution mechanics of 1Password CLI commands, for 1Password-backed files restored with `opmaterialize` (`Secrets Manifest`), and for the read-only authentication preflight that precedes multi-service work.
 
 ## Core Rule
 
@@ -74,11 +74,17 @@ python3 <skill-dir>/scripts/auth_preflight.py --json-out .context/<task>/auth-pr
 
 The script is read-only and, by default, never triggers a 1Password authorization prompt: `op whoami` and `oprun slack-account <profile> auth status` run only with `--with-op`, and `--offline` also skips the network checks (`ghrun gh api user`, `gws-account <profile> auth status`). Output carries status, domain, and workspace names only; tokens, `op://` references, and e-mail addresses are redacted. Exit 1 means at least one FAIL. MCP connectors cannot be checked from the script; use the read-only identity calls listed in the reference.
 
+## Secret-Backed Files (`opmaterialize`)
+
+To save, register, diff, or restore file-based secrets (VPN configs, dotenv files, private subagent definitions, and other files declared in the `Secrets Manifest` of the `Dotfiles Secrets` vault), read `references/materialize.md` first. It holds the manifest layout, the `out_path` rule (final deployed path, never a chezmoi source path), the one-file-per-`add` rule, and the restore and `--force` policy.
+
+The tool is `scripts/opmaterialize` in this skill. `~/.local/bin/opmaterialize` (deployed by `chezmoi apply`) runs it from `~/.codex/skills/op-cli-runner`, `~/.claude/skills/op-cli-runner`, or `skills/op-cli-runner` under `chezmoi source-path`, in that order. The Restore Pattern below runs it through the wrapper.
+
 ## Restore Pattern
 
 For 1Password-backed dotfiles:
 
-1. Use `$onepassword-secret-materialize` for restore policy.
+1. Follow `references/materialize.md` for restore policy.
 2. Use this skill's wrapper for execution:
 
    ```bash
@@ -104,12 +110,12 @@ For 1Password-backed dotfiles:
 
 ## Wrapper Availability
 
-Treat a missing `opmaterialize` wrapper separately from 1Password authentication failures. If `opmaterialize` is not found or exits 127 before contacting 1Password, use the bundled script from the installed `onepassword-secret-materialize` skill, which lives next to this skill under the same skills root (`<skill-dir>/..`, for example `~/.claude/skills` or `~/.codex/skills`):
+Treat a missing `opmaterialize` wrapper separately from 1Password authentication failures. If `opmaterialize` is not found or exits 127 before contacting 1Password, use the bundled script in this skill:
 
 ```bash
 OP_ACCOUNT=my.1password.com \
 OP_DOTFILES_MATERIALIZE_VAULT="Dotfiles Secrets" \
-sh <skill-dir>/../onepassword-secret-materialize/scripts/opmaterialize diff
+sh <skill-dir>/scripts/opmaterialize diff
 ```
 
 Use this only for wrapper availability. Do not use it as an authentication fallback.
@@ -140,6 +146,7 @@ After changing this skill, run:
 ```bash
 python3 <skill-dir>/scripts/run_op_cli.py --help
 python3 -m py_compile <skill-dir>/scripts/run_op_cli.py <skill-dir>/scripts/auth_preflight.py
+sh <skill-dir>/scripts/opmaterialize --help   # usage only; does not contact 1Password
 python3 <skill-dir>/scripts/auth_preflight.py --offline   # exit 0 or 1; no e-mail, token, or op:// values in the output
 scripts/skill-quick-validate skills/op-cli-runner   # from the dotfiles repo root
 ```

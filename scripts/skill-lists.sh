@@ -15,13 +15,13 @@
 # Claude Code には codex-cli-runner、Codex には claude-cli-runner を入れる差分に注意。
 claude_skills=(
   codex-cli-runner grok-cli-runner agent-orchestrator skill-manager handoff
-  dads-design repo-evaluator op-cli-runner onepassword-secret-materialize gws-cli-runner
+  dads-design repo-evaluator op-cli-runner gws-cli-runner
   meeting-minutes meeting-prep-brief doc-grill client-proposal-pack deliverable-closeout
   git-branch-review pdf-extract contract-review expense-to-ledger task-sweep
 )
 codex_skills=(
   claude-cli-runner grok-cli-runner agent-orchestrator skill-manager handoff
-  dads-design repo-evaluator op-cli-runner onepassword-secret-materialize gws-cli-runner
+  dads-design repo-evaluator op-cli-runner gws-cli-runner
   meeting-minutes meeting-prep-brief doc-grill client-proposal-pack deliverable-closeout
   git-branch-review pdf-extract contract-review expense-to-ledger task-sweep
 )

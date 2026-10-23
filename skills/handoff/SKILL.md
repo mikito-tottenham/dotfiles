@@ -22,7 +22,7 @@ Create a handoff packet that lets a fresh agent resume work without guessing. Ch
    - Same-worktree handoff: reference `.context` artifact paths directly.
    - PR or cross-machine handoff: do not assume `.context` files travel. Summarize the facts and reference only committed paths, commits, branches, PR URLs, or comments.
    - If an ignored artifact is too large or too sensitive to summarize, state the missing carrier and ask for a durable transfer choice.
-4. Check for secrets (see Redaction Rules). If secret-backed files must be saved, restored, diffed, or explained, use `$onepassword-secret-materialize` and describe only the non-secret action, for example "restore secret-backed files with `$onepassword-secret-materialize` before running integration checks."
+4. Check for secrets (see Redaction Rules). If secret-backed files must be saved, restored, diffed, or explained, use `$op-cli-runner` (its `opmaterialize` reference) and describe only the non-secret action, for example "restore secret-backed files with `opmaterialize` via `$op-cli-runner` before running integration checks."
 5. Write or draft the handoff. External writes such as posting PR comments, creating issues, or editing durable docs require explicit user instruction.
 
 ## Handoff Contract
@@ -48,7 +48,7 @@ commands not yet run and why; required durable anchors that are still missing
 ## 次の一手
 the single first action the receiver takes (one command or one file read), then the
 ordered remaining steps and the skills to invoke (including
-`$onepassword-secret-materialize` when secret-backed files are part of the workflow)
+`$op-cli-runner` when secret-backed files are part of the workflow)
 
 ## 参照 artifact
 paths under `.context/` and committed files the receiver must read, one line each on
@@ -83,4 +83,4 @@ Deferred work:
 
 ## Redaction Rules
 
-Never include secret values, tokens, private keys, real `op://...` references, local account names, personal data, sensitive manifest rows, or unnecessary local machine details. Before finalizing, scan the handoff and replace sensitive material with a safe description of how to obtain or restore it; when the workflow depends on secret-backed local files, invoke or recommend `$onepassword-secret-materialize` instead of documenting the secret material.
+Never include secret values, tokens, private keys, real `op://...` references, local account names, personal data, sensitive manifest rows, or unnecessary local machine details. Before finalizing, scan the handoff and replace sensitive material with a safe description of how to obtain or restore it; when the workflow depends on secret-backed local files, invoke or recommend `opmaterialize` via `$op-cli-runner` instead of documenting the secret material.
