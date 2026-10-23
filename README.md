@@ -22,11 +22,13 @@ else
   exit 1
 fi && \
 brew install git chezmoi && \
-mkdir -p "$HOME/.local/share" && \
-git clone https://github.com/mikito-tottenham/dotfiles.git "$HOME/.local/share/chezmoi" && \
-brew bundle --file="$HOME/.local/share/chezmoi/Brewfile" && \
+DOTFILES_SOURCE="$HOME/Claude/ghq/github.com/mikito-tottenham/dotfiles" && \
+mkdir -p "$(dirname "$DOTFILES_SOURCE")" "$HOME/.config/chezmoi" && \
+git clone https://github.com/mikito-tottenham/dotfiles.git "$DOTFILES_SOURCE" && \
+printf 'sourceDir = "%s"\n' "$DOTFILES_SOURCE" >"$HOME/.config/chezmoi/chezmoi.toml" && \
+brew bundle --file="$DOTFILES_SOURCE/Brewfile" && \
 chezmoi apply && \
-"$HOME/.local/share/chezmoi/scripts/bootstrap-workspace"
+"$DOTFILES_SOURCE/scripts/bootstrap-workspace"
 ```
 
 `brew bundle` を `chezmoi apply` より先に実行します。`chezmoi apply` は配布 skill の配備（`scripts/deploy-skills`）に Brewfile の `gh` を使い、無い場合は失敗して止まります（ADR-0073）。
@@ -37,12 +39,14 @@ chezmoi apply && \
 # git と chezmoi をインストール
 brew install git chezmoi
 
-# dotfiles repo を chezmoi の標準 source path に clone
-mkdir -p "$HOME/.local/share"
-git clone https://github.com/mikito-tottenham/dotfiles.git "$HOME/.local/share/chezmoi"
+# dotfiles repo を ghq checkout の配置へ clone し、chezmoi source として設定（ADR-0056）
+DOTFILES_SOURCE="$HOME/Claude/ghq/github.com/mikito-tottenham/dotfiles"
+mkdir -p "$(dirname "$DOTFILES_SOURCE")" "$HOME/.config/chezmoi"
+git clone https://github.com/mikito-tottenham/dotfiles.git "$DOTFILES_SOURCE"
+printf 'sourceDir = "%s"\n' "$DOTFILES_SOURCE" >"$HOME/.config/chezmoi/chezmoi.toml"
 
 # Homebrew パッケージを復元（chezmoi apply の skill 配備が gh を使うため先に入れる）
-brew bundle --file="$HOME/.local/share/chezmoi/Brewfile"
+brew bundle --file="$DOTFILES_SOURCE/Brewfile"
 
 # dotfiles を適用（run_onchange script が配布 skill を ~/.claude/skills などへ配備する）
 chezmoi apply
@@ -60,7 +64,7 @@ opmaterialize restore
 ghrun --refresh
 
 # project に依存しない workspace repo を clone / pull
-"$HOME/.local/share/chezmoi/scripts/bootstrap-workspace"
+"$DOTFILES_SOURCE/scripts/bootstrap-workspace"
 ```
 
 配布 skill と third-party external skill は `chezmoi apply` の run_onchange script（`run_onchange_after_deploy-skills.sh.tmpl` → `scripts/deploy-skills`）が `gh skill install` で配備・撤去・Codex 同期まで行います（ADR-0073）。期待リストの正本は `scripts/skill-lists.sh`、手動復旧用の `gh skill install` 一覧は [docs/skills-install-manifest.md](docs/skills-install-manifest.md) です。
