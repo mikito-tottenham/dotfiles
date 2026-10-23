@@ -124,3 +124,10 @@ ADR-0069 の棚卸しから 3 週間後の再点検）。
 - `bash -n scripts/bootstrap-web` が通ること
 - `agents-common.md` の文字数が 9,297 → 8,000 前後に減り、`chezmoi diff ~/.codex/AGENTS-common.md` が apply 後に空であること
 - 新規・変更ファイルに実名・メールアドレス・secret・モデル名の直書きが無いこと（ADR の `agent_model` を除く）
+
+## 追補（2026-10-23、ADR-0076）
+
+決定 1 で見送った `onepassword-secret-materialize` の吸収を、同日の ADR-0076 で行った。見送りの理由だったラッパー編集は、
+main checkout に未コミットで残っていた WIP（`chezmoi source-path` による source 解決）で、ADR-0076 の仕分けで取り込んだ。
+本文は `op-cli-runner/references/materialize.md`、script は `op-cli-runner/scripts/opmaterialize` へ移し、first-party は 21 本 → 20 本
+（Claude Code / Codex 各 19 本）になった。決定 1 の維持リストと Verification の本数（21 本・各 20 本）は本 ADR 作成時点の記録として残す。
