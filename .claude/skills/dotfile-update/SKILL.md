@@ -18,6 +18,22 @@ Phase / Step を持つ作業として扱うため、各 Step をまたぐ前に 
 artifact の初期必須項目は `task`、`phase_or_step`、`created_at` とし、Markdown は Front Matter、JSON は同名キーで保持する。
 推奨命名は `.context/<task-or-date>/<nn>-<phase-name>.(md|json)` とする。
 
+### 0. 作業前の同期確認
+
+ソースを編集する前に、作業する checkout がリモートの既定ブランチより遅れていないかを確認する。
+遅れたまま編集すると、ADR 番号の重複や、リモートで統合・削除済みのファイルへの変更が起き、push の前に書き直しが必要になる（2026-10-25 に 19 コミットの遅れで発生。ADR-0077）。
+
+1. `git fetch origin` を実行する
+2. `git status --short --branch` で現在のブランチと未コミットの変更を、`git rev-list --left-right --count HEAD...origin/main` で ahead / behind を確認する
+3. 結果に応じて次のどれかを選ぶ:
+   - behind が 0: そのまま Step 1 へ進む
+   - behind が 1 以上で、ahead が 0 かつ作業ツリーがクリーン: 遅れている分には実機へ未反映の変更が含まれるため、先に追従する。`git merge --ff-only origin/main` の後、`chezmoi diff` をユーザーに提示し、承認を得てから対象を明示して apply する（skill の配備は `chezmoi apply --include=scripts`）。ユーザーが今は追従しないと判断した場合は、origin/main から `git worktree add` した作業ツリーで編集し、実機への apply は追従後に回す
+   - ahead が 1 以上、または未コミットの変更がある: 他のセッションや未 push の作業の可能性があるため、巻き込まずに状況をユーザーへ報告して判断を仰ぐ
+4. ADR を追加する場合は、追従後の（または origin/main を基準にした）`docs/adr/` で最新番号を確かめてから番号を決める
+
+Step artifact:
+- fetch の結果、ahead / behind、選んだ対応を `sync-check` artifact として `.context/` に保存する。
+
 ### 1. ソースファイルの編集
 
 chezmoi のソースファイルを直接編集する。
