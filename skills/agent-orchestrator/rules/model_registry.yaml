@@ -21,19 +21,23 @@
 # v4 (2026-09-15): Codex 列を `~/.codex/models_cache.json` に実在する ID だけで構成。
 #   S/A = gpt-6-astra (config.toml 既定。effort は low/medium/high/xhigh/max/ultra)、
 #   B = gpt-5.6-sol、C = gpt-5.6-luna。gpt-5.5 は registry から外した。
+# v5 (2026-10-25): 既定の実行者を親に反転した (ADR-0077)。委譲は親 AI の正規指示
+#   ファイル (AGENTS-common) の委譲条件に当たる作業に限り、解決 model が親と同じ
+#   場合は model_elision に従う。committer role を削除した。
 
-version: 4
-updated_at: "2026-09-15"
+version: 5
+updated_at: "2026-10-25"
 
 execution_modes:
   self: >-
-    親オーケストレータの直接実行。意図明確化・計画・委譲・artifact 検査・
-    統合・裁定・最終報告のオーケストレーション作業専用。
-    具体タスク実行には使わない。
+    親の直接実行。既定の実行モード。意図明確化・計画・委譲・artifact 検査・
+    統合・裁定・最終報告に加え、委譲条件に当たらない具体タスクも親が行う。
+    委譲条件の正本は親 AI の正規指示ファイル (AGENTS-common の委譲条項)。
   agent_tool: >-
     親 provider の subagent 機構 (Claude Code: Agent tool / Codex: custom agent)
     で同 provider の subagent へ委譲する (Self-Elision: 外部 CLI subprocess を
-    起動しない、が親も直接実行しない)。
+    起動しない)。委譲条件に当たる場合だけ使い、解決 model が親と同じ場合は
+    model_elision に従う。
   cli_runner: >-
     provider 対応の runner skill で外部 CLI subprocess として実行する。
 
@@ -55,7 +59,13 @@ provider_resolution:
   parent: >-
     親自身の provider キー (claude_code / codex) に置換する。
     tiers の同名列で model / effort を解決し、mode は self_elision により
-    常に agent_tool になる。
+    常に agent_tool になる。解決 model が親と同じ場合は model_elision に従う。
+
+model_elision: >-
+  解決した model が親と同じ場合は、委譲条件のうち文脈の切り離し・並列化・
+  ツールや指示の分離・独立レビューのどれかに当たるときだけ agent_tool で委譲する。
+  役割分担だけが理由なら委譲せず、親が直接実行する (固定費とレイテンシが
+  増えるだけで、コスト上の利点がないため)。
 
 harness_notes:
   codex_custom_agents: >-
@@ -88,7 +98,7 @@ harness_notes:
 #   レビューなどは claude_code 列(詳細は model-profiles.md)。
 # - 反復実行ループ(閾値・例外は AGENTS.md の反復スクリプト化ルール参照)は
 #   スクリプト化を優先し、スクリプト生成・実行の委譲は C/B tier から始める。
-# - 会話応答・軽微な単発編集は委譲しない(委譲の固定費 > 実行コストのため)。
+# - 委譲条件に当たらない作業は委譲しない(委譲の固定費 > 実行コストのため)。
 # - クロスモデルレビューが必要な場合は、role の provider を親と異なる列へ
 #   明示して cli_runner で倒してよい (逸脱理由を artifact または報告に記録)。
 tiers:
@@ -97,7 +107,7 @@ tiers:
       最難関。novel な設計判断、要件が曖昧で高リスク、失敗コストが大きい、
       複数の相反する制約の裁定が必要。
     codex: { model: gpt-6-astra, effort: xhigh }
-    claude_code: { model: fable }  # 親と同モデル。トークン最高価のため使用は最小限に
+    claude_code: { model: fable }  # トークン最高価のため使用は最小限に。親が fable なら model_elision に従う
   A:
     intent: >-
       実装主力。設計判断を含む実装、複数ファイルにまたがる変更、
@@ -120,10 +130,14 @@ tiers:
 roles:
   orchestrator:
     mode: self
-    use_for: タスク分解、tier/role 判断、委譲、artifact 検査、統合、裁定、最終報告
+    use_for: >-
+      既定の実行者。委譲条件に当たらない具体タスクの実行、タスク分解、
+      委譲判断、tier/role 判断、artifact 検査、統合、裁定、最終報告
   worker:
     tier: dynamic  # 親が tiers の選択規則に従いタスクごとに推論する
-    use_for: 実装、コード生成、ファイル作業、調査・執筆など実行系全般
+    use_for: >-
+      委譲条件に当たる実行系作業 (大量の読み込み、独立したワークパッケージの
+      並列実行、別利用枠で行う大きめの実装・調査など)
   reviewer_tech:
     provider: parent
     mode: agent_tool
@@ -144,12 +158,6 @@ roles:
     use_for: >-
       予定調整、タスク整理、連絡文案、実務段取り。
       secret・認証情報・raw の予定本文/連絡先を渡さない (AGENTS.md の personal 制約に準拠)。
-  committer:
-    provider: parent
-    mode: agent_tool
-    tier: A  # Claude Code 親は A 固定 (2026-07-25 ユーザー指示)。
-             # Codex 親は未 pin・目安 B (pin はユーザー判断待ち)。
-    use_for: git commit などの定型実行作業
 
 # skill 固有の override。参照形式: skills.<skill>.roles.<role>
 # ここに定義がない skill は上の roles / tiers を既定として使う。

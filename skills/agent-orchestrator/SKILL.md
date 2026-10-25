@@ -5,12 +5,13 @@ description: "Plan and coordinate delegated work across agents and runners. Use 
 
 # Agent Orchestrator
 
-Claude Code / Codex いずれかの親エージェントを司令塔として、作業を role に分類し、
+Claude Code / Codex いずれかの親エージェントが、委譲すると決めた作業を role に分類し、
 resolver の解決結果に従って runner skill または同 provider の subagent へ委譲する。
 
-親は orchestration 作業(意図明確化・計画・委譲・artifact 検査・統合・裁定・最終報告)
-だけを直接実行する。worker 的な具体タスクを親が兼任しない。これは品質のためでもある:
-委譲は成果物を `.context/` に観測可能な形で残し、レビューと再実行を可能にする。
+既定の実行者は親である。委譲するのは、親 AI の正規指示ファイル(AGENTS-common の
+委譲条項)が定める条件(文脈の切り離し・並列化・ツールや指示の分離・独立レビュー・
+別利用枠でのコスト優位)に当たる作業だけで、役割分担だけを理由に委譲しない。
+委譲した作業は成果物を `.context/` に観測可能な形で残し、レビューと再実行を可能にする。
 
 ## Model resolution
 
@@ -30,13 +31,14 @@ resolver の解決結果に従って runner skill または同 provider の suba
   親の異同で実行モードを決める(正本: `providers.*.self_elision`)。
   親と同じ provider へは親 provider の subagent 機構、異なる provider へは
   対応する cli_runner を使う。
+- 解決した model が親と同じ場合は registry `model_elision` に従い、文脈の切り離し・
+  並列化・ツールや指示の分離・独立レビューのどれにも当たらなければ親が直接実行する。
 
 ## Workflow
 
-1. **分類 (self)**: 依頼をワークパッケージに分解し、各パッケージへ registry の role を
-   1 つ割り当てる。迷ったら `use_for` の記述で選ぶ。どの role にも該当しない
-   会話応答・軽微な単発編集は orchestration の一部として親が扱ってよい
-   (委譲の固定費が実行コストを上回るため)。
+1. **分類 (self)**: 依頼をワークパッケージに分解し、委譲条件に当たるパッケージにだけ
+   registry の role を 1 つ割り当てる。迷ったら `use_for` の記述で選ぶ。委譲条件に
+   当たらないパッケージは親が直接実行する(委譲の固定費が実行コストを上回るため)。
 
    逆に、実行ループの兆候(同種ツール呼び出しの連続。閾値・例外は AGENTS.md の
    反復スクリプト化ルールに従う)を検出したパッケージは、親でターン実行を続けず、
@@ -63,7 +65,7 @@ resolver の解決結果に従って runner skill または同 provider の suba
      Codex: custom agent)で起動する。registry の `subagent` は custom agent 名、
      `model` / `effort` は各ハーネスが対応する指定へ使う(省略すると親・ハーネス既定へ
      落ち tier 未適用になるため、registry が tier を持つ role では必ず明示する)。
-   - `mode: self` → 親が直接行う(orchestration 作業のみ)。
+   - `mode: self` → 親が直接行う(既定。委譲条件に当たらない作業すべて)。
 4. **検査 (self)**: 各委譲の期待 artifact が実体化しているか、runner の summary が
    success かを確認する。runner の成功は「実行と artifact 実体化」だけを保証する。
    内容の品質判断は親の責務として必ず中身を読む。

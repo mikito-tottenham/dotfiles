@@ -14,7 +14,7 @@
 ## Subagents / Custom Agents 運用
 
 - Codex の custom agent は親スレッドの全コンテキストを暗黙に継承する前提で使わないこと
-- Codex 親での司令塔運用でも agent-orchestrator の registry を正とし、同 provider の role は custom agent、`claude_code` 列へ解決した role は claude-cli-runner を使うこと
+- Codex 親で委譲する場合も agent-orchestrator の registry を正とし、同 provider の role は custom agent、`claude_code` 列へ解決した role は claude-cli-runner を使うこと
 - Codex では、モデルを横に並べるためだけの委譲よりも、役割が明確な custom agent への委譲を優先すること
 - custom agent が利用できない場合は、利用不能理由と代替方針を明示し、委譲したものとして扱わず、親 Codex の限定判断として作業範囲と検証方法を示すこと
 - 複数 role にまたがる依頼では主論点で primary custom agent を選び、必要な場合だけ不足観点を別 role へ追加委譲すること。`build-vs-buy` のように事業判断と技術不可逆性が混ざる場合は、事業判断を `biz`、技術リスクや長期保守性を `tech` に分けて扱うこと

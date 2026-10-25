@@ -1,6 +1,6 @@
 ---
 title: "Orchestration Invariants — 委譲境界の監査基準"
-updated_at: 2026-10-23
+updated_at: 2026-10-25
 ---
 
 # Orchestration Invariants
@@ -9,9 +9,13 @@ orchestration 文書(SKILL.md / registry / 委譲 prompt)を監査・修正す�
 旧 orchestration evaluator skill(2026-10 統合)の要約で、判断の正本は SKILL.md と
 `rules/model_registry.yaml`。違反の兆候を見つけたら resolver → 依存 skill → ADR の順に直す。
 
-1. `self` と Self-Elision は別物。`self` は親の直接実行で orchestration 作業専用、
-   Self-Elision は「外部 CLI を起動せず同 provider の subagent へ委譲する」最適化。
-2. 親は具体タスクを所有しない。モデルが一致しても worker / reviewer / judge 役を親が兼任しない。
+1. `self` と Self-Elision は別物。`self` は親の直接実行で既定の実行モード(委譲条件に
+   当たらない具体タスクを含む)、Self-Elision は「外部 CLI を起動せず同 provider の
+   subagent へ委譲する」最適化。解決 model も親と同じなら registry `model_elision` に従う。
+2. 具体タスクは親が直接実行するのが既定。委譲は委譲条件(文脈の切り離し・並列化・
+   ツールや指示の分離・独立レビュー・別利用枠でのコスト優位)に当たる場合に限り、
+   役割分担だけを理由に委譲しない。reviewer / judge など独立レビューの役は、モデルが
+   一致しても親が兼任しない(別の文脈であること自体が役の目的のため)。
 3. 委譲先が親と異なる provider なら runner skill を使い、raw CLI / API 呼び出しを skill に書かない。
 4. runner は subprocess 機構(prompt file / stream log / timeout / expected artifact / summary / failure)を所有し、
    resolver は role → provider / model / effort / mode の選択だけを所有する。

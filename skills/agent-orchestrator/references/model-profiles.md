@@ -1,6 +1,6 @@
 ---
 title: "Model Profiles — worker tier ladder の判断補助"
-updated_at: 2026-10-23
+updated_at: 2026-10-25
 ---
 
 # Model Profiles
@@ -53,14 +53,14 @@ cli_runner になる。
 
 ### fable / Claude Fable 5.1(Claude 列 S)
 
-- Mythos クラス。この構成で最も賢く、最も高価。親(司令塔)と同一モデル。
+- Mythos クラス。この構成で最も賢く、最も高価。親が fable のときは同一モデルになり、registry の `model_elision` に従う。
 - 得意: 曖昧さの裁定、相反する制約の統合、最高難度の設計・レビュー。
 - 留意: 使用は最小限に。「worker に落とせない判断」だけを渡す。
 
 ### opus / Claude Opus 5(Claude 列 A)
 
 - Claude の実行系最上位。ニュアンスの効いた文章、コンテキスト理解、
-  堅実なコード品質。committer role の pin 先。
+  堅実なコード品質。
 - 得意: MCP・ブラウザ等ハーネス前提の実行、日本語の対外文書、
   セッション文脈に近い作業、Codex 成果物のクロスチェック。
 
