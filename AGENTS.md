@@ -11,6 +11,7 @@
 - dotfile 変更前に [chezmoi-knowledge/SKILL.md](.claude/skills/chezmoi-knowledge/SKILL.md) と [semantics.md](.claude/skills/chezmoi-knowledge/references/semantics.md) を確認し、source / target / ignore の前提を外さないこと
 - `chezmoi apply` の前とドリフト確認時は `scripts/chezmoi-drift --check-ignore` 相当の `.chezmoiignore` 整合確認を行い、意図せず無効化された source がないことを確認すること
 - ADR を追加・リネームするときは `scripts/adr-number-check --staged` で番号の重複が無いことを確認すること。commit 時は repo ローカルの Claude / Codex hook（`--hook`）が新規の衝突だけを止める。既存の重複（0048）はリネームせず報告に留める（ADR-0069）
+- PR のマージは `ghrun gh pr merge <番号> --repo mikito-tottenham/dotfiles --rebase` で行うこと。リポジトリ設定で squash と merge commit は無効で、rebase だけが許可されている。また fork のため、`gh pr create` / `gh pr merge` で `--repo` を省くと fork 元（rmanzoku/dotfiles）が対象になって失敗する（2026-10-25 実測）
 - ファイル探索は `rg --files`、内容検索は `rg` を第一候補とし、`rg` が使えない場合だけ `ag`、最後に `grep` を使うこと
 
 # Desktop 自動実行設定管理
