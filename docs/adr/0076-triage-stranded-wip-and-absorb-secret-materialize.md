@@ -102,3 +102,19 @@ related_adr: ["0006", "0016", "0047", "0048", "0049", "0055", "0056", "0063", "0
 - `grep -rn onepassword-secret-materialize --exclude-dir=.git --exclude-dir=adr --exclude-dir=worktrees .` が manifest の撤去記録だけ
 - `scripts/adr-number-check`、`scripts/docs-link-check`、`scripts/verify-cloud-parity --quiet`
 - 機密 grep: 変更ファイルに `op://` の実値、メールアドレス、ホスト名、IP、利用者のホームディレクトリの絶対 path が無いこと
+
+## 追補（2026-10-26、Claude Opus 5.5）
+
+ユーザーの判断（2026-10-26「消していい」「hooks.json も dotfiles で管理できるようにして」）を受けて、Consequences に残した 2 点を決着させた。
+
+- **`~/.codex/hooks.json` を chezmoi 管理にする。** 実機ファイルから artifact gate（PreToolUse）と SUPERSET 通知 4 件を外し、
+  context guard（UserPromptSubmit）とクラウドでの `opmaterialize restore`（SessionStart）だけを残した。その内容を
+  `dot_codex/hooks.json.tmpl` と `dot_codex/hooks/executable_context_guard.py` として source に入れた。ホームディレクトリの
+  path だけを `.chezmoi.homeDir` で描画し、コマンド文字列は実機と同一に保つ（Codex が hook の承認状態を持つため）。
+  WIP のテンプレートを捨てた理由（artifact gate の互換 shim と通知先の無い SUPERSET 通知）は、この 2 つを外したことで解消した。
+  ADR-0016 の「`~/.codex/hooks.json` に repo enforcement を載せない」はこの形で守られる。
+- **Codex の context guard は Claude 用と共通化しない。** Codex の transcript は usage を `payload` 配下に `cached_input_tokens` 付きで
+  持つため、`dot_claude/hooks/executable_context_guard.py` とは読み方が違う。閾値の環境変数も `CODEX_CTX_HANDOFF_THRESHOLD` で別にした。
+- **Gemini の SUPERSET hook も外す。** `dot_gemini/settings.json.tmpl` は `~/.superset/hooks/gemini-hook.sh` を存在確認なしで
+  3 event から呼んでいたが、`~/.superset` は実機に無い。ADR-0072 決定 4（Claude）と同じ理由で `hooks` ごと削除した。Qwen には該当なし。
+

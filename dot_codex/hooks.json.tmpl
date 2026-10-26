@@ -1,0 +1,27 @@
+{
+  "description": "Global Codex hooks: context-budget handoff guard and cloud secret restore. Repo enforcement such as the artifact gate stays in repo-local hooks (ADR-0016).",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 '{{ .chezmoi.homeDir }}/.codex/hooks/context_guard.py'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"${OP_SERVICE_ACCOUNT_TOKEN:-}\" ] && command -v opmaterialize >/dev/null 2>&1 && opmaterialize restore >/dev/null 2>&1 || true",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -168,6 +168,8 @@ Conductor などのツールが git worktree を立ち上げて dotfiles を編�
 | `.claude/hooks/phase_artifact_hook.py` | artifact gate。repo ローカルの gate が無い repo では warn で動く（ADR 0016 追補） |
 | `.codex/AGENTS.md` | Codex エージェント設定 |
 | `.codex/config.toml` | Codex モデル・プロジェクト設定 |
+| `.codex/hooks.json` | Codex のグローバル hook（context guard と、クラウドでの `opmaterialize restore`）。artifact gate は repo ローカルに置く（ADR 0016） |
+| `.codex/hooks/context_guard.py` | Codex の transcript から直近のコンテキスト量を読み、handoff 閾値を超えたら警告する UserPromptSubmit hook |
 | `.qwen/QWEN.md` | Qwen ユーザー設定 |
 | `.qwen/settings.json` | Qwen モデルプロバイダー設定 |
 
@@ -190,6 +192,8 @@ Conductor などのツールが git worktree を立ち上げて dotfiles を編�
 | `.claude/settings.json` | `dot_claude/settings.json` |
 | `.codex/AGENTS.md` | `dot_codex/AGENTS.md` |
 | `.codex/config.toml` | `dot_codex/private_config.toml.tmpl` |
+| `.codex/hooks.json` | `dot_codex/hooks.json.tmpl` |
+| `.codex/hooks/*.py` | `dot_codex/hooks/executable_*.py` |
 | `.config/op/dotfiles.env.example` | `dot_config/private_op/dotfiles.env.example` |
 | `.local/bin/oprun` | `dot_local/bin/executable_oprun` |
 | `.local/bin/ghrun` | `dot_local/bin/executable_ghrun` |
