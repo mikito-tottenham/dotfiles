@@ -19,37 +19,5 @@
     "folderTrust": {
       "enabled": true
     }
-  },
-  "hooks": {
-    "BeforeAgent": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "{{ .chezmoi.homeDir }}/.superset/hooks/gemini-hook.sh"
-          }
-        ]
-      }
-    ],
-    "AfterAgent": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "{{ .chezmoi.homeDir }}/.superset/hooks/gemini-hook.sh"
-          }
-        ]
-      }
-    ],
-    "AfterTool": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "{{ .chezmoi.homeDir }}/.superset/hooks/gemini-hook.sh"
-          }
-        ]
-      }
-    ]
   }
 }
