@@ -54,5 +54,7 @@ Codex の両方に次を適用する。
 - Brave 側のログイン状態と 1Password 拡張をそのまま使えるため、ログインのやり直しが減る。
 - Codex には Brave を直接操作する経路が無いことが多い。その場合はルール 3 に当たり、
   理由を伝えてから Codex App Browser などを使う。
-- Brave は現時点で Brewfile に含まれていない（手動インストール）。新しいマシンでは Brave を
-  別途入れる必要がある。Brewfile への追加は本 ADR の範囲外とする。
+- 2026-11-10 の追補で Brewfile に `cask "brave-browser"` を追加し、新しいマシンでは `brew bundle` で
+  Brave が入るようにした。既に手動で入れた `/Applications/Brave Browser.app` がある Mac では
+  `brew bundle` が既存アプリとの衝突で失敗するため、`brew install --cask --adopt brave-browser` で
+  Homebrew の管理下に移す。
