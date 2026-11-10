@@ -10,8 +10,8 @@ Soundcore AI の Web UI（`https://ai.soundcore.com/home`）には公開 API が
 
 ## ブラウザの選び方
 
-- 既存のログインセッション、Cookie、パスワードマネージャ、MFA の状態が要るなら Chrome（Claude in Chrome）を使う
-- ユーザーが Codex App Browser を指定した、そこで既にログイン済み、またはアプリ内ブラウザで進めたい場合はそちらを使う
+- 共通ルール（ブラウザ操作）に従い、最初にユーザーの Brave Browser（Claude Code では Claude in Chrome、接続先は Brave）を使う。既存のログインセッション、Cookie、パスワードマネージャ、MFA の状態もここにある
+- Codex App Browser などアプリ内ブラウザは、ユーザーが指定した場合か、Brave で進められない理由をユーザーに伝えた後にだけ使う
 - どちらも未認証なら `https://ai.soundcore.com/home` を開き、ユーザーがログインを終えるまで待ってから続ける
 - Soundcore の認証情報をユーザーに求めない。認証はユーザー本人がブラウザで行う
 

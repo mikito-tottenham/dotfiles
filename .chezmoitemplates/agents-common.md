@@ -52,6 +52,13 @@
 - gws アカウントの実メールアドレスは git 管理下の文書やコミットメッセージに書かず、必要なときは `gws-account <profile> auth status` の `user` フィールドで実行時に確認すること
 - プロファイル対応、再認証の切り分けと依頼の仕方、カレンダー共有 ACL の手順は gws-cli-runner skill の `references/account-profiles.md` を正本とし、ここには再掲しないこと
 
+# ブラウザ操作
+
+- Web ページの閲覧・操作でブラウザを使うときは、ユーザーが別のブラウザを指定した場合を除き、最初にユーザーの Brave Browser を試すこと（dotfiles ADR-0078）。Claude Code では Claude in Chrome（`mcp__claude-in-chrome__*`。接続先は Brave）を使い、複数のブラウザが接続されているときは `list_connected_browsers` で確認して Brave を選ぶこと
+- Brave を試す前に、アプリ内ブラウザ（Claude Desktop の browser pane、Codex App Browser など）や Google Chrome・Safari などの別ブラウザを開かないこと。`open -a` や AppleScript でブラウザを起動・操作するときも `Brave Browser` を対象にすること
+- 別のブラウザへ切り替えてよいのは、Brave を操作するツールが無い、再試行しても Brave に接続できない、Brave では開けないページである、のいずれかの場合だけとし、切り替える前に理由を 1 行でユーザーに伝えること。黙って切り替えないこと
+- 例外として、作業中プロジェクトの dev server をハーネスのプレビュー機能（Claude Desktop の `preview_start` など）で起動して確認する場合は、そのプレビュー画面を使ってよい
+
 # 日本語の文章スキル
 
 - 人に読ませる日本語の文章（社内外のメール・チャット、提案書、報告書、議事録、スライドなど）を書く・直すときは、構成と読みやすさを `natural-japanese`、敬語・宛名・事実と約束の確認を `japanese-business-writing` で扱うこと。Agent 自身の返答、コミットメッセージ、ADR、`.context/` の作業メモには使わないこと
