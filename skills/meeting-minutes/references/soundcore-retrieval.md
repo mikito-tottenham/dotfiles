@@ -1,6 +1,6 @@
 ---
 title: Soundcore Work / Soundcore AI からの文字起こし取得
-updated_at: 2026-10-23
+updated_at: 2026-11-16
 source: 2026-10-23 の Skill 統合で、旧 Soundcore 取得 skill の Workflow / Extraction Notes を移設
 ---
 
@@ -40,10 +40,22 @@ UI やブラウザツールが変わったら再確認する。
 - `navigator.clipboard.writeText` や `document.execCommand('copy')` でローカル側へ渡さない。ユーザー操作なしでは書き込みが失敗し、クリップボードは変わらない
 - file artifact（話者・時刻・本文の TSV など）で逐語の保証が要るときは、保存したファイルからセグメントごとに UTF-16 code unit 数と code unit の総和 mod 9973 を計算し、その checksum 一覧を実行する JS に埋め込んで DOM と比較し、不一致の index だけを返す（結果が短くなり切り詰められない）。観測した回では 186/186 が一致した
 
-## 一括取得（2026-10-08 観測、99 件を約 70 秒で取得）
+## 複数件の取得（2026-11-16 観測、4 件を画面から取得）
 
-- 多数の録音は、録音を 1 件ずつ開かず、ページ内から Web アプリ自身の API を呼ぶ。アプリは `https://anka-api-*.soundcore.com` へ `POST` XHR を送る: `/app/audio/note/list`（body `{page, page_size, sort_by, order, is_recycled}`。`page_size: 200` で 99 件全部が返った）、`/app/audio/note/query_summary` と `/app/audio/note/query_trans`（body `{note_id}`）。文字起こしセグメントは `speaker_label`、ミリ秒の `start_time` / `end_time`、`content` を持つ
-- auth header は、`XMLHttpRequest.prototype.setRequestHeader` をラップしてページ変数に保持したまま録音を 1 件クリックして再利用する。その値を `javascript_tool` から返したりファイルに書いたりしない。終わったらタブを閉じる
-- 一覧の `app_note_id` は録音開始の epoch 秒（UI の `YYYY-MM-DD HH:MM:SS` と一致する）、`created_at` はアップロード時刻、`audio_duration` はミリ秒。録音は `https://ai.soundcore.com/file/<note_id>` で開く。後の実行で重複を検出できるよう、この URL か `note_id` を出典に書く
-- 結果をローカル側へ移すには、ページ内で 1 つの JSON Blob を作ってダウンロードする。ファイル名・出典・サイズを示してユーザーに確認し、ダウンロード後すぐに作業 repo の `.context/` へ移す
-- レコーダーの時計が狂っていることがあり、2025-01-01 のような日付の録音がある。実際の日付は文字起こしと既存の議事録で確かめる
+内部 API を直接呼ぶ方法は使えなくなった（下の「使えなくなった方法」）。複数件でも、録音を 1 件ずつ開いて画面から読む。
+
+- ホームの録音一覧は仮想化されておらず、全件（観測時 111 件）が DOM にある。各行の葉要素の `innerText` が `YYYY-MM-DD HH:MM:SS | <duration>` で、その親をたどると 1 行目が会議名ラベルになる。まず一覧だけを読み、開始時刻（秒まで）で取り込み済みの判定を済ませてから、未取り込みの録音だけを開く
+- 録音を開くには、一覧の日時の葉要素を `click()` する。開いた後の `location.pathname` の末尾が `note_id`（48 文字）
+- 文字起こしペインは、画面上部の `button.icon-btn` のうち右端のものを押すと開く。話者ラベルの葉要素が 0 件のときだけ押す（開いた状態でもう一度押すと閉じる）
+- 開く → 要約を読む → 文字起こしペインを開く → セグメントを集める、を対象の録音について 1 回の `javascript_tool` 呼び出しでループし、結果を `window` 変数に貯める。戻り値は件数・話者・最終時刻などの短い要約だけにする
+- 読み出しは「観測メモ」の一時 `<article>` + `get_page_text` を使う。2 録音分（約 25,000 文字）が 1 回で切り詰めなしに返った。読み終えたら要素と `window` 変数を消し、タブを閉じる
+- 全文を repo に保存する場合は、読んだ本文を `.context/` に 1 セグメント 1 行で書き出し、ページ側と照合してから、repo 用のファイルを script で生成する。照合は、セグメントごとの（UTF-16 code unit 数、code unit の総和 mod 9973）を 10 セグメント単位でまとめたハッシュにし、ページ側とローカル側で同じ計算をして突き合わせる。ページから返す値が短く済み、`[TRUNCATED]` にかからない
+- 話者ラベルが 1 種類しか無い録音は、通話の片側（録音者側）しか入っていないことがある。相手の発言を要約から補わず、議事録に「録音は片側のみ」と明記する
+- 話者分離が粗い録音では、1 つの speaker ラベルに複数人の発言が混ざる（同じラベルの中で質問と回答が続く）。担当の帰属は推定と明記する
+
+## 使えなくなった方法: 内部 API の直接呼び出し（2026-10-08 観測 → 2026-11-16 に不可を確認）
+
+- 2026-10-08 には、ページ内から `https://anka-api-*.soundcore.com` の `/app/audio/note/list`・`query_summary`・`query_trans` を平文 JSON で呼べ、99 件を約 70 秒で取得できた
+- 2026-11-16 時点では、リクエスト本文とレスポンスの `data` が暗号化された文字列になり、ヘッダーに署名・nonce・時刻（`X-Signature`、`X-Request-Once`、`X-Request-Ts`、`X-Encryption-Info` など）が付く。捕まえたヘッダーの使い回しでは呼べない
+- 暗号化や署名の解析はしない。画面に表示された内容を読む方法（上の節）に切り替える
+- 当時の観測のうち今も使えるもの: 録音は `https://ai.soundcore.com/file/<note_id>` で開く。重複検出のため、この URL か `note_id` を出典に書く。レコーダーの時計が狂っていて 2025-01-01 のような日付になる録音があるので、実際の日付は文字起こしと既存の議事録で確かめる
