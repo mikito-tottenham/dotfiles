@@ -2,7 +2,8 @@
 """PDF / PPTX が拡大しても掠れないかを検査する（dotfiles ADR-0080）。
 
 不合格（exit 1）:
-  - 文字を持たず画像だけのページ・スライド（文字ごと画像化されている）
+  - PDF の Type 3 フォント・未埋め込みフォント（Acrobat / Chrome / Drive プレビューで文字が細く掠れる）
+  - 文字を持たず画像だけのページ・スライド（文字ごと画像化されている。背景画像として貼った形を含む）
   - 配置サイズに対して解像度が足りない画像（既定 200ppi 未満）
 PDF は poppler の pdffonts / pdfimages を使う。PPTX は標準ライブラリだけで読む。
 写真や図版そのものが主役のページは --allow-image-only で画像だけのページを許す。
@@ -26,8 +27,20 @@ def check_pdf(path, min_ppi, allow_image_only):
     fails, notes = [], []
     pages = int(re.search(r"Pages:\s*(\d+)", run(["pdfinfo", path])).group(1))
     fonts = run(["pdffonts", path]).splitlines()[2:]
-    if any("Type 3" in line for line in fonts):
-        notes.append("Type 3 フォントあり（輪郭は保たれるが、ビューアによって検索・コピーが効かないことがある）")
+    type3, not_embedded = set(), set()
+    for line in fonts:
+        col = line.split()
+        if len(col) < 7:
+            continue
+        name = col[0].split("+")[-1]
+        if " ".join(col[1:-6]).startswith("Type 3"):
+            type3.add(name)
+        if col[-5] != "yes":
+            not_embedded.add(name)
+    if type3:
+        fails.append("Type 3 フォント: " + ", ".join(sorted(type3)) + "（静的 TrueType を @font-face で埋め込み、太字は Bold の実体を使う）")
+    if not_embedded:
+        fails.append("未埋め込みフォント: " + ", ".join(sorted(not_embedded)))
     image_pages = set()
     for line in run(["pdfimages", "-list", path]).splitlines()[2:]:
         col = line.split()
@@ -66,19 +79,24 @@ def check_pptx(path, min_ppi, allow_image_only):
             (n for n in z.namelist() if re.fullmatch(r"ppt/slides/slide\d+\.xml", n)),
             key=lambda n: int(re.search(r"\d+", n.rsplit("/", 1)[1]).group()),
         )
+        pres = z.read("ppt/presentation.xml").decode("utf-8", "replace")
+        slide_cx = int(re.search(r'<p:sldSz[^>]*cx="(\d+)"', pres).group(1))
         for name in slides:
             no = re.search(r"\d+", name.rsplit("/", 1)[1]).group()
             xml = z.read(name).decode("utf-8", "replace")
             pics = re.findall(r"<p:pic>.*?</p:pic>", xml, re.S)
-            if pics and "<a:t>" not in xml and not allow_image_only:
+            bg = re.search(r"<p:bg>.*?</p:bg>", xml, re.S)
+            bg_rid = re.search(r'r:embed="([^"]+)"', bg.group(0)) if bg else None
+            if (pics or bg_rid) and "<a:t>" not in xml and not allow_image_only:
                 fails.append(f"slide{no}: 文字が無く画像だけのスライド")
             rels_name = f"ppt/slides/_rels/slide{no}.xml.rels"
             rels = z.read(rels_name).decode() if rels_name in z.namelist() else ""
             targets = dict(re.findall(r'Id="([^"]+)"[^>]*?Target="([^"]+)"', rels))
             targets.update({i: t for t, i in re.findall(r'Target="([^"]+)"[^>]*?Id="([^"]+)"', rels)})
-            for pic in pics:
-                rid = re.search(r'r:embed="([^"]+)"', pic)
-                ext = re.search(r'<a:ext cx="(\d+)" cy="(\d+)"', pic)
+            placed = [(re.search(r'r:embed="([^"]+)"', pic), re.search(r'<a:ext cx="(\d+)" cy="(\d+)"', pic)) for pic in pics]
+            if bg_rid:
+                placed.append((bg_rid, re.match(r"(\d+)", str(slide_cx))))
+            for rid, ext in placed:
                 if not rid or not ext or rid.group(1) not in targets:
                     continue
                 media = normpath(join(dirname(name), targets[rid.group(1)]))

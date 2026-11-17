@@ -22,7 +22,7 @@ source: 業務 repo 群の marp-slides Skill・build_proposal.py・build_pdf.sh�
 - 構成は `slides/<deck>/{README.md, deck.md, theme.css, assets/, dist/}`。`deck.md` と `theme.css` が正本。
 - 書き出し: `marp deck.md --html -o dist/index.html`、`marp deck.md --pdf -o dist/deck.pdf`。PPTX は pptx Skill で作る。repo の npm scripts があればそちらを使う。
 - PDF / PPTX の書き出しには Chromium 系ブラウザが要る。Chrome / Edge が無い環境では `CHROME_PATH` にブラウザ実行ファイルを指定する。
-- 日本語フォントは `theme.css` で明示する（例: `font-family: "Hiragino Sans", "Noto Sans CJK JP", "BIZ UDPGothic", sans-serif;`）。指定しないと環境によって欧文フォントに落ち、行送りが崩れる。
+- 日本語フォントは、静的 TrueType のフォントファイル（BIZ UDPゴシック / BIZ UDP明朝など。SIL OFL。Regular と Bold の両方）を repo に置き、`theme.css` の `@font-face` で読み込む（`marp` には `--allow-local-files` を付ける）。`font-family` はその書体だけにし、ヒラギノ・游ゴシック・Noto Sans JP / CJK を fallback に並べない。Chromium はこれらの CFF・可変フォントと、Bold の実体が無い太字を Type 3 フォントとして PDF に埋め込み、Acrobat・Chrome・Drive のプレビューで文字が細く掠れる。フォントを読めない環境では、掠れる PDF を出さずに失敗させる。
 - 画像は `assets/` に置いて相対参照する。生成画像に文字を入れず、文字は Marp 側で書く。図解は SVG か HTML / CSS で組み、PNG / JPEG にしない。写真は配置サイズで 200ppi 以上のものを使う（共通ルール「成果物の鮮明さ」）。
 
 ## pandoc → PDF（文書型）
@@ -33,7 +33,7 @@ pandoc draft.md -s --embed-resources --css style.css --metadata title="<タイ�
 "<browser>" --headless=new --disable-gpu --no-pdf-header-footer --print-to-pdf=dist/draft.pdf .context/<task>/draft.html
 ```
 
-- `style.css` の `font-family` に日本語フォントを入れる。Linux では `fonts-noto-cjk` などを先に入れる。
+- `style.css` のフォントは Marp と同じ条件にする（静的 TrueType を `@font-face` で読み込み、fallback を並べない）。Noto CJK は Type 3 になるので PDF 用には使わない。
 - wkhtmltopdf を使う場合は `LANG=C.UTF-8` を付け、`--enable-local-file-access` を指定する。
 
 ## 差し込み型（複数顧客へ同じ型）
