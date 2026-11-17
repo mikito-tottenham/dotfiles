@@ -1,6 +1,6 @@
 ---
 title: 書き出し経路と検品
-updated: "2026-10-03"
+updated: "2026-11-17"
 source: 業務 repo 群の marp-slides Skill・build_proposal.py・build_pdf.sh・bin/pptx-*
 ---
 
@@ -13,17 +13,17 @@ source: 業務 repo 群の marp-slides Skill・build_proposal.py・build_pdf.sh�
 | 求められている形 | 経路 | 備考 |
 |---|---|---|
 | スライド（PDF で送付） | Marp | repo に Marp の仕組み（`slides/<deck>/deck.md`、`theme.css`、npm scripts）があればそれに従う |
-| 顧客が編集できる PowerPoint | Marp の `--pptx`、または built-in の pptx Skill | Marp の PPTX は既定で各ページが画像になり、文字を編集できない（編集可能な出力は Marp の実験的機能で LibreOffice が要る）。編集可能な PPTX が要るなら pptx Skill を使う |
+| PowerPoint | built-in の pptx Skill | Marp の既定の `--pptx` は各ページが 1 枚の画像になり、拡大すると掠れ、文字も編集できないので使わない（編集可能な出力は Marp の実験的機能で LibreOffice が要る） |
 | 文書型の提案書（A4 縦） | Markdown → pandoc → HTML → PDF | 表・長文が中心の場合 |
 | 同じ型を複数の顧客へ | 差し込みデータ + 固定テンプレート | 下の「差し込み型」 |
 
 ## Marp
 
 - 構成は `slides/<deck>/{README.md, deck.md, theme.css, assets/, dist/}`。`deck.md` と `theme.css` が正本。
-- 書き出し: `marp deck.md --html -o dist/index.html`、`marp deck.md --pdf -o dist/deck.pdf`、`marp deck.md --pptx -o dist/deck.pptx`。repo の npm scripts があればそちらを使う。
+- 書き出し: `marp deck.md --html -o dist/index.html`、`marp deck.md --pdf -o dist/deck.pdf`。PPTX は pptx Skill で作る。repo の npm scripts があればそちらを使う。
 - PDF / PPTX の書き出しには Chromium 系ブラウザが要る。Chrome / Edge が無い環境では `CHROME_PATH` にブラウザ実行ファイルを指定する。
 - 日本語フォントは `theme.css` で明示する（例: `font-family: "Hiragino Sans", "Noto Sans CJK JP", "BIZ UDPGothic", sans-serif;`）。指定しないと環境によって欧文フォントに落ち、行送りが崩れる。
-- 画像は `assets/` に置いて相対参照する。生成画像に文字を入れず、文字は Marp 側で書く。
+- 画像は `assets/` に置いて相対参照する。生成画像に文字を入れず、文字は Marp 側で書く。図解は SVG か HTML / CSS で組み、PNG / JPEG にしない。写真は配置サイズで 200ppi 以上のものを使う（共通ルール「成果物の鮮明さ」）。
 
 ## pandoc → PDF（文書型）
 
@@ -47,6 +47,6 @@ pandoc draft.md -s --embed-resources --css style.css --metadata title="<タイ�
 
 ## 検品
 
-描画の目視、日本語フォントの埋め込み、原稿との本文照合、ページ数、対外表現の確認は `doc-grill` の `references/preflight-checklist.md` を全項目通す。描画用の `render_pptx.sh` と照合用の `pptx_text_coverage.py` は `doc-grill` の `scripts/` にある。ここには再掲しない。
+描画の目視、日本語フォントの埋め込み、拡大時の鮮明さ（`check_sharpness.py`）、原稿との本文照合、ページ数、対外表現の確認は `doc-grill` の `references/preflight-checklist.md` を全項目通す。描画用の `render_pptx.sh` と照合用の `pptx_text_coverage.py` は `doc-grill` の `scripts/` にある。ここには再掲しない。
 
 提案資料で特に見る点: 他の顧客名・内部計画値・社内向けの言い回し・目標値と実績値の混同・出典の無い数値。
