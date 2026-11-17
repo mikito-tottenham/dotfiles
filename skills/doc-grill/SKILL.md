@@ -107,7 +107,7 @@ Grill 結果の**全件**について、[references/adjudication.md](references/
 - 機密・内部メモの混入（コメント、発表者ノート、`要確認` タグ、他案件の名称、内部 path、AI の作業メモ）
 - ファイル形式（指定どおりの形式、最新の正本からの生成、ファイル名の規約、開けること）
 
-描画と本文照合には同梱 script を使う: `scripts/render_pptx.sh <deck.pptx> [keynote|soffice]`（PPTX → PDF → `render/slide-NN.jpg`）、`scripts/pptx_text_coverage.py <原稿.md> <pptx のテキスト.md> [--section '## 本文']`（原稿の本文が派生物に欠けていないか）。拡大時の掠れは `scripts/check_sharpness.py <file>.pdf|.pptx ...` で検査する（画像だけのページと 200ppi 未満の画像で exit 1）。呼び方はチェックリストに書いてある。
+描画と本文照合には同梱 script を使う: `scripts/render_pptx.sh <deck.pptx> [keynote|soffice]`（PPTX → PDF → `render/slide-NN.jpg`）、`scripts/pptx_text_coverage.py <原稿.md> <pptx のテキスト.md> [--section '## 本文']`（原稿の本文が派生物に欠けていないか）。拡大時の掠れは `scripts/check_sharpness.py <file>.pdf|.pptx ...` で検査する（Type 3 フォント、画像だけのページ、200ppi 未満の画像で exit 1）。呼び方はチェックリストに書いてある。
 
 外部公開レポート・出典付きレポートの Grill 観点と検品基準は [references/external-report-standard.md](references/external-report-standard.md) を併用する。
 
