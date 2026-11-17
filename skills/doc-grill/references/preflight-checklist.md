@@ -36,7 +36,15 @@ source_of_truth: <正本の path と commit / 更新時刻>
 - pptx / docx は PDF に書き出してから上の 2 つを行う。PPTX は同梱の `scripts/render_pptx.sh <deck.pptx> [keynote|soffice]` で `render/deck.pdf` と `render/slide-NN.jpg` を作れる（macOS の既定は Keynote、それ以外は LibreOffice）。macOS で PowerPoint を AppleScript から開くと、ファイルアクセス許可のダイアログで止まることがある。Keynote で開く場合は、Keynote のコンテナ（`~/Library/Containers/com.apple.iWork.Keynote/Data/tmp/`）にコピーしてから開くと書き出せた（2026-09-11 観測、script はこれを行う）。Keynote の描画は書体・行送りが近似なので、余白に 1 割ほどの余裕を見る
 - repo に描画用の script があれば、そちらを優先する
 
-## 3. 顧客に出せない文言
+## 3. 拡大時の鮮明さ
+
+- `scripts/check_sharpness.py <file>.pdf <file>.pptx` が exit 0 である。不合格になるのは、文字が無く画像だけのページ・スライド（文字ごと画像化されている）と、配置サイズで 200ppi 未満の画像
+- 不合格のときは派生物を加工せず、正本と書き出し経路を直す。文字・表・図解を文字データとベクター（HTML / CSS、SVG、Office のテキストボックスや図形）で組み直し、写真は解像度の足りる素材に差し替えるか小さく配置する
+- 写真が主役のページなど意図した例外だけ `--allow-image-only` / `--min-ppi <n>` を使い、理由を備考に書く
+- docx は PDF に書き出してから同じ検査をする
+- 目でも確かめる: `pdftoppm -r 400 -f <n> -l <n> -png <file>.pdf <outdir>/zoom` で図のあるページを拡大し、文字と線の縁がにじんでいないことを見る
+
+## 4. 顧客に出せない文言
 
 - 内輪の表現、社内の略語、作業者の視点の言い回し（例: 自社を「実験台」と表現する類）
 - 保証・断定の表現（必ず、確実に、100% など）で、根拠が無いもの
@@ -45,7 +53,7 @@ source_of_truth: <正本の path と commit / 更新時刻>
 - 相手に伝えた条件・範囲を超える約束
 - repo の文言ルールの禁止表現
 
-## 4. 機密・内部メモの混入
+## 5. 機密・内部メモの混入
 
 - 残ってはいけない作業用の印: `要確認`、`TODO`、`TBD`、`〔`、`［要`、`FIXME`、`xx` などのプレースホルダ
 - 内部の path や作業痕跡: `.context/`、`/Users/`、repo 名、branch 名、ADR 番号
@@ -58,7 +66,7 @@ source_of_truth: <正本の path と commit / 更新時刻>
   - 確認例: `unzip -l <file>` で該当パーツの有無を見て、`unzip -p <file> <part>` で中身を見る
 - PDF のテキスト（`pdftotext`）と Office のテキスト（markitdown など）に対して、上の語を `rg` で検索する
 
-## 5. 送付物一式
+## 6. 送付物一式
 
 - 同時に送る文書（送付メール、質問リスト、案内文）も同じ検品を通した
 - 送付メールの本文は `japanese-business-writing` で確かめた
