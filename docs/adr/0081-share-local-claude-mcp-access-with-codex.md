@@ -8,7 +8,7 @@ updated_at: 2026-11-26
 updated_by_agent_model: "Claude Opus 5.5 (claude-opus-5-5)"
 ---
 
-> Codex の chatwork 登録は [ADR 0082](./0082-align-chatwork-and-slack-tokens-with-distribution-model.md) で変更した。`oprun` 起動はやめ、taskell-management の `bin/sync-mcp-secrets.py` が `codex mcp add --env` で token 付きで登録する。dotfiles の template には chatwork を書かない。
+> Codex の chatwork 登録は [ADR 0082](./0082-align-chatwork-and-slack-tokens-with-distribution-model.md) で変更した。`oprun` 起動はやめ、dotfiles の `codex-chatwork-sync` が `codex mcp add --env` で token 付きで登録する。dotfiles の template には chatwork を書かない。
 
 # 背景
 
