@@ -63,6 +63,12 @@ opmaterialize restore
 # GitHub 用 token を materialize（gh / git push が Touch ID なしで動く。ADR-0063）
 ghrun --refresh
 
+# Slack 用 token を保存（slack-account が Touch ID なしで動く。ADR-0082）
+slack-account --refresh
+
+# Chatwork MCP の token を Claude Code / Claude Desktop / Codex へ配る（taskell-management の checkout で。ADR-0082）
+# op run --env-file="$HOME/.config/op/dotfiles.env" -- python3 bin/sync-mcp-secrets.py
+
 # project に依存しない workspace repo を clone / pull
 "$DOTFILES_SOURCE/scripts/bootstrap-workspace"
 ```
@@ -228,7 +234,9 @@ oprun gemini --help
 oprun slack-fetch-message 'https://<ws>.slack.com/archives/<CHANNEL>/p<16桁>'
 
 # 例: Slack ワークスペースをプロファイルで選んで操作 (SLACK_<PROFILE>_TOKEN を dotfiles.env に op:// 参照)
-oprun slack-account taskell auth status
+# token は最初とローテート後に 1 回だけ 1Password から保存し (Touch ID 1 回)、普段は保存先から読む (ADR-0082)
+slack-account --refresh
+slack-account taskell auth status
 
 # 直接読む必要がある単発処理
 op read 'op://<vault>/<item>/<field>'

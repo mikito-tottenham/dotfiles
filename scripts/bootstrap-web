@@ -96,8 +96,9 @@ onepassword_status="not-run"
 #   "name|stdio|command [args...]|KEY=VALUE ..."  (command と env は空白で分割する。env は省略可)
 # 対象外: pencil (ローカル macOS アプリ依存)。claude.ai コネクタはクラウドホストがセッションへ
 # 渡すため、ここで登録する必要が無い (script の再現対象外)。
-# chatwork はローカルの登録 (ADR-0062 決定 8) と同じ形で、oprun が起動時に dotfiles.env の
-# CHATWORK_API_TOKEN (op://) を解決する。restore 前に起動すると失敗するので、restore 後に /mcp で再接続する。
+# chatwork は oprun が起動時に dotfiles.env の CHATWORK_API_TOKEN (op://) を解決する。クラウドは
+# service account 認証なので Touch ID は出ない (ローカルは sync-mcp-secrets.py が token を配る。ADR-0082)。
+# restore 前に起動すると失敗するので、restore 後に /mcp で再接続する。
 mcp_servers=(
   "mfc_ca|http|https://alpha.mcp.developers.biz.moneyforward.com/mcp/ca/v3"
   "chatwork|stdio|$HOME/.local/bin/oprun npx -y @chatwork/mcp-server|OPRUN_NO_MASKING=1"

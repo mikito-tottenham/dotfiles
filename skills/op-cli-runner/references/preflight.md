@@ -24,8 +24,9 @@
    ```
 
    - `--only gh,gws` で対象を絞る。`--profile <name>` で gws プロファイルを限定する。
-   - `--offline` はネットワークを使う確認（`ghrun gh api user`、`gws-account <p> auth status`）を省く。
-   - `--with-op` を付けたときだけ `op whoami` と `oprun slack-account <p> auth status` を実行する。どちらも 1Password の承認を求める可能性があるため、ユーザーがその場で承認できるときに限る。
+   - `--offline` はネットワークを使う確認（`ghrun gh api user`、`gws-account <p> auth status`、`slack-account <p> auth status`）を省く。
+   - `slack-account <p> auth status` は `~/.config/op/injected/slack.env`（`slack-account --refresh` の生成物）があれば既定で実行する。1Password は呼ばない。
+   - `--with-op` を付けたときだけ `op whoami` を実行し、slack.env が無いときは `oprun slack-account <p> auth status` で確認する。どちらも 1Password の承認を求める可能性があるため、ユーザーがその場で承認できるときに限る。
    - 出力はステータス・ドメイン・ワークスペース名だけで、token・op:// reference・メールアドレスは伏せる。exit 1 は FAIL がある状態。
 3. MCP コネクタは script から検査できない。下の「MCP コネクタの確認」で読み取りツールを 1 回呼び、接続先が目的の組織と一致するかを確かめる。
 4. FAIL / WARN は下の症状表で分類し、「ユーザーに依頼すること」の列をそのまま依頼文の材料にする。Agent が代わりに実行しない操作は依頼に回し、別アカウントや別経路への切り替えで作業を続けない。
@@ -53,8 +54,8 @@
 | gws `token_valid: false`、`invalid_grant`、`invalid_rapt` | 該当プロファイルの OAuth 失効。他プロファイルは有効なことが多い | preflight で他プロファイルの状態を確認し、境界が一致する作業だけ続ける。`gws-cli-runner` の Recovery Runbook に従う | `gws-account <profile> auth login` をフォアグラウンドで実行し、ブラウザで選ぶアカウントのドメインを明示して依頼 |
 | gws ログイン時にブラウザで `403 org_internal` | 別組織のアカウントを選んだ | 同じプロファイルで再ログインを依頼し直す | 正しいドメインのアカウントを選び直す |
 | gws-account exit 78 | `GOOGLE_WORKSPACE_CLI_*` の ambient 変数 | 変数を unset して wrapper で再実行。素の `gws` に切り替えない | なし |
-| `slack-account` exit 1（token 未設定、`op://` のまま） | `oprun` を通さずに実行した、または `dotfiles.env` にキーが無い | `oprun slack-account <profile> ...` で実行する。キー欠落なら止める | 1Password 項目と `dotfiles.env` のキー追加 |
-| `slack-account` exit 2 で `invalid_auth` / `token_revoked` / `not_authed` | Slack App の token 失効・取り消し | 止める。別ワークスペースや MCP で代替しない | Slack App の token 再発行と 1Password 項目の更新 |
+| `slack-account` exit 1（token 未設定、`op://` のまま） | `slack.env` が未生成か古い、または `dotfiles.env` にキーが無い | ユーザーに通常のターミナルで `slack-account --refresh` を依頼する。Agent からは実行しない。キー欠落なら止める | 1Password 項目と `dotfiles.env` のキー追加 |
+| `slack-account` exit 2 で `invalid_auth` / `token_revoked` / `not_authed` | Slack App の token 失効・取り消し、または 1Password 側の更新後に `slack.env` が古いまま | 止める。別ワークスペースや MCP で代替しない | Slack App の token 再発行と 1Password 項目の更新、続けて `slack-account --refresh` |
 | Slack MCP コネクタが未認証、または目的と違うワークスペース | コネクタは 1 ワークスペース固定 | slack-account のプロファイルがあればそちらを使う。無ければ止める | claude.ai のコネクタ設定での再接続 |
 | Chatwork MCP が起動しない・ツールが出ない | MCP は `oprun` 経由で起動するため、起動時に 1Password の承認が要る | `/mcp` の状態を伝える | 1Password の承認後に `/mcp` から再接続 |
 | MoneyForward MCP が `access token is required` / `invalid or expired access token` | MCP の OAuth token 失効 | authorize 系ツールで認可 URL を発行してユーザーに渡し、ユーザーがログインした後に exchange 系ツールで完了させる。ログイン操作は代行しない | 認可 URL を開き、MoneyForward にログインして承認する |

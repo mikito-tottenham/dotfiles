@@ -3,11 +3,14 @@ title: "Adopt slack-account Profile Isolation for Slack Web API"
 date: 2026-09-11
 agent_model: "Claude Code (Claude Fable 5.1)"
 status: accepted
-updated_at: 2026-09-25
+updated_at: 2026-11-26
 updated_by_agent_model: "Claude Opus 5.5 (claude-opus-5-5)"
+superseded_in_part_by: "ADR 0082"
 ---
 
 # ADR 0061: Adopt slack-account Profile Isolation for Slack Web API
+
+> Slack token の読み先は [ADR 0082](./0082-align-chatwork-and-slack-tokens-with-distribution-model.md) で変更した。ローカルの主経路は `oprun slack-account ...` ではなく、`slack-account --refresh` で保存した `~/.config/op/injected/slack.env` を読む `slack-account <profile> ...` になる。環境変数が優先されるため、`oprun` 経由とクラウドはそのまま動く。
 
 ## Context
 

@@ -17,10 +17,17 @@
 唯一の制限)。params は JSON object で、値が dict / list なら JSON 文字列化して渡す (blocks, attachments 等)。
 出力はレスポンス JSON をそのまま stdout に出す (`--json` の有無で変わらない)。
 
-profile: `^[a-z0-9][a-z0-9-]*$`。token は環境変数 `SLACK_<PROFILE>_TOKEN`
-(profile を大文字化、`-` → `_`。例 `SLACK_TWIN_TOKEN`) で供給する。実値は 1Password に置き、
-`~/.config/op/dotfiles.env` に `op://` reference を書いて
-`op run --env-file="$HOME/.config/op/dotfiles.env" -- slack-account <profile> ...` で解決する。
+    slack-account --refresh   1Password から ~/.config/op/injected/slack.env を再生成する
+
+profile: `^[a-z0-9][a-z0-9-]*$`。token のキーは `SLACK_<PROFILE>_TOKEN`
+(profile を大文字化、`-` → `_`。例 `SLACK_TWIN_TOKEN`)。実値は 1Password に置き、
+`~/.config/op/dotfiles.env` に `op://` reference を書く。
+
+token の読み先は次の順で、先に見つかった方だけを使う (→ dotfiles ADR-0082)。
+  1. 環境変数 `SLACK_<PROFILE>_TOKEN` (`oprun slack-account ...` やクラウドの service account 経由)
+  2. `~/.config/op/injected/slack.env` (0600)。`slack-account --refresh` が `oprun` で 1 回だけ
+     1Password から解決して書く派生物で、普段の実行では 1Password を呼ばない (Touch ID 不要)
+どちらにも無ければ exit 1 で `--refresh` を案内する。token をローテートしたら `--refresh` し直す。
 
 `read` は既存の `slack-fetch-message` を子プロセスとして exec し、`SLACK_API_TOKEN` を子環境にだけ渡す
 (出力・exit code はその CLI のもの)。
@@ -42,7 +49,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import subprocess
 from datetime import datetime
+from pathlib import Path
 
 PROG = "slack-account"
 API_BASE = "https://slack.com/api/"
@@ -59,6 +68,11 @@ EXIT_NET = 3
 
 _PROFILE_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _METHOD_RE = re.compile(r"^[a-z][a-zA-Z.]+$")
+_TOKEN_KEY_RE = re.compile(r"^SLACK_[A-Z0-9_]+_TOKEN$")
+_TOKEN_VALUE_RE = re.compile(r"^xox[pb]-[A-Za-z0-9-]+$")
+TOKEN_FILE = Path(
+    os.environ.get("SLACK_TOKEN_ENV_FILE") or Path.home() / ".config/op/injected/slack.env"
+)
 
 
 def log(message: str) -> None:
@@ -105,15 +119,29 @@ def token_env_key(profile: str) -> str:
     return "SLACK_" + profile.upper().replace("-", "_") + "_TOKEN"
 
 
+def read_token_file() -> dict[str, str]:
+    """`--refresh` が書いた `KEY='value'` 形式のファイルを読む。無ければ空。"""
+    if not TOKEN_FILE.is_file():
+        return {}
+    tokens: dict[str, str] = {}
+    for line in TOKEN_FILE.read_text(encoding="utf-8").splitlines():
+        key, sep, value = line.partition("=")
+        if sep and _TOKEN_KEY_RE.match(key):
+            tokens[key] = value.strip().strip("'")
+    return tokens
+
+
 def load_token(profile: str, argv_hint: list[str]) -> tuple[str, str]:
     key = token_env_key(profile)
     token = os.environ.get(key, "").strip()
     hint = " ".join([PROG, profile] + argv_hint)
     if not token:
+        token = read_token_file().get(key, "")
+    if not token:
         raise UsageError(
-            f"environment variable {key} is empty for profile '{profile}'\n"
+            f"{key} is set neither in the environment nor in {TOKEN_FILE} (profile '{profile}')\n"
             f"put `{key}=op://<vault>/<item>/<field>` in ~/.config/op/dotfiles.env, then\n"
-            f'run: op run --env-file="$HOME/.config/op/dotfiles.env" -- {hint}'
+            f"run once in your terminal: {PROG} --refresh"
         )
     if token.startswith("op://"):
         raise UsageError(
@@ -514,7 +542,63 @@ HANDLERS = {
 }
 
 
+def emit_tokens() -> int:
+    """`--refresh` が `oprun` 配下で自分を呼ぶ内部サブコマンド。解決済みの token を stdout に出す。"""
+    if sys.stdout.isatty():
+        err("token を端末へは出力しません (--refresh を使ってください)")
+        return EXIT_USAGE
+    found = {k: v.strip() for k, v in os.environ.items() if _TOKEN_KEY_RE.match(k) and v.strip()}
+    if not found:
+        err("SLACK_<PROFILE>_TOKEN が ~/.config/op/dotfiles.env に定義されていません")
+        return EXIT_USAGE
+    for key, value in sorted(found.items()):
+        if not _TOKEN_VALUE_RE.match(value):
+            err(f"{key} が Slack token (xoxp- / xoxb-) の形式ではありません")
+            return EXIT_USAGE
+    for key, value in sorted(found.items()):
+        print(f"{key}='{value}'")
+    return EXIT_OK
+
+
+def refresh_tokens() -> int:
+    """1Password から token を 1 回だけ解決し、TOKEN_FILE を原子的に置き換える。"""
+    oprun = shutil.which("oprun")
+    if oprun is None:
+        err("oprun が PATH にありません")
+        return 127
+    log(f"1Password から {TOKEN_FILE} を生成します (Touch ID を 1 回求められます)")
+    # op run は既定で子プロセス出力中の secret を伏せ字にするため、token 自体を
+    # 書き出すこの用途では OPRUN_NO_MASKING=1 が必須 (oprun のコメント参照)。
+    result = subprocess.run(
+        [oprun, sys.executable, os.path.abspath(__file__), "--emit"],
+        env={**os.environ, "OPRUN_NO_MASKING": "1"},
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        for line in (result.stderr or "").splitlines():
+            err(line)
+        err(f"失敗 (exit {result.returncode})。{TOKEN_FILE} は変更していません")
+        return result.returncode
+    TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = TOKEN_FILE.with_name(f"{TOKEN_FILE.name}.tmp.{os.getpid()}")
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(result.stdout)
+        os.replace(tmp, TOKEN_FILE)
+    finally:
+        tmp.unlink(missing_ok=True)
+    keys = [line.partition("=")[0] for line in result.stdout.splitlines() if line]
+    log(f"生成しました: {TOKEN_FILE} ({', '.join(keys)}。値は表示しません)")
+    return EXIT_OK
+
+
 def main(argv: list[str]) -> int:
+    if argv[:1] == ["--refresh"]:
+        return refresh_tokens()
+    if argv[:1] == ["--emit"]:
+        return emit_tokens()
     parser = build_parser()
     args = parser.parse_args(argv)
     try:

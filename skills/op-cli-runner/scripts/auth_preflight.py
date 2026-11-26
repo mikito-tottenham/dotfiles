@@ -13,6 +13,7 @@
   - コマンドの存在確認、ファイルの存在と permission 確認、`ssh -G` の設定解決
   - `ghrun gh api user`（materialize 済み token を読むだけ）
   - `gws-account <profile> auth status`（ネットワークで token の有効性を確認する）
+  - `slack-account <profile> auth status`（`~/.config/op/injected/slack.env` があるときだけ。保存済み token を読むだけ）
 ネットワークも避けたいときは `--offline` を付ける。
 
 usage:
@@ -36,6 +37,7 @@ from pathlib import Path
 
 HOME = Path.home()
 OP_ENV_FILE = Path(os.environ.get("OP_DOTFILES_ENV_FILE", HOME / ".config/op/dotfiles.env"))
+SLACK_TOKEN_FILE = Path(os.environ.get("SLACK_TOKEN_ENV_FILE") or HOME / ".config/op/injected/slack.env")
 GH_ENV_FILE = Path(os.environ.get("GH_TOKEN_ENV_FILE", HOME / ".config/op/injected/github.env"))
 GWS_ACCOUNTS_DIR = HOME / ".config/gws/accounts"
 OP_SSH_SOCK = HOME / "Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
@@ -241,7 +243,7 @@ def check_gws(selected: list[str], offline: bool) -> None:
 
 
 # ---------------------------------------------------------------- Slack
-def check_slack(with_op: bool) -> None:
+def check_slack(with_op: bool, offline: bool) -> None:
     log("start area=slack")
     if not shutil.which("slack-account"):
         record("slack", "cli", "FAIL", "slack-account が PATH に無い", "dotfiles の dot_local/bin/slack-account を chezmoi apply する（ユーザー作業）")
@@ -255,12 +257,22 @@ def check_slack(with_op: bool) -> None:
     record("slack", "profiles", "OK" if profiles else "WARN",
            f"dotfiles.env に定義された slack-account プロファイル: {', '.join(profiles) or 'なし'}"
            "（MCP コネクタ経由のワークスペースはこの script では検査しない）")
+    # slack.env（`slack-account --refresh` の生成物）があれば 1Password を呼ばずに確認できる（ADR-0082）
+    materialized = SLACK_TOKEN_FILE.is_file()
     for p in profiles:
-        if not with_op:
-            record("slack", p, "SKIP", "oprun は Touch ID を伴うため既定で実行しない（--with-op で auth status を実行）")
+        if offline:
+            record("slack", p, "SKIP", "--offline のため auth status を省略")
             continue
-        log(f"slack auth status profile={p} (oprun)")
-        rc, out, err = run(["oprun", "slack-account", p, "auth", "status", "--json"], 60)
+        if materialized:
+            cmd, via = ["slack-account", p, "auth", "status", "--json"], "slack.env"
+        elif with_op:
+            cmd, via = ["oprun", "slack-account", p, "auth", "status", "--json"], "oprun"
+        else:
+            record("slack", p, "SKIP", f"{SLACK_TOKEN_FILE} が無い。oprun は Touch ID を伴うため既定で実行しない",
+                   "ユーザーに通常のターミナルで `slack-account --refresh` を 1 回実行してもらう（--with-op なら oprun で確認）")
+            continue
+        log(f"slack auth status profile={p} ({via})")
+        rc, out, err = run(cmd, 60)
         if rc == 0:
             try:
                 data = json.loads(out)
@@ -270,7 +282,7 @@ def check_slack(with_op: bool) -> None:
         elif rc is None:
             record("slack", p, "WARN", "60 秒で応答しない（Touch ID 待ちの可能性）", "ユーザーに 1Password の承認状況を確認する")
         elif rc == 1:
-            record("slack", p, "FAIL", f"設定エラー exit 1: {first_line(err)}", "dotfiles.env の当該キーと 1Password 項目をユーザーに確認する")
+            record("slack", p, "FAIL", f"設定エラー exit 1: {first_line(err)}", "dotfiles.env の当該キーと 1Password 項目をユーザーに確認し、`slack-account --refresh` を依頼する")
         elif rc == 2:
             record("slack", p, "FAIL", f"Slack API ok:false: {first_line(err) or first_line(out)}",
                    "invalid_auth / token_revoked なら Slack App の token 再発行と 1Password 更新をユーザーに依頼する")
@@ -283,7 +295,7 @@ def main() -> int:
     ap.add_argument("--only", default=",".join(AREAS), help="検査対象（カンマ区切り: op,gh,gws,slack）")
     ap.add_argument("--profile", action="append", default=[], help="gws プロファイルを限定する（複数指定可）")
     ap.add_argument("--with-op", action="store_true", help="op whoami と oprun slack-account auth status も実行する（Touch ID を伴いうる）")
-    ap.add_argument("--offline", action="store_true", help="ネットワークを使う確認（gh api / gws auth status）を省略する")
+    ap.add_argument("--offline", action="store_true", help="ネットワークを使う確認（gh api / gws auth status / slack auth status）を省略する")
     ap.add_argument("--json-out", help="結果 JSON の保存先（.context/ 配下を推奨）")
     args = ap.parse_args()
 
@@ -301,7 +313,7 @@ def main() -> int:
     if "gws" in areas:
         check_gws(args.profile, args.offline)
     if "slack" in areas:
-        check_slack(args.with_op)
+        check_slack(args.with_op, args.offline)
 
     counts = {s: sum(r["status"] == s for r in RESULTS) for s in ("OK", "WARN", "FAIL", "SKIP")}
     print("\n== summary ==")

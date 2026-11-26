@@ -16,7 +16,7 @@ updated_at: 2026-10-23
 
 - organization: <組織の呼称>
 - gws_profile: <gws-profile>            # gws-account のプロファイル名
-- slack_profile: <slack-profile>        # oprun slack-account のプロファイル名。無ければ none
+- slack_profile: <slack-profile>        # slack-account のプロファイル名。無ければ none
 - chatwork: <chatwork-mcp>              # Chatwork MCP の接続名（repo の project MCP 等）。無ければ none
 - repo: <repo>                          # 一次証拠・補助証拠を持つ git repo（ghq 名）
 - default_branch: <default>             # origin 側の既定ブランチ
@@ -30,7 +30,7 @@ updated_at: 2026-10-23
 
 | ソース | 経路 | 疎通確認 | 備考 |
 |---|---|---|---|
-| Slack | `oprun slack-account <slack-profile> ...` | `oprun slack-account <slack-profile> auth status` | `auth status` の team 表示が対象組織であることを記録する。MCP の Slack コネクタは 1 ワークスペース固定なので、接続先が違えば使わない |
+| Slack | `slack-account <slack-profile> ...` | `slack-account <slack-profile> auth status` | `auth status` の team 表示が対象組織であることを記録する。MCP の Slack コネクタは 1 ワークスペース固定なので、接続先が違えば使わない |
 | Chatwork | `<chatwork-mcp>` | `get_me` | 誰のアカウントで読んでいるかを `get_me` の結果で記録する（表示名のみ。token は書かない） |
 | Gmail | `gws-account <gws-profile> gmail ...` | `gws-account <gws-profile> auth status` の後、`gmail users messages list` を `maxResults: 1` で 1 回 | MCP の Gmail コネクタが別アカウント接続なら使わない |
 | Calendar | `gws-account <gws-profile> calendar ...` | `calendar calendarList list` を 1 回 | MCP の Calendar コネクタに対象組織のカレンダーが入っていないことがある |

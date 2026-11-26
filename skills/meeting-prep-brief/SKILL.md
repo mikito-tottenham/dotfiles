@@ -20,7 +20,7 @@ description: Prepare a pre-meeting brief for a recurring or one-off meeting by c
 ### Phase 0 preflight → `00-preflight.md`
 
 1. 会議の主体（どの会社・どの相手との会議か）を決める。曖昧ならユーザーに聞く。
-2. 作業ルートの `AGENTS.md`「アカウント境界」節で、主体ごとの経路を引く。カレンダー・Gmail・Drive は `gws-account <profile>` か MCP コネクタ、Slack は `oprun slack-account <profile>` か MCP コネクタ、Chatwork は MCP。プロファイル名の対応は `gws-cli-runner` の `references/account-profiles.md` を正本とする。
+2. 作業ルートの `AGENTS.md`「アカウント境界」節で、主体ごとの経路を引く。カレンダー・Gmail・Drive は `gws-account <profile>` か MCP コネクタ、Slack は `slack-account <profile>` か MCP コネクタ、Chatwork は MCP。プロファイル名の対応は `gws-cli-runner` の `references/account-profiles.md` を正本とする。
 3. `op-cli-runner` の `scripts/auth_preflight.py` を `--only gws` などで実行し、使う経路の状態を確かめる。MCP コネクタは同 Skill の `references/preflight.md` の「MCP コネクタの確認」で接続先の組織を確かめる。コネクタの接続先が目的の組織と違う場合、そのコネクタの結果は使わない。
 4. 情報源ごとに「使う経路／接続先の確認結果／使えない理由」を `00-preflight.md` に書く。
 

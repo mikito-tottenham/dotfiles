@@ -12,7 +12,7 @@ source: 業務 repo の定例会議 Skill（references/sources.md）を一般化
 |---|---|---|---|
 | 1 | カレンダー | `gws-account <profile> calendar events list` / Calendar コネクタ | 当日の開催時刻・出席者・添付。前回開催日 |
 | 2 | 過去議事録 | repo の議事録ディレクトリ → 未マージブランチ → 会議メモの Doc → メールで届いた会議メモ → 録音（`meeting-minutes` の Soundcore 取得手順） | 前回分（必要なら前々回） |
-| 3 | Slack | `oprun slack-account <profile> api search.messages ...` / Slack コネクタ | 前回開催日の前日以降 |
+| 3 | Slack | `slack-account <profile> api search.messages ...` / Slack コネクタ | 前回開催日の前日以降 |
 | 4 | Gmail | 同梱 `scripts/fetch_gmail.py` → `scripts/fetch_threads.py` / Gmail コネクタ | 同上 |
 | 5 | Chatwork | Chatwork MCP の room 一覧 → メッセージ読み取り | 同上（相手先とのルームがあるとき） |
 
@@ -39,7 +39,7 @@ gws-account <profile> calendar events list --params '{"calendarId":"primary","ti
 
 ## 3. Slack
 
-- slack-account の場合: `oprun slack-account <profile> api search.messages --params '{"query":"in:#<channel> after:<YYYY-MM-DD>","sort":"timestamp","count":100}'`。複数ページは `page` を進める。`oprun` は 1Password の承認を求めることがある。`search.messages` は user token が必要で、bot token のプロファイル（`auth status` の `token_type` で確認）では `conversations.history` / `conversations.replies` を使う。
+- slack-account の場合: `slack-account <profile> api search.messages --params '{"query":"in:#<channel> after:<YYYY-MM-DD>","sort":"timestamp","count":100}'`。複数ページは `page` を進める。token は `~/.config/op/injected/slack.env` から読み、1Password の承認は求めない。exit 1 で token が無いと言われたら、ユーザーに `slack-account --refresh` を依頼する。`search.messages` は user token が必要で、bot token のプロファイル（`auth status` の `token_type` で確認）では `conversations.history` / `conversations.replies` を使う。
 - コネクタの場合: 検索ツールに `in:#<channel> after:<YYYY-MM-DD>` を渡し、cursor で全件取る。ツール名の接頭辞は接続ごとに違うので ToolSearch で解決する。
 - チャンネルの一覧読み取りは、oldest より前に立った親スレッドへの新しい返信を返さないことがある。古いスレッドはキーワード検索で親を見つけてからスレッドを読む。
 - 「未回答」と判断する前に、ユーザー本人の発言を期間で検索する。

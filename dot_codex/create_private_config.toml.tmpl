@@ -18,9 +18,6 @@ url = "https://beta.mcp.developers.biz.moneyforward.com/mcp/ca/v3"
 {{ if eq .chezmoi.os "darwin" }}
 [mcp_servers.mfc_ca_alpha]
 url = "https://alpha.mcp.developers.biz.moneyforward.com/mcp/ca/v3"
-
-[mcp_servers.chatwork]
-command = "{{ .chezmoi.homeDir }}/.local/bin/oprun"
-args = ["npx", "-y", "@chatwork/mcp-server"]
-env = { OPRUN_NO_MASKING = "1" }
+# chatwork は taskell-management の bin/sync-mcp-secrets.py が `codex mcp add` で token 付きで登録する
+# (起動時に 1Password を呼ばない。ADR-0082)。token を含むためこの template には書かない
 {{ end -}}
