@@ -408,8 +408,8 @@ dotfiles リポジトリのセッションは SessionStart hook が自動でフ�
 | gemini | bootstrap-web | `GEMINI_API_KEY` | 1Password → dotfiles.env 参照 → `oprun gemini` |
 | gh | bootstrap-web | `GH_TOKEN`（dotfiles.env 参照 → `ghrun --refresh` で `~/.config/op/injected/github.env`） | session repo は git=proxy / PR 等=MCP で足りる。`gh` 固有コマンドや session repo 以外の git は restore 後に `ghrun --refresh` |
 | copilot | bootstrap-web | `COPILOT_GITHUB_TOKEN`（+ Copilot 契約） | 1Password → env |
-| slack-account | chezmoi（`~/.local/bin`） | `SLACK_<PROFILE>_TOKEN` | 1Password → dotfiles.env 参照 → `oprun slack-account <profile> ...`（ADR-0061） |
-| chatwork（MCP） | bootstrap-web が `claude mcp add` で登録（実体は `npx`） | `CHATWORK_API_TOKEN` | 1Password → dotfiles.env 参照 → 起動時に `oprun` が解決。restore 後に `/mcp` で再接続 |
+| slack-account | chezmoi（`~/.local/bin`） | `SLACK_<PROFILE>_TOKEN` | 1Password → dotfiles.env 参照 → `oprun slack-account <profile> ...`（ADR-0061。環境変数が優先されるため、ローカルの slack.env 方式〈ADR-0082〉と併存する） |
+| chatwork（MCP） | bootstrap-web が `claude mcp add` で登録（実体は `npx`） | `CHATWORK_API_TOKEN` | 1Password → dotfiles.env 参照 → 起動時に `oprun` が解決。restore 後に `/mcp` で再接続（ローカルは sync-mcp-secrets.py が token を配る方式。ADR-0082） |
 
 API キー系は 1Password に保存し `~/.config/op/dotfiles.env` に `KEY=op://<vault>/<item>/<field>`
 を書き、`oprun <cmd>` で注入する（規約準拠）。secret 実値は git に置かない。

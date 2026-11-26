@@ -72,7 +72,7 @@ Before work that depends on several authenticated routes (1Password, `ghrun gh`,
 python3 <skill-dir>/scripts/auth_preflight.py --json-out .context/<task>/auth-preflight.json
 ```
 
-The script is read-only and, by default, never triggers a 1Password authorization prompt: `op whoami` and `oprun slack-account <profile> auth status` run only with `--with-op`, and `--offline` also skips the network checks (`ghrun gh api user`, `gws-account <profile> auth status`). Output carries status, domain, and workspace names only; tokens, `op://` references, and e-mail addresses are redacted. Exit 1 means at least one FAIL. MCP connectors cannot be checked from the script; use the read-only identity calls listed in the reference.
+The script is read-only and, by default, never triggers a 1Password authorization prompt: `op whoami` (and `oprun slack-account <profile> auth status` when `~/.config/op/injected/slack.env` is missing) run only with `--with-op`; `slack-account <profile> auth status` reads the materialized token file without 1Password; `--offline` also skips the network checks (`ghrun gh api user`, `gws-account <profile> auth status`, `slack-account <profile> auth status`). Output carries status, domain, and workspace names only; tokens, `op://` references, and e-mail addresses are redacted. Exit 1 means at least one FAIL. MCP connectors cannot be checked from the script; use the read-only identity calls listed in the reference.
 
 ## Secret-Backed Files (`opmaterialize`)
 

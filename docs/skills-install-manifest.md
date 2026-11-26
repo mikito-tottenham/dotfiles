@@ -23,7 +23,7 @@ updated_at: 2026-10-23
 
 - CLI（`bootstrap-web` が導入）: `jq` `rg` `codex` `gemini` `ghq` `gh` `gws` `copilot` `op`
 - CLI（chezmoi が `dot_local/bin` から配置。`verify-cloud-parity` は有無だけを見る）: `opmaterialize` `oprun` `ghrun` `gws-account` `slack-account` `slack-fetch-message` `calendar-acl`
-- MCP（`claude mcp add --scope user`）: `mfc_ca`（http）、`chatwork`（stdio。`oprun` 経由で起動し、token は `dotfiles.env` の `op://` 参照から解決する。ADR-0062 決定 8）
+- MCP（`claude mcp add --scope user`）: `mfc_ca`（http）、`chatwork`（stdio。ローカルは taskell-management の `bin/sync-mcp-secrets.py` が token 付きで登録し、起動時に 1Password を呼ばない。クラウドは `bootstrap-web` が `oprun` 経由で登録する。ADR-0082）
 - 対象外: `pencil`（ローカルアプリ依存）。claude.ai コネクタはクラウドホストがセッションへ渡すため、script で再現する必要が無い
 - これらが通信するホストの allowlist は `docs/web-session-runner-setup.md` の Network access 節に列挙する（ADR-0068）
 

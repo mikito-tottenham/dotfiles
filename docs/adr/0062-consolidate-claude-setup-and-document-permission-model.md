@@ -3,11 +3,14 @@ title: "Consolidate Claude / Codex Setup and Document the Permission Model"
 date: 2026-09-15
 agent_model: "Claude Code (Claude Fable 5.1)"
 status: accepted
-updated_at: 2026-10-03
+updated_at: 2026-11-26
 updated_by_agent_model: "Claude Opus 5.5 (claude-opus-5-5)"
+superseded_in_part_by: "ADR 0082"
 ---
 
 # ADR 0062: Consolidate Claude / Codex Setup and Document the Permission Model
+
+> 決定 8（chatwork MCP を `oprun` 経由で起動する）は [ADR 0082](./0082-align-chatwork-and-slack-tokens-with-distribution-model.md) で取り下げた。ローカルの Claude Code・Claude Desktop・Codex は、taskell-management の `bin/sync-mcp-secrets.py` が配る token で起動する。
 
 ## Context
 

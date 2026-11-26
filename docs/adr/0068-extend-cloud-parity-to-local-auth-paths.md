@@ -4,9 +4,14 @@ date: 2026-09-29
 agent_model: "Claude Opus 5.5 (claude-opus-5-5)"
 status: proposed
 related_adr: ["0045", "0058", "0061", "0062", "0063"]
+superseded_in_part_by: "ADR 0082"
+updated_at: 2026-11-26
+updated_by_agent_model: "Claude Opus 5.5 (claude-opus-5-5)"
 ---
 
 # ADR 0068: Extend Cloud Parity To Local Auth Paths
+
+> ローカルの chatwork MCP は [ADR 0082](./0082-align-chatwork-and-slack-tokens-with-distribution-model.md) で配布方式（taskell-management の `bin/sync-mcp-secrets.py`）に変えた。クラウドの `oprun` 起動はこの ADR のまま。そのため、クラウドの登録内容（command・env のキー）はローカルと一致しない。
 
 ## Context
 
