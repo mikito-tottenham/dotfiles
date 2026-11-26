@@ -10,7 +10,7 @@ superseded_in_part_by: "ADR 0082"
 
 # ADR 0062: Consolidate Claude / Codex Setup and Document the Permission Model
 
-> 決定 8（chatwork MCP を `oprun` 経由で起動する）は [ADR 0082](./0082-align-chatwork-and-slack-tokens-with-distribution-model.md) で取り下げた。ローカルの Claude Code・Claude Desktop・Codex は、taskell-management の `bin/sync-mcp-secrets.py` が配る token で起動する。
+> 決定 8（chatwork MCP を `oprun` 経由で起動する）は [ADR 0082](./0082-align-chatwork-and-slack-tokens-with-distribution-model.md) で取り下げた。ローカルの Claude Code・Claude Desktop は taskell-management の `bin/sync-mcp-secrets.py`、Codex は dotfiles の `codex-chatwork-sync` が配る token で起動する。
 
 ## Context
 

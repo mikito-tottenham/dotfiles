@@ -1,0 +1,76 @@
+#!/bin/sh
+set -eu
+
+# Codex の chatwork MCP を、token を設定に書き込んだ形で登録し直す (→ ADR-0082)。
+#
+# 背景: Codex の chatwork を `oprun npx ...` で起動すると、Codex を起動するたびに 1Password の
+# 認可 (tty 単位、10 分無操作で失効) を通り、Touch ID を求められる。ここで `oprun` を 1 回だけ
+# 通して token を解決し、`codex mcp add --env` で ~/.codex/config.toml へ書く。普段の起動では
+# 1Password を呼ばない。
+#
+# Claude Code / Claude Desktop への配布は taskell-management の bin/sync-mcp-secrets.py が行う。
+# このスクリプトは、そこに含まれない Codex だけを同じ考え方で扱う。
+# 正本は 1Password。token をローテートしたら実行し直す。Agent からは実行しない
+# (tty の無い環境では認可が安定しないため。ghrun --refresh と同じ扱い)。
+
+name="chatwork"
+
+usage() {
+  printf '%s\n' "usage: codex-chatwork-sync   1Password から token を解決し、Codex の chatwork MCP を登録し直す" >&2
+}
+
+log() {
+  printf '[%s] codex-chatwork-sync: %s\n' "$(date +%H:%M:%S)" "$1" >&2
+}
+
+# oprun 配下で自分自身を呼ぶ内部サブコマンド。oprun が CHATWORK_API_TOKEN を注入した状態で呼ばれる。
+apply() {
+  : "${CHATWORK_API_TOKEN:?CHATWORK_API_TOKEN が ~/.config/op/dotfiles.env に定義されていません}"
+  case "$CHATWORK_API_TOKEN" in
+    op://* | *[!A-Za-z0-9]*)
+      log "CHATWORK_API_TOKEN が未解決の op:// 参照か、想定外の文字を含んでいます"
+      exit 65
+      ;;
+  esac
+
+  # 再登録で冪等にする。未登録なら remove は失敗するが、想定内なので続行する。
+  if codex mcp remove "$name" >/dev/null 2>&1; then
+    log "既存の登録を削除"
+  else
+    log "既存の登録なし (remove は非 0、想定内)"
+  fi
+
+  # `codex mcp add` は token を引数に取る仕様のため、実行中の一瞬だけ ps から見え得る。
+  if ! codex mcp add "$name" --env "CHATWORK_API_TOKEN=$CHATWORK_API_TOKEN" -- npx -y @chatwork/mcp-server >/dev/null; then
+    log "codex mcp add が失敗しました。chatwork は未登録の状態です。原因を直して実行し直してください"
+    exit 1
+  fi
+  log "登録完了 (${#CHATWORK_API_TOKEN} chars, value hidden)"
+}
+
+case "${1:-}" in
+  --apply)
+    apply
+    exit 0
+    ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  '') ;;
+  *)
+    usage
+    exit 64
+    ;;
+esac
+
+for cmd in oprun codex; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    log "$cmd が PATH にありません"
+    exit 127
+  fi
+done
+
+log "開始: 1Password から token を解決します (Touch ID を 1 回求められます)"
+oprun "$0" --apply
+log "完了。Codex を開き直すと反映されます"
