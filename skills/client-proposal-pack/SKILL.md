@@ -54,7 +54,7 @@ description: Produce a client-facing proposal deck or document end to end, for e
 - 全ページの描画を目で見る（`doc-grill` の `scripts/render_pptx.sh`、`pdftoppm`）
 - `pdffonts` で日本語フォントの埋め込みを確かめる
 - PPTX は `doc-grill` の `scripts/pptx_text_coverage.py` で原稿との本文照合をする
-- 拡大しても掠れないことを `doc-grill` の `scripts/check_sharpness.py` で確かめる（Type 3 フォント、画像だけのページ、200ppi 未満の画像は不合格）
+- 拡大しても掠れないことを `doc-grill` の `scripts/check_sharpness.py` で確かめる（Type 3 フォント、画像だけのページ、200ppi 未満の写真、288ppi 未満の可逆形式の画像は不合格）。拡大しての確認は PDF ビューアで行い、Google Drive のプレビュー（PDF を画像に変換して表示する）を合否に使わない
 - 他の顧客名・内部向け表現・出典の無い数値・目標値と実績値の混同が無いこと
 
 問題が見つかったら Phase 3 か 5 へ戻り、`06-inspection.md` に指摘と修正を記録する。

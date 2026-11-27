@@ -38,11 +38,12 @@ source_of_truth: <正本の path と commit / 更新時刻>
 
 ## 3. 拡大時の鮮明さ
 
-- `scripts/check_sharpness.py <file>.pdf <file>.pptx` が exit 0 である。不合格になるのは、PDF の Type 3 フォント・未埋め込みフォント（Acrobat・Chrome・Drive のプレビューで文字が細く掠れる）、文字が無く画像だけのページ・スライド（文字ごと画像化されている）、配置サイズで 200ppi 未満の画像
-- 不合格のときは派生物を加工せず、正本と書き出し経路を直す。Type 3 フォントは、テーマや CSS のフォントを静的 TrueType（BIZ UDPゴシック / BIZ UDP明朝など。Regular と Bold の実体）の `@font-face` に替え、ヒラギノ・游ゴシック・Noto Sans JP / CJK と fallback の列挙を外して作り直す。文字・表・図解を文字データとベクター（HTML / CSS、SVG、Office のテキストボックスや図形）で組み直し、写真は解像度の足りる素材に差し替えるか小さく配置する
-- 写真が主役のページなど意図した例外だけ `--allow-image-only` / `--min-ppi <n>` を使い、理由を備考に書く
+- `scripts/check_sharpness.py <file>.pdf <file>.pptx` が exit 0 である。不合格になるのは、PDF の Type 3 フォント・未埋め込みフォント（Acrobat・Chrome・Drive のプレビューで文字が細く掠れる）、文字が無く画像だけのページ・スライド（文字ごと画像化されている）、配置サイズで 200ppi 未満の写真（JPEG）、288ppi 未満の可逆形式の画像（PNG など。スクリーンショットや図版）
+- 不合格のときは派生物を加工せず、正本と書き出し経路を直す。Type 3 フォントは、テーマや CSS のフォントを静的 TrueType（BIZ UDPゴシック / BIZ UDP明朝など。Regular と Bold の実体）の `@font-face` に替え、ヒラギノ・游ゴシック・Noto Sans JP / CJK と fallback の列挙を外して作り直す。文字・表・図解を文字データとベクター（HTML / CSS、SVG、Office のテキストボックスや図形）で組み直し、写真は解像度の足りる素材に差し替えるか小さく配置する。スクリーンショットは 2 倍以上の倍率で撮り直す
+- 写真が主役のページなど意図した例外だけ `--allow-image-only` / `--min-ppi <n>` / `--min-ppi-lossless <n>` を使い、理由を備考に書く
 - docx は PDF に書き出してから同じ検査をする
-- 目でも確かめる: `pdftoppm -r 400 -f <n> -l <n> -png <file>.pdf <outdir>/zoom` で図のあるページを拡大し、文字と線の縁がにじんでいないことを見る
+- 目でも確かめる: `pdftoppm -r 400 -f <n> -l <n> -png <file>.pdf <outdir>/zoom` で図のあるページを拡大し、文字と線の縁がにじんでいないことを見る。スクリーンショットの中の文字は、下限を満たしていても拡大すればぼけるので、読ませたい文字が画像の中だけに無いことも見る
+- 拡大しての確認は PDF ビューア（ブラウザの PDF 表示、macOS のプレビュー、Acrobat）か上の `pdftoppm` で行う。Google Drive のプレビューは PDF を 1 ページあたり横 3,200px までの画像に変換して表示し、Retina 相当の画面では 200% を超えると合格した PDF でも掠れるので、合否に使わない（dotfiles ADR-0080 追記）
 
 ## 4. 顧客に出せない文言
 
