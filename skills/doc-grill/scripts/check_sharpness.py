@@ -4,9 +4,15 @@
 不合格（exit 1）:
   - PDF の Type 3 フォント・未埋め込みフォント（Acrobat / Chrome / Drive プレビューで文字が細く掠れる）
   - 文字を持たず画像だけのページ・スライド（文字ごと画像化されている。背景画像として貼った形を含む）
-  - 配置サイズに対して解像度が足りない画像（既定 200ppi 未満）
+  - 配置サイズに対して解像度が足りない画像。写真（JPEG）は既定 200ppi 未満、
+    スクリーンショットや図版に使う可逆形式（PNG など）は既定 288ppi 未満
+    （16:9 スライド全面で横 3,840px。4K 画面の全画面表示で等倍になる解像度）
 PDF は poppler の pdffonts / pdfimages を使う。PPTX は標準ライブラリだけで読む。
 写真や図版そのものが主役のページは --allow-image-only で画像だけのページを許す。
+
+この検査が見るのはファイルだけ。Google Drive のプレビューは PDF を 1 ページ横 3,200px までの
+画像に変換して表示するので、合格した PDF でも Drive のプレビューでは拡大すると掠れる。
+拡大して確かめるときは PDF ビューア（ブラウザの PDF 表示、macOS のプレビュー、Acrobat）で開く。
 """
 import argparse
 import re
@@ -23,7 +29,11 @@ def run(cmd):
     return subprocess.run(cmd, capture_output=True, text=True, check=True).stdout
 
 
-def check_pdf(path, min_ppi, allow_image_only):
+LOSSY_ENC = {"jpeg", "jpx", "jp2"}
+RASTER_FIX = "2 倍以上の倍率で撮り直すか小さく配置する。図解は SVG / HTML で組む"
+
+
+def check_pdf(path, min_ppi, min_ppi_lossless, allow_image_only):
     fails, notes = [], []
     pages = int(re.search(r"Pages:\s*(\d+)", run(["pdfinfo", path])).group(1))
     fonts = run(["pdffonts", path]).splitlines()[2:]
@@ -48,8 +58,11 @@ def check_pdf(path, min_ppi, allow_image_only):
             continue
         image_pages.add(int(col[0]))
         ppi = min(float(col[12]), float(col[13]))
-        if ppi < min_ppi:
-            fails.append(f"p{col[0]}: 画像 {col[3]}x{col[4]}px が {ppi:.0f}ppi（{min_ppi}ppi 未満）")
+        if col[8] in LOSSY_ENC:
+            if ppi < min_ppi:
+                fails.append(f"p{col[0]}: 画像 {col[3]}x{col[4]}px が {ppi:.0f}ppi（{min_ppi}ppi 未満）")
+        elif ppi < min_ppi_lossless:
+            fails.append(f"p{col[0]}: 可逆形式の画像 {col[3]}x{col[4]}px が {ppi:.0f}ppi（{min_ppi_lossless}ppi 未満。{RASTER_FIX}）")
     if not allow_image_only:
         for page in sorted(image_pages):
             text = run(["pdftotext", "-f", str(page), "-l", str(page), path, "-"])
@@ -72,7 +85,7 @@ def image_size(data):
     return None
 
 
-def check_pptx(path, min_ppi, allow_image_only):
+def check_pptx(path, min_ppi, min_ppi_lossless, allow_image_only):
     fails, notes = [], []
     with zipfile.ZipFile(path) as z:
         slides = sorted(
@@ -102,20 +115,25 @@ def check_pptx(path, min_ppi, allow_image_only):
                 media = normpath(join(dirname(name), targets[rid.group(1)]))
                 if media.lower().endswith((".svg", ".emf", ".wmf")) or media not in z.namelist():
                     continue
-                size = image_size(z.read(media))
+                data = z.read(media)
+                size = image_size(data)
                 if not size or not int(ext.group(1)):
                     notes.append(f"slide{no}: {media} の大きさを読めず未検査")
                     continue
                 ppi = size[0] / (int(ext.group(1)) / EMU_PER_INCH)
-                if ppi < min_ppi:
-                    fails.append(f"slide{no}: 画像 {size[0]}x{size[1]}px が {ppi:.0f}ppi（{min_ppi}ppi 未満）")
+                if data[:2] == b"\xff\xd8":
+                    if ppi < min_ppi:
+                        fails.append(f"slide{no}: 画像 {size[0]}x{size[1]}px が {ppi:.0f}ppi（{min_ppi}ppi 未満）")
+                elif ppi < min_ppi_lossless:
+                    fails.append(f"slide{no}: 可逆形式の画像 {size[0]}x{size[1]}px が {ppi:.0f}ppi（{min_ppi_lossless}ppi 未満。{RASTER_FIX}）")
     return len(slides), fails, notes
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("files", nargs="+")
-    ap.add_argument("--min-ppi", type=int, default=200)
+    ap.add_argument("--min-ppi", type=int, default=200, help="写真（JPEG）の下限")
+    ap.add_argument("--min-ppi-lossless", type=int, default=288, help="可逆形式（PNG など。スクリーンショット・図版）の下限")
     ap.add_argument("--allow-image-only", action="store_true")
     args = ap.parse_args()
     failed = False
@@ -123,9 +141,9 @@ def main():
         lower = path.lower()
         try:
             if lower.endswith(".pdf"):
-                count, fails, notes = check_pdf(path, args.min_ppi, args.allow_image_only)
+                count, fails, notes = check_pdf(path, args.min_ppi, args.min_ppi_lossless, args.allow_image_only)
             elif lower.endswith(".pptx"):
-                count, fails, notes = check_pptx(path, args.min_ppi, args.allow_image_only)
+                count, fails, notes = check_pptx(path, args.min_ppi, args.min_ppi_lossless, args.allow_image_only)
             else:
                 print(f"SKIP {path}: pdf / pptx 以外")
                 continue

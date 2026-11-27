@@ -23,7 +23,7 @@ source: 業務 repo 群の marp-slides Skill・build_proposal.py・build_pdf.sh�
 - 書き出し: `marp deck.md --html -o dist/index.html`、`marp deck.md --pdf -o dist/deck.pdf`。PPTX は pptx Skill で作る。repo の npm scripts があればそちらを使う。
 - PDF / PPTX の書き出しには Chromium 系ブラウザが要る。Chrome / Edge が無い環境では `CHROME_PATH` にブラウザ実行ファイルを指定する。
 - 日本語フォントは、静的 TrueType のフォントファイル（BIZ UDPゴシック / BIZ UDP明朝など。SIL OFL。Regular と Bold の両方）を repo に置き、`theme.css` の `@font-face` で読み込む（`marp` には `--allow-local-files` を付ける）。`font-family` はその書体だけにし、ヒラギノ・游ゴシック・Noto Sans JP / CJK を fallback に並べない。Chromium はこれらの CFF・可変フォントと、Bold の実体が無い太字を Type 3 フォントとして PDF に埋め込み、Acrobat・Chrome・Drive のプレビューで文字が細く掠れる。フォントを読めない環境では、掠れる PDF を出さずに失敗させる。
-- 画像は `assets/` に置いて相対参照する。生成画像に文字を入れず、文字は Marp 側で書く。図解は SVG か HTML / CSS で組み、PNG / JPEG にしない。写真は配置サイズで 200ppi 以上のものを使う（共通ルール「成果物の鮮明さ」）。
+- 画像は `assets/` に置いて相対参照する。生成画像に文字を入れず、文字は Marp 側で書く。図解は SVG か HTML / CSS で組み、PNG / JPEG にしない。写真は配置サイズで 200ppi 以上、スクリーンショットは 2 倍以上の倍率で撮った PNG を 288ppi 以上で使う（共通ルール「成果物の鮮明さ」）。
 
 ## pandoc → PDF（文書型）
 
