@@ -3,7 +3,7 @@ title: "Keep Deliverables Sharp When Zoomed: Text and Diagrams as Vector, Not Im
 date: 2026-11-17
 agent_model: "Claude Code (Claude Fable 5.2)"
 status: accepted
-updated_at: 2026-11-27
+updated_at: 2026-11-28
 updated_by_agent_model: "Claude Code (Claude Fable 5.2)"
 ---
 
@@ -148,3 +148,31 @@ origin/main から同じものを入れる。
   Google スライド・ドキュメントの文字データで作る）は、資料ごとの判断として残る。
 - 288ppi を満たしたラスターも、それ以上に拡大すればぼける。読ませたい文字を画像に入れない、という
   規則 1 と目視で補う。
+
+## 追記（2026-11-28）: 共有するスライド資料は Google スライドを最終版にする
+
+上の「残ること」のうち、相手が Drive で読むスライド資料の渡し方を、ユーザーの決定で Google スライドに
+固定した。決める前に、既存の Google スライドを Brave（2 倍表示）で開いて描画を確かめた。
+
+### 調べた結果
+
+- 文字がテキストとして入っている Google スライド（Slides API で `textRun` が取れるもの）は、編集画面で
+  スライドが SVG（`<text>` 要素）として描画され、表示倍率を 235% に上げても SVG のまま広がった。
+  `/preview` も SVG で、`<canvas>` や `<img>` への画像化は無かった。
+- スライドの画像を背景（`stretchedPictureFill`）に貼っただけの Google スライドは、編集画面で横 2,046px の
+  PNG 1 枚として描画され、拡大すると掠れる。Drive には名前に「画像スライド」と付けた旧版のほかに、
+  名前からは分からないもの（10/20 の 1 件）も残っていた。
+
+### 決めたこと
+
+9. Drive のリンクで共有するスライド資料の最終版は、文字をテキストとして持つ Google スライドにする。
+   PDF は添付・印刷用の写しとし、スライド資料を PDF の Drive プレビューで読ませない。
+10. 画像を貼っただけの Google スライドを使わない。Google スライドにした後、Slides API で各スライドに
+    `textRun` があることと、全面の画像・背景画像が無いことを確かめる。
+
+### 残ること
+
+- HTML / Marp から PDF を作る経路は、そのままでは Google スライドにならない。編集可能な PPTX を作って
+  Google スライドへ変換する経路での書体・レイアウトのずれは、本追記では実測していない。
+- A4 の文書（報告書・契約書など）の渡し方は決めていない。
+- スマホの Google スライドアプリでの描画は実測していない。
