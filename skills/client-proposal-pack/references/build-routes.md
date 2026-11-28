@@ -14,6 +14,7 @@ source: 業務 repo 群の marp-slides Skill・build_proposal.py・build_pdf.sh�
 |---|---|---|
 | スライド（PDF で送付） | Marp | repo に Marp の仕組み（`slides/<deck>/deck.md`、`theme.css`、npm scripts）があればそれに従う |
 | PowerPoint | built-in の pptx Skill | Marp の既定の `--pptx` は各ページが 1 枚の画像になり、拡大すると掠れ、文字も編集できないので使わない（編集可能な出力は Marp の実験的機能で LibreOffice が要る） |
+| Google スライド（Drive のリンクで共有） | 編集可能な PPTX を作り、Google スライドへ変換して Drive に保存 | 共有するスライド資料の最終版はこれにする（PDF の Drive プレビューは拡大すると掠れる）。画像を貼っただけのスライドにしない。変換後に Slides API で `textRun` があることと全面画像が無いことを確かめ、書体とレイアウトのずれを全ページ目で見る |
 | 文書型の提案書（A4 縦） | Markdown → pandoc → HTML → PDF | 表・長文が中心の場合 |
 | 同じ型を複数の顧客へ | 差し込みデータ + 固定テンプレート | 下の「差し込み型」 |
 
